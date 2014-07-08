@@ -1,18 +1,20 @@
 # Time between successful PoW solutions
 POW_SOLUTION_TIME = 10
 # Time for a block to traverse the network
-TRANSIT_TIME = 50
-# Number of required uncles
-UNCLES = 4
+TRANSIT_TIME = 10
+# Max uncle depth
+UNCLE_DEPTH = 4
 # Uncle block reward (normal block reward = 1)
-UNCLE_REWARD_COEFF = 0.875
+UNCLE_REWARD_COEFF = 29/32.
 # Reward for including uncles
-NEPHEW_REWARD_COEFF = 0.01
+NEPHEW_REWARD_COEFF = 3/64.
 # Rounds to test
-ROUNDS = 80000
+ROUNDS = 100000
 
 import random
 import copy
+
+all_miners = {}
 
 
 class Miner():
@@ -21,14 +23,13 @@ class Miner():
         self.id = random.randrange(10000000)
         # Set up a few genesis blocks (since the algo is grandpa-dependent,
         # we need two genesis blocks plus some genesis uncles)
-        self.blocks = {
-            0: {"parent": -1, "uncles": [], "miner": -1, "height": 0,
-                "score": 0, "id": 0, "children": {1: 1}},
-            1: {"parent": 0, "uncles": [], "miner": -1, "height": 1,
-                "score": 0, "id": 1, "children": {}}
-        }
+        self.blocks = {}
+        for i in range(UNCLE_DEPTH + 2):
+            self.blocks[i] = \
+                {"parent": i-1, "uncles": {}, "miner": -1, "height": i,
+                 "score": i, "id": i, "children": {}}
         # ID of "latest block"
-        self.head = 1
+        self.head = UNCLE_DEPTH + 1
 
     # Hear about a block
     def recv(self, block):
@@ -38,33 +39,38 @@ class Miner():
             addme = False
         if block["parent"] not in self.blocks:
             addme = False
-        for u in block["uncles"]:
-            if u not in self.blocks:
-                addme = False
         p = self.blocks[block["parent"]]
         if addme:
             self.blocks[block["id"]] = copy.deepcopy(block)
-            # Each parent keeps track of its children, to help
-            # facilitate the rule that a block must have N+ siblings
-            # to be valid
             if block["id"] not in p["children"]:
                 p["children"][block["id"]] = block["id"]
-            # Check if the new block deserves to be the new head
-            if len(p["children"]) >= 1 + UNCLES:
-                for c in p["children"]:
-                    newblock = self.blocks[c]
-                    if newblock["score"] > self.blocks[self.head]["score"]:
-                        self.head = newblock["id"]
+            if block["score"] > self.blocks[self.head]["score"]:
+                self.head = block["id"]
 
     # Mine a block
     def mine(self):
+        HEAD = self.blocks[self.head]
+        H = HEAD
         h = self.blocks[self.blocks[self.head]["parent"]]
-        b = sorted(list(h["children"]), key=lambda x: -self.blocks[x]["score"])
-        p = self.blocks[b[0]]
-        block = {"parent": b[0], "uncles": b[1:], "miner": self.id,
-                 "height": h["height"] + 2, "score": p["score"] + len(b),
+        u = {}
+        notu = {}
+        for i in range(UNCLE_DEPTH):
+            for c in h["children"]:
+                u[c] = True
+            notu[H["id"]] = True
+            for c in H["uncles"]:
+                notu[c] = True
+            H = h
+            h = self.blocks[h["parent"]]
+        for i in notu:
+            if i in u:
+                del u[i]
+        block = {"parent": self.head, "uncles": u, "miner": self.id,
+                 "height": HEAD["height"] + 1, "score": HEAD["score"]+1+len(u),
                  "id": random.randrange(1000000000000), "children": {}}
         self.recv(block)
+        global all_miners
+        all_miners[block["id"]] = block
         return block
 
 
@@ -111,8 +117,9 @@ length_of_chain = 0
 ZORO = {}
 print "### PRINTING BLOCKCHAIN ###"
 
-while h["id"] > 1:
-    print h["miner"], h["height"], h["score"]
+while h["id"] > UNCLE_DEPTH + 2:
+    print h["id"], h["miner"], h["height"], h["score"]
+    print "Uncles: ", list(h["uncles"])
     total_blocks_in_chain += 1 + len(h["uncles"])
     ZORO[h["id"]] = True
     length_of_chain += 1
@@ -148,9 +155,10 @@ for c in counts:
     print c, groupings[c] / counts[c] / (groupings[1] / counts[1])
 
 print " "
-print "Total blocks produced: ", len(miners[0].blocks) - 2
+print "Total blocks produced: ", len(all_miners) - UNCLE_DEPTH
 print "Total blocks in chain: ", total_blocks_in_chain
-print "Efficiency: ", total_blocks_in_chain * 1.0 / (len(miners[0].blocks) - 2)
-print "Average uncles: ", total_blocks_in_chain * 1.0 / length_of_chain
+print "Efficiency: ", \
+    total_blocks_in_chain * 1.0 / (len(all_miners) - UNCLE_DEPTH)
+print "Average uncles: ", total_blocks_in_chain * 1.0 / length_of_chain - 1
 print "Length of chain: ", length_of_chain
 print "Block time: ", ROUNDS * 1.0 / length_of_chain
