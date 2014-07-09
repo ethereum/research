@@ -1,15 +1,15 @@
 # Time between successful PoW solutions
-POW_SOLUTION_TIME = 10
+POW_SOLUTION_TIME = 5
 # Time for a block to traverse the network
 TRANSIT_TIME = 10
 # Max uncle depth
-UNCLE_DEPTH = 4
+UNCLE_DEPTH = 9
 # Uncle block reward (normal block reward = 1)
-UNCLE_REWARD_COEFF = 29/32.
+UNCLE_REWARD_COEFF = 30/32.
 # Reward for including uncles
-NEPHEW_REWARD_COEFF = 3/64.
+NEPHEW_REWARD_COEFF = 2/64.
 # Rounds to test
-ROUNDS = 100000
+ROUNDS = 120000
 
 import random
 import copy
@@ -52,6 +52,10 @@ class Miner():
         HEAD = self.blocks[self.head]
         H = HEAD
         h = self.blocks[self.blocks[self.head]["parent"]]
+        # Select the uncles. The valid set of uncles for a block consists
+        # of the children of the 2nd to N+1th order grandparents minus
+        # the parent and said grandparents themselves and blocks that were
+        # uncles of those previous blocks
         u = {}
         notu = {}
         for i in range(UNCLE_DEPTH):
@@ -74,6 +78,8 @@ class Miner():
         return block
 
 
+# If b1 is the n-th degree grandchild and b2 is the m-th degree grandchild
+# of nearest common ancestor C, returns min(m, n)
 def cousin_degree(miner, b1, b2):
     while miner.blocks[b1]["height"] > miner.blocks[b2]["height"]:
         b1 = miner.blocks[b1]["parent"]
@@ -86,6 +92,7 @@ def cousin_degree(miner, b1, b2):
         t += 1
     return t
 
+# Set hashpower percentages here
 percentages = [1]*25 + [5, 5, 5, 5, 5, 10, 15, 25]
 miners = []
 for p in percentages:
