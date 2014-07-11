@@ -3,7 +3,7 @@ POW_SOLUTION_TIME = 60
 # Time for a block to traverse the network
 TRANSIT_TIME = 12
 # Max uncle depth
-UNCLE_DEPTH = 0
+UNCLE_DEPTH = 1
 # Uncle block reward (normal block reward = 1)
 UNCLE_REWARD_COEFF = 7/8.
 # Reward for including uncles
