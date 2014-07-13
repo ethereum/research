@@ -58,8 +58,6 @@ def run_tape(v, tape):
     #Implemented in a blockchain, any additional hashes or timestamp would be added in the sha
     return str(v)
     
-def sha_cap(s):
-    return u.sha3(s)
 
 # This times the various parts of the hashing function - make the tape longer to make tape evaluation dominate
 def test(num_iterations, num_tape_evals, tape_w = 100, tape_d = 1000):
@@ -82,7 +80,7 @@ def test(num_iterations, num_tape_evals, tape_w = 100, tape_d = 1000):
             time_evaluating_tape += time.time() - t
             
             t = time.time()
-            h = sha_cap(x)
+            h = u.sha3(x)
             time_sha_capping += time.time() - t
 
     total_time = time_generating_tape + time_generating_inputs + time_evaluating_tape + time_sha_capping
