@@ -1,15 +1,15 @@
 # Time between successful PoW solutions
-POW_SOLUTION_TIME = 60
+POW_SOLUTION_TIME = 6
 # Time for a block to traverse the network
 TRANSIT_TIME = 12
 # Max uncle depth
-UNCLE_DEPTH = 1
+UNCLE_DEPTH = 4
 # Uncle block reward (normal block reward = 1)
-UNCLE_REWARD_COEFF = 7/8.
+UNCLE_REWARD_COEFF = 15/16.
 # Reward for including uncles
-NEPHEW_REWARD_COEFF = 1/16.
+NEPHEW_REWARD_COEFF = 1/32.
 # Rounds to test
-ROUNDS = 1000000
+ROUNDS = 500000
 
 import random
 
