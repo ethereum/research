@@ -61,7 +61,7 @@ def run_tape(v, tape):
 def sha_cap(s):
     return u.sha3(s)
 
-
+# This times the various parts of the hashing function - make the tape longer to make tape evaluation dominate
 def test(num_iterations, num_tape_evals, tape_w = 100, tape_d = 1000):
     time_generating_tape = 0.
     time_generating_inputs = 0.
@@ -72,9 +72,9 @@ def test(num_iterations, num_tape_evals, tape_w = 100, tape_d = 1000):
         tape = gen_tape(str(i), tape_w, tape_d)
         time_generating_tape += time.time() - t
         
-        for i in xrange(num_tape_evals):
+        for j in xrange(num_tape_evals):
             t = time.time()
-            v = gen_inputs(str(i), tape_w)
+            v = gen_inputs(str(j), tape_w)
             time_generating_inputs += time.time() - t
             
             t = time.time()
