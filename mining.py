@@ -59,8 +59,13 @@ def run_tape(v, tape):
     return str(v)
     
 
-# This times the various parts of the hashing function - make the tape longer to make tape evaluation dominate
-def test(num_iterations, num_tape_evals, tape_w = 100, tape_d = 1000):
+# This times the various parts of the hashing function - you can make the tape longer to make tape evaluation dominate
+#num_iterations is the number of tapes that are used
+#num_tape_evals is the number of nonces allowed, per tape
+#tape_w is the width of the tape
+#tape_d is the depth of the tape
+
+def test(num_iterations = 10, num_tape_evals = 1000, tape_w = 100, tape_d = 1000):
     time_generating_tape = 0.
     time_generating_inputs = 0.
     time_evaluating_tape = 0.
@@ -69,16 +74,16 @@ def test(num_iterations, num_tape_evals, tape_w = 100, tape_d = 1000):
         t = time.time()
         tape = gen_tape(str(i), tape_w, tape_d)
         time_generating_tape += time.time() - t
-        
+
         for j in xrange(num_tape_evals):
             t = time.time()
             v = gen_inputs(str(j), tape_w)
             time_generating_inputs += time.time() - t
-            
+
             t = time.time()
             x = run_tape(v,tape)
             time_evaluating_tape += time.time() - t
-            
+
             t = time.time()
             h = u.sha3(x)
             time_sha_capping += time.time() - t
