@@ -94,6 +94,40 @@ class Galois:
     def __repr__(self):
         return repr(self.val)
 
+
+# Modular division class
+
+def mkModuloClass(n):
+
+    if pow(2, n, n) != 2:
+        raise Exception("n must be prime!")
+
+    class Mod:
+        val = 0
+
+        def __init__(self, val):
+            self.val = val.val if isinstance(
+                self.val, self.__class__) else val
+
+        def __add__(self, other):
+            return self.__class__((self.val + other.val) % n)
+
+        def __mul__(self, other):
+            return self.__class__((self.val * other.val) % n)
+
+        def __sub__(self, other):
+            return self.__class__((self.val - other.val) % n)
+
+        def __div__(self, other):
+            return self.__class__((self.val * other.val ** (n-2)) % n)
+
+        def __int__(self):
+            return self.val
+
+        def __repr__(self):
+            return repr(self.val)
+    return Mod
+
 # Evaluates a polynomial in little-endian form, eg. x^2 + 3x + 2 = [2, 3, 1]
 # (normally I hate little-endian, but in this case dealing with polynomials
 # it's justified, since you get the nice property that p[n] is the nth degree
