@@ -27,7 +27,7 @@ def minimax_estimator(fac):
     return o
 
 
-def diff_estimator(fac, dw, mf):
+def diff_estimator(fac, dw, mf, exp=1):
     o = [1]
     derivs = [0] * 14
     for i in range(14, len(diffs)):
@@ -37,11 +37,11 @@ def diff_estimator(fac, dw, mf):
     vals = [max(diffs[i] + derivs[i] * dw, diffs[i] * mf) for i in range(len(diffs))]
     for i in range(1, len(diffs)):
         if vals[i] * 1.0 / vals[i-1] > fac:
-            o.append(o[-1] * vals[i] * 1.0 / vals[i-1] / fac)
+            o.append(o[-1] * 1.0 / fac * (vals[i] / vals[i-1])**exp)
         elif vals[i] > vals[i-1]:
             o.append(o[-1])
         else:
-            o.append(o[-1] * vals[i] * 1.0 / vals[i-1])
+            o.append(o[-1] * 1.0 * (vals[i] / vals[i-1])**exp)
     return o
 
 
@@ -101,21 +101,26 @@ def evaluate_estimates(estimates, crossvalidate=False):
 
 
 # Simulated annealing optimizer
-def optimize(producer, floors, ceilings, rate=0.7):
-    vals = [f*0.5+c*0.5 for f, c in zip(floors, ceilings)]
-    y = evaluate_estimates(producer(*vals))
-    for i in range(1, 5000):
-        stepsizes = [(f*0.5-c*0.5) / i**rate for f, c in zip(floors, ceilings)]
-        steps = [(random.random() * 2 - 1) * s for s in stepsizes]
-        newvals = [max(mi, min(ma, v+s)) for v, s, mi, ma in zip(vals, steps, floors, ceilings)]
-        newy = evaluate_estimates(producer(*newvals))
-        if newy < y:
-            vals = newvals
-            y = newy
-        if not i % 1000:
-            print i, vals, y
+def optimize(producer, floors, ceilings, rate=0.7, rounds=5000, tries=1):
+    bestvals, besty = None, 999999999999999
+    for t in range(tries):
+        print 'Starting test %d of %d' % (t + 1, tries)
+        vals = [f*0.5+c*0.5 for f, c in zip(floors, ceilings)]
+        y = evaluate_estimates(producer(*vals))
+        for i in range(1, rounds):
+            stepsizes = [(f*0.5-c*0.5) / i**rate for f, c in zip(floors, ceilings)]
+            steps = [(random.random() * 2 - 1) * s for s in stepsizes]
+            newvals = [max(mi, min(ma, v+s)) for v, s, mi, ma in zip(vals, steps, floors, ceilings)]
+            newy = evaluate_estimates(producer(*newvals))
+            if newy < y:
+                vals = newvals
+                y = newy
+            if not i % 1000:
+                print i, vals, y
+        if y < besty:
+            bestvals, besty = vals, y
         
-    return vals
+    return bestvals
 
 
 def score(producer, *vals):
