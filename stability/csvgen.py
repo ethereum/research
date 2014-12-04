@@ -8,6 +8,9 @@ tests = [
     [fit.diff_estimator, [1, 0, 0.001], [1.2, 10, 1]],
     [fit.diff_estimator, [1, 0, 0.001, 0], [1.2, 10, 1, 5]],
     [fit.ndiff_estimator, [1, 0, 0, 0.001], [1.2, 10, 1, 1]],
+    [fit.tx_diff_estimator, [1, 0, 0.001], [1.2, 10, 1]],
+    [fit.tx_diff_estimator, [1, 0, 0.001, 0, 0], [1.2, 10, 1, 6, 2]],
+    [fit.minimax_fee_estimator, [1, 3], [1.2, 60]],
 ]
 
 vals = [fit.optimize(t, mi, ma, rate=0.4, rounds=12000, tries=10)

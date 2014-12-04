@@ -5,11 +5,11 @@ TRANSIT_TIME = 12
 # Max uncle depth
 UNCLE_DEPTH = 4
 # Uncle block reward (normal block reward = 1)
-UNCLE_REWARD_COEFF = 15/16.
+UNCLE_REWARD_COEFF = 29/32.
 # Reward for including uncles
 NEPHEW_REWARD_COEFF = 1/32.
 # Rounds to test
-ROUNDS = 500000
+ROUNDS = 1000000
 
 import random
 
@@ -17,8 +17,11 @@ all_miners = {}
 
 
 class Miner():
-    def __init__(self, p):
+    def __init__(self, p, backward=0):
+        # Miner hashpower
         self.hashpower = p
+        # Miner mines a few blocks behind the head?
+        self.backward = backward
         self.id = random.randrange(10000000)
         # Set up a few genesis blocks (since the algo is grandpa-dependent,
         # we need two genesis blocks plus some genesis uncles)
@@ -52,6 +55,8 @@ class Miner():
     # Mine a block
     def mine(self):
         HEAD = self.blocks[self.head]
+        for i in range(self.backward):
+            HEAD = self.blocks[HEAD["parent"]]
         H = HEAD
         h = self.blocks[self.blocks[self.head]["parent"]]
         # Select the uncles. The valid set of uncles for a block consists
@@ -60,7 +65,7 @@ class Miner():
         # uncles of those previous blocks
         u = {}
         notu = {}
-        for i in range(UNCLE_DEPTH):
+        for i in range(UNCLE_DEPTH - self.backward):
             for c in self.children.get(h["id"], {}):
                 u[c] = True
             notu[H["id"]] = True
@@ -94,11 +99,26 @@ def cousin_degree(miner, b1, b2):
         t += 1
     return t
 
-# Set hashpower percentages here
-percentages = [1]*25 + [5, 5, 5, 5, 5, 10, 15, 25]
+# Set hashpower percentages and strategies
+# Strategy = how many blocks behind head you mine
+profiles = [
+    # (hashpower, strategy, count)
+    (1, 0, 20),
+    (1, -1, 4),  # cheaters, mine 1/2/4 blocks back to reduce
+    (1, -2, 3),  # chance of being in a two-block fork
+    (1, -4, 3),
+    (5, 4, 1),
+    (10, 1, 1),
+    (15, 1, 1),
+    (25, 1, 1),
+]
+
+total_pct = 0
 miners = []
-for p in percentages:
-    miners.append(Miner(p))
+for p, b, c in profiles:
+    for i in range(c):
+        miners.append(Miner(p, b))
+        total_pct += p
 
 miner_dict = {}
 for m in miners:
@@ -110,7 +130,7 @@ for t in range(ROUNDS):
     if t % 5000 == 0:
         print t
     for m in miners:
-        R = random.randrange(POW_SOLUTION_TIME * sum(percentages))
+        R = random.randrange(POW_SOLUTION_TIME * total_pct)
         if R < m.hashpower and t < ROUNDS - TRANSIT_TIME * 3:
             b = m.mine()
             listen_queue.append([t + TRANSIT_TIME, b])
@@ -149,19 +169,21 @@ for m in miners:
 print "### PRINTING PROFITS ###"
 
 for p in profit:
-    print miner_dict[p].hashpower, profit[p]
+    print miner_dict.get(p, Miner(0)).hashpower, profit.get(p, 0)
 
 print "### PRINTING RESULTS ###"
 
 groupings = {}
 counts = {}
 for p in profit:
-    h = miner_dict[p].hashpower
-    counts[h] = counts.get(h, 0) + 1
-    groupings[h] = groupings.get(h, 0) + profit[p]
+    m = miner_dict.get(p, None)
+    if m:
+        h = str(m.hashpower)+','+str(m.backward)
+        counts[h] = counts.get(h, 0) + 1
+        groupings[h] = groupings.get(h, 0) + profit[p]
 
 for c in counts:
-    print c, groupings[c] / counts[c] / (groupings[1] / counts[1])
+    print c, groupings[c] / counts[c] / (groupings['1,0'] / counts['1,0'])
 
 print " "
 print "Total blocks produced: ", len(all_miners) - UNCLE_DEPTH
