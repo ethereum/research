@@ -6,8 +6,8 @@ hashpower = [float(x) for x in open('hashpower.csv').readlines()]
 target = 12
 seconds_in_day = 8640
 ema_factor = 0.005
-f = 30
-threshold = 1.5
+f = 80
+threshold = 1.3
 maxadjust = 0.1
 
 
