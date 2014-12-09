@@ -36,15 +36,10 @@ than multiple memory lookups would - even for GPUs/FPGAs/ASICs.
 """
 
 
-try:
-    shathree = __import__('sha3')
-except:
-    shathree = __import__('python_sha3')
 import time
 
+from pyethereum import utils
 
-def sha3(x):
-    return decode_int(shathree.sha3_256(x).digest()) #
 
 def decode_int(s):
     o = 0
@@ -61,9 +56,17 @@ def encode_int(x):
     return o
 
 
+def sha3(x):
+    return decode_int(utils.sha3(x))
+
+
+def cantor_pair(x, y, p):
+    return ((x+y) * (x+y+1) / 2 + y) % p
+
 
 def get_daggerset(params, seedset):
     return [produce_dag(params, i) for i in seedset]
+
 
 def update_daggerset(params, daggerset, seedset, seed):
     idx = decode_int(seed) % len(daggerset)
@@ -71,97 +74,58 @@ def update_daggerset(params, daggerset, seedset, seed):
     daggerset[idx] = produce_dag(params, seed)
 
 
-P = (2**256 - 4294968273)**2
-
-
 def produce_dag(params, seed):
-    k, w, d = params.k, params.w, params.d
-    o = [sha3(seed)**2]
+    k, hk, w, hw, n, p, t = params.k, params.hk, params.w, \
+        params.hw, params.dag_size, params.p, params.h_threshold
+    print 'Producing dag of size %d (%d memory)' % (n, n * params.wordsz)
+    o = [sha3(seed)]
     init = o[0]
     picker = 1
-    for i in range(1, params.dag_size):
+    for i in range(1, n):
         x = 0
-        picker = (picker * init) % P
-        #assert picker == pow(init, i, P)
+        picker = (picker * init) % p
         curpicker = picker
-        for j in range(k): # can be flattend if params are known
-            pos = curpicker % i
-            x |= o[pos]
-            curpicker >>= 10
-        o.append(pow(x, w, P))  # use any "hash function" here
-    return o
-
-def quick_calc(params, seed, pos, known={}):
-    init = sha3(seed)**2
-    k, w, d = params.k, params.w, params.d
-    known[0] = init
-    def calc(i):
-        if i not in known:
-            curpicker = pow(init, i, P)
-            x = 0
-            for j in range(k):
-                pos = curpicker % i
-                x |= calc(pos)
+        if i < t:
+            for j in range(k):  # can be flattend if params are known
+                x ^= o[curpicker % i]
                 curpicker >>= 10
-            known[i] = pow(x, w, P)
-        return known[i]
-    o = calc(pos)
+        else:
+            for j in range(hk):
+                x ^= o[curpicker % t]
+                curpicker >>= 10
+        o.append(pow(x, w if i < t else hw, p))  # use any "hash function" here
     return o
 
 
-def produce_dag_k2dr(params, seed):
-    """
-    # k=2 and dependency ranges d  [:i/d], [-i/d:]
-    Idea is to prevent partitial memory availability in
-    which a significant part of the higher mem acesses
-    can be substituted by two low mem accesses, plus some calc.
-    """
-    w, d = params.w, params.d
-    o = [sha3(seed)**2]
-    init = o[0]
-    picker = 1
-    for i in range(1, params.dag_size):
-        x = 0
-        picker = (picker * init) % P
-        curpicker = picker
-        # higher end
-        f = i/d + 1
-        pos = i - f + curpicker % f
-        x |= o[pos]
-        curpicker >>= 10
-        # lower end
-        pos = f - curpicker % f - 1
-        x |= o[pos]
-        o.append(pow(x, w, P))  # use any "hash function" here
-    return o
-
-
-def quick_calc_k2dr(params, seed, pos, known={}):
-    # k=2 and dependency ranges d [:i/d], [-i/d:]
-    init = sha3(seed) ** 2
-    k, w, d = params.k, params.w, params.d
+def quick_calc(params, seed, pos, known=None):
+    k, hk, w, hw, p, t = params.k, params.hk, params.w, \
+        params.hw, params.p, params.h_threshold
+    init = sha3(seed) % p
+    if known is None:
+        known = {}
     known[0] = init
+
     def calc(i):
         if i not in known:
-            curpicker = pow(init, i, P)
+            curpicker = pow(init, i, p)
             x = 0
-            # higher end
-            f = i/d + 1
-            pos = i - f + curpicker % f
-            x |= calc(pos)
-            curpicker >>= 10
-            # lower end
-            pos = f - curpicker % f - 1
-            x |= calc(pos)
-            known[i] = pow(x, w, P)
+            if i < t:
+                for j in range(k):
+                    x ^= calc(curpicker % i)
+                    curpicker >>= 10
+                known[i] = pow(x, w, p)
+            else:
+                for j in range(hk):
+                    x ^= calc(curpicker % t)
+                    curpicker >>= 10
+                known[i] = pow(x, hw, p)
         return known[i]
     o = calc(pos)
+    print 'Calculated index %d in %d lookups' % (pos, len(known))
     return o
 
-produce_dag = produce_dag_k2dr
-quick_calc = quick_calc_k2dr
 
-def hashimoto(daggerset, lookups, header, nonce):
+def hashimoto(params, daggerset, header, nonce):
     """
     Requirements:
     - I/O bound: cycles spent on I/O â‰« cycles spent in cpu
@@ -178,41 +142,48 @@ def hashimoto(daggerset, lookups, header, nonce):
     lookups depend on previous lookup results
     impossible to route computation/lookups based on the initial sha3
     """
-    num_dags = len(daggerset)
-    dag_size = len(daggerset[0])
-    mix = sha3(header + encode_int(nonce)) ** 2
+    rand = sha3(header + encode_int(nonce)) % params.p
+    mix = rand
     # loop, that can not be unrolled
     # dag and dag[pos] depended on previous lookup
-    for i in range(lookups):
-        dag = daggerset[mix % num_dags] # modulo
-        pos = mix % dag_size    # modulo
+    for i in range(params.lookups):
+        v = mix if params.is_serial else rand >> i
+        dag = daggerset[v % params.num_dags]  # modulo
+        pos = v % params.dag_size    # modulo
         mix ^= dag[pos]         # xor
+        # print v % params.num_dags, pos, dag[pos]
+    print header, nonce, mix
     return mix
+
 
 def light_hashimoto(params, seedset, header, nonce):
-    lookups = params.lookups
-    dag_size = params.dag_size
-    known = dict((s, {}) for s in seedset) # cache results for each dag
-    mix = sha3(header + encode_int(nonce)) ** 2 
-    for i in range(lookups):
-        seed = seedset[mix % len(seedset)]
-        pos = mix % dag_size
-        mix ^= quick_calc(params, seed, pos, known[seed])
-    num_accesses = sum(len(known[s]) for s in seedset)
-    print 'Calculated %d lookups with %d accesses' % (lookups, num_accesses)
+    rand = sha3(header + encode_int(nonce)) % params.p
+    mix = rand
+
+    for i in range(params.lookups):
+        v = mix if params.is_serial else rand >> i
+        seed = seedset[v % len(seedset)]
+        pos = v % params.dag_size
+        qc = quick_calc(params, seed, pos)
+        # print v % params.num_dags, pos, qc
+        mix ^= qc
+    print 'Calculated %d lookups' % \
+        (params.lookups)
+    print header, nonce, mix
     return mix
 
+
 def light_verify(params, seedset, header, nonce):
-    return light_hashimoto(params, seedset, header, nonce) \
-        <= 2**512 / params.diff
+    h = light_hashimoto(params, seedset, header, nonce)
+    return h <= 256**params.wordsz / params.diff
 
 
 def mine(daggerset, params, header, nonce=0):
     orignonce = nonce
     origtime = time.time()
     while 1:
-        h = hashimoto(daggerset, params.lookups, header, nonce)
-        if h <= 2**512 / params.diff:
+        h = hashimoto(params, daggerset, header, nonce)
+        if h <= 256**params.wordsz / params.diff:
             noncediff = nonce - orignonce
             timediff = time.time() - origtime
             print 'Found nonce: %d, tested %d nonces in %.2f seconds (%d per sec)' % \
@@ -228,44 +199,55 @@ class params(object):
     lookups:  hashes_per_sec(lookups=0) â‰« hashes_per_sec(lookups_mem_hard)
     k:        ?
     d:        higher values enfore memory availability but require more quick_calcs
-    numdags:  so that a dag can be updated in reasonable time
+    num_dags: so that a dag can be updated in reasonable time
     """
-    memory = 512 * 1024**2          # memory usage
-    numdags = 128                   # number of dags
-    dag_size = memory /numdags / 64 # num 64byte values per dag
-    lookups = 512                   # memory lookups per hash
-    diff = 2**14                    # higher is harder
-    k = 2                           # num dependecies of each dag value
-    d = 8                           # max distance of first dependency (1/d=fraction of size)
-    w = 2
+    p = (2 ** 256 - 4294968273)**2    # prime modulus
+    wordsz = 64                       # word size
+    memory = 10 * 1024**2            # memory usage
+    num_dags = 2                     # number of dags
+    dag_size = memory/num_dags/wordsz # num 64byte values per dag
+    lookups = 40                      # memory lookups per hash
+    diff = 2**14                      # higher is harder
+    k = 2                             # num dependecies of each dag value
+    hk = 8                            # dependencies for final nodes
+    d = 8                             # max distance of first dependency (1/d=fraction of size)
+    w = 2                             # work factor on node generation
+    hw = 8                            # work factor on final node generation
+    h_threshold = dag_size*2/5        # cutoff between final and nonfinal nodes
+    is_serial = False                 # hashimoto is serial
 
 
 if __name__ == '__main__':
-    print dict((k,v) for k,v in params.__dict__.items() if isinstance(v,int))
+    print dict((k, v) for k, v in params.__dict__.items()
+               if isinstance(v, int))
 
     # odds of a partitial storage attack
     missing_mem = 0.01
     P_partitial_mem_success = (1-missing_mem) ** params.lookups
-    print 'P success per hash with %d%% mem missing: %d%%' %(missing_mem*100, P_partitial_mem_success*100)
+    print 'P success per hash with %d%% mem missing: %d%%' % \
+        (missing_mem*100, P_partitial_mem_success*100)
 
-    # which actually only results in a slower mining, as more hashes must be tried
-    slowdown = 1/ P_partitial_mem_success
-    print 'x%.1f speedup required to offset %d%% missing mem' % (slowdown, missing_mem*100)
+    # which actually only results in a slower mining,
+    # as more hashes must be tried
+    slowdown = 1 / P_partitial_mem_success
+    print 'x%.1f speedup required to offset %d%% missing mem' % \
+        (slowdown, missing_mem*100)
 
     # create set of DAGs
     st = time.time()
-    seedset = [str(i) for i in range(params.numdags)]
+    seedset = [str(i) for i in range(params.num_dags)]
     daggerset = get_daggerset(params, seedset)
-    print 'daggerset with %d dags' % len(daggerset), 'size:', 64*params.dag_size*params.numdags / 1024**2 , 'MB'
+    print 'daggerset with %d dags' % len(daggerset), 'size:', \
+        64*params.dag_size*params.num_dags / 1024**2, 'MB'
     print 'creation took %.2fs' % (time.time() - st)
 
     # update DAG
     st = time.time()
-    update_daggerset(params, daggerset, seedset, seed='new') 
+    update_daggerset(params, daggerset, seedset, seed='qwe')
     print 'updating 1 dag took %.2fs' % (time.time() - st)
 
     # Mine
-    for i in range(10):
+    for i in range(1):
         header = 'test%d' % i
         print '\nmining', header
         nonce = mine(daggerset, params, header)
@@ -273,7 +255,3 @@ if __name__ == '__main__':
         st = time.time()
         assert light_verify(params, seedset, header, nonce)
         print 'verification took %.2fs' % (time.time() - st)
-
-
-
-
