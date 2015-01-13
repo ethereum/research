@@ -22,6 +22,8 @@ BOUNDED_ADJUST_THRESHOLD = 1.3
 BOUNDED_ADJUST_FACTOR = 0.01
 # How many blocks back to look
 BLKS_BACK = 10
+# Naive difficulty adjustment factor
+NAIVE_ADJUST_FACTOR = 1/1024.
 
 
 # Produces a value according to the exponential distribution; used
@@ -79,6 +81,19 @@ def bounded_adjust(timestamps, diffs):
         fac = (1 + BOUNDED_ADJUST_FACTOR) ** (delta / expected)
     else:
         fac = 1
+    return diffs[-1] * fac
+
+
+# Old Ethereum algorithm
+def old_adjust(timestamps, diffs):
+    if len(timestamps) < 2:
+        return diffs[-1]
+    delta = timestamps[-1] - timestamps[-2]
+    expected = TARGET * 0.693
+    if delta > expected:
+        fac = 1 - NAIVE_ADJUST_FACTOR
+    else:
+        fac = 1 + NAIVE_ADJUST_FACTOR
     return diffs[-1] * fac
 
 
