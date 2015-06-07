@@ -1,11 +1,12 @@
 # Time between successful PoW solutions
-POW_SOLUTION_TIME = 6
+POW_SOLUTION_TIME = 12
 # Time for a block to traverse the network
-TRANSIT_TIME = 12
+TRANSIT_TIME = 8
 # Max uncle depth
 UNCLE_DEPTH = 4
 # Uncle block reward (normal block reward = 1)
-UNCLE_REWARD_COEFF = 29/32.
+UNCLE_REWARD_COEFF = 32/32.
+UNCLE_DEPTH_PENALTY = 4/32.
 # Reward for including uncles
 NEPHEW_REWARD_COEFF = 1/32.
 # Rounds to test
@@ -104,13 +105,13 @@ def cousin_degree(miner, b1, b2):
 profiles = [
     # (hashpower, strategy, count)
     (1, 0, 20),
-    (1, -1, 4),  # cheaters, mine 1/2/4 blocks back to reduce
-    (1, -2, 3),  # chance of being in a two-block fork
-    (1, -4, 3),
-    (5, 4, 1),
-    (10, 1, 1),
-    (15, 1, 1),
-    (25, 1, 1),
+    (1, 1, 4),  # cheaters, mine 1/2/4 blocks back to reduce
+    (1, 2, 3),  # chance of being in a two-block fork
+    (1, 4, 3),
+    (5, 0, 1),
+    (10, 0, 1),
+    (15, 0, 1),
+    (25, 0, 1),
 ]
 
 total_pct = 0
@@ -157,7 +158,8 @@ while h["id"] > UNCLE_DEPTH + 2:
     for u in h["uncles"]:
         ZORO[u] = True
         u2 = miners[0].blocks[u]
-        profit[u2["miner"]] = profit.get(u2["miner"], 0) + UNCLE_REWARD_COEFF
+        profit[u2["miner"]] \
+            = profit.get(u2["miner"], 0) + UNCLE_REWARD_COEFF - UNCLE_DEPTH_PENALTY * (h["height"] - u2["height"])
     h = miners[0].blocks[h["parent"]]
 
 print "### PRINTING HEADS ###"
