@@ -79,8 +79,9 @@ class GhostTable():
             cur_entry[sig.view[i]][sig.signer] = True
             # If it has 67% signatures, finalize
             if len(cur_entry[sig.view[i]]) > NUM_VALIDATORS * 2 / 3:
-                prevgt = block_map[sig.view[i]].gt
-                print 'confirmed', block_map[sig.view[i]].height, sig.view[i], prevgt.hash()
+                # prevgt = block_map[sig.view[i]].gt
+                prevgt = self
+                print 'confirmed', block_map[sig.view[i]].height, sig.view[i]
                 # Update blocks between the previous confirmation and the
                 # current confirmation based on the newly confirmed block's
                 # ghost table
@@ -97,6 +98,8 @@ class GhostTable():
                 print i, sig.view[i]
                 self.confirmed.append(sig.view[i])
 
+    # Hash of the ghost table's contents (to make sure that it's not
+    # being modified when it's already supposed to be set in stone)
     def hash(self):
         print hashlib.sha256(repr(self.unconfirmed) +
                              repr(self.confirmed)).hexdigest()[:15]
