@@ -16,11 +16,13 @@ class NetworkSimulator():
         self.peers = {}
         for a in self.agents:
             p = []
-            while len(p) < num_peers:
+            while len(p) <= num_peers // 2:
                 p.append(random.choice(self.agents))
                 if p[-1] == a:
                     p.pop()
-            self.peers[a.id] = p
+            self.peers[a.id] = self.peers.get(a.id, []) + p
+            for peer in p:
+                self.peers[peer.id] = self.peers.get(peer.id, []) + [a]
 
     def tick(self):
         if self.time in self.objqueue:
