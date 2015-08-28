@@ -61,7 +61,7 @@ class Validator():
         # The validator's ID, and its position in the queue
         self.pos = self.id = pos
         # This validator's offset from the clock
-        self.time_offset = max(normal_distribution(200, 100)(), 0)
+        self.time_offset = normal_distribution(0, 100)()
         # The highest height that this validator has seen
         self.max_height = 0
         self.head = None
@@ -90,10 +90,11 @@ class Validator():
         for i, b in list(enumerate(self.received_blocks))[sign_from:]:
             if self.received_blocks[i] is None:
                 time_delta = self.get_time() - BLKTIME * i 
-                my_opinion = 0.35 / (1 + max(0, time_delta) * 0.3 / BLKTIME) + 0.14
+                my_opinion = 0.35 / (1 + max(0, time_delta) * 0.2 / BLKTIME) + 0.14
             else:
                 time_delta = self.time_received[b.hash] - BLKTIME * i 
-                my_opinion = 0.7 / (1 + abs(time_delta) * 0.3 / BLKTIME) + 0.15
+                my_opinion = 0.7 / (1 + abs(time_delta) * 0.2 / BLKTIME) + 0.15
+                # print 'tdpost', time_delta, my_opinion
                 if my_opinion == 0.5:
                     my_opinion = 0.5001
             votes = self.received_signatures[i].values() if i < len(self.received_signatures) else []
@@ -253,7 +254,7 @@ def run(steps=4000):
         del discarded[x]
     for i in range(steps):
         n.tick()
-        if i % 250 == 0:
+        if i % 500 == 0:
             print get_opinions(n)[-60:]
             finalized0 = [(v.max_finalized_height, v.finalized_hashes) for v in n.agents]
             finalized = sorted(finalized0, key=lambda x: len(x[1]))
@@ -281,4 +282,4 @@ def run(steps=4000):
             print "Network health back to normal!"
             print "###########################################################"
             n.generate_peers()
-    calibrate(n.agents[0].finalized_hashes)
+    calibrate(n.agents[0].finalized_hashes[:n.agents[0].max_finalized_height + 1])
