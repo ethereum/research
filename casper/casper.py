@@ -6,8 +6,8 @@ import math
 
 NUM_VALIDATORS = 20
 BLKTIME = 40
-BY_CHAIN = False
-NETSPLITS = False
+NETSPLITS = 2
+CHECK_INTEGRITY = True
 
 GENESIS_STATE = 0
 
@@ -31,6 +31,9 @@ class Signature():
         # Finalized height
         self.sign_from = sign_from
 
+    def get_height(self):
+        return self.sign_from + len(self.probs)
+
 
 class Block():
     def __init__(self, maker, height):
@@ -40,6 +43,13 @@ class Block():
         self.height = height
         # Hash of the signature (for db storage purposes)
         self.hash = random.randrange(10**20) + 10**21 + 10**23 * self.height
+
+
+class BlockRequest():
+    def __init__(self, sender, height):
+        self.sender = sender
+        self.ask_height = height
+        self.hash = random.randrange(10**14)
 
 
 def state_transition(state, block):
@@ -83,28 +93,41 @@ class Validator():
     def get_time(self):
         return self.network.time + self.time_offset
 
+    def broadcast(self, obj):
+        self.network.broadcast(self, obj)
+
     def sign(self, block):
         # Initialize the probability array, the core of the signature
         best_guesses = [None] * len(self.received_blocks)
         sign_from = max(0, self.max_finalized_height - 30)
         for i, b in list(enumerate(self.received_blocks))[sign_from:]:
             if self.received_blocks[i] is None:
-                time_delta = self.get_time() - BLKTIME * i 
+                time_delta = self.get_time() - BLKTIME * i
                 my_opinion = 0.35 / (1 + max(0, time_delta) * 0.2 / BLKTIME) + 0.14
             else:
-                time_delta = self.time_received[b.hash] - BLKTIME * i 
+                time_delta = self.time_received[b.hash] - BLKTIME * i
                 my_opinion = 0.7 / (1 + abs(time_delta) * 0.2 / BLKTIME) + 0.15
                 # print 'tdpost', time_delta, my_opinion
                 if my_opinion == 0.5:
                     my_opinion = 0.5001
             votes = self.received_signatures[i].values() if i < len(self.received_signatures) else []
             votes += [my_opinion] * (NUM_VALIDATORS - len(votes))
-            best_guesses[i] = min(vote(votes), 1 if self.received_blocks[i] is not None else my_opinion)
+            vote_from_signatures = vote(votes)
+            bg = min(vote_from_signatures, 1 if self.received_blocks[i] is not None else my_opinion)
+            # In case we fall into an equilibrium trap at 0.5, eventually force divergence
+            if self.get_time() - BLKTIME * i > BLKTIME * 40:
+                fac = 1.0 / (1.0 + (self.get_time() - BLKTIME * i) / (BLKTIME * 40))
+                if 0.14 < bg < 1 - 0.5 * fac:
+                    bg = 0.14 + (bg - 0.14) * fac
+            best_guesses[i] = bg
+
+            if vote_from_signatures > 0.95 and self.received_blocks[i] is None:
+                self.broadcast(BlockRequest(self.id, i))
             if best_guesses[i] > 0.9999:
                 while len(self.finalized_hashes) <= i:
                     self.finalized_hashes.append(None)
                 self.finalized_hashes[i] = self.received_blocks[i].hash
-            elif best_guesses[i] < 0.0001:    
+            elif best_guesses[i] < 0.0001:
                 while len(self.finalized_hashes) <= i:
                     self.finalized_hashes.append(None)
                 self.finalized_hashes[i] = False
@@ -113,7 +136,7 @@ class Validator():
             self.max_finalized_height += 1
             last_state = self.finalized_states[-1] if len(self.finalized_states) else GENESIS_STATE
             self.finalized_states.append(state_transition(last_state, self.received_blocks[self.max_finalized_height]))
-        
+
         self.probs = self.probs[:sign_from] + best_guesses[sign_from:]
         log('Making signature: %r' % self.probs[-10:], lvl=1)
         sign_from_state = self.finalized_states[sign_from - 1] if sign_from > 0 else GENESIS_STATE
@@ -144,14 +167,11 @@ class Validator():
             for i, p in enumerate(obj.probs):
                 self.received_signatures[i + obj.sign_from][obj.signer] = p
             self.network.broadcast(self, obj)
-        # Received an object request, respond if we have it
-        elif isinstance(obj, ObjRequest):
-            if obj.ask_hash in self.received_objects:
-                self.network.direct_send(obj.sender_id, ObjResponse(
-                                         self.received_objects[obj.ask_hash]))
-        # Received an object response, add to database
-        elif isinstance(obj, ObjResponse):
-            self.received_objects[obj.obj.hash] = obj.obj
+        # Received a block request, respond if we have it
+        elif isinstance(obj, BlockRequest):
+            if obj.ask_height < len(self.received_blocks):
+                if self.received_blocks[obj.ask_height] is not None:
+                    self.network.direct_send(obj.sender, self.received_blocks[obj.ask_height])
         self.received_objects[obj.hash] = obj
         self.time_received[obj.hash] = self.get_time()
 
@@ -180,12 +200,15 @@ all_signatures = []
 now = [0]
 
 
-
 def who_heard_of(h, n):
-   o = ''
-   for x in n.agents:
-       o += '1' if h in x.received_objects else '0'
-   return o
+    o = ''
+    for x in n.agents:
+        o += '1' if h in x.received_objects else '0'
+    return o
+
+
+ALPHA = '0123456789'
+
 
 def get_opinions(n):
     o = []
@@ -197,20 +220,23 @@ def get_opinions(n):
         q = ''
         for x in n.agents:
             if len(x.probs) <= h:
-                p += '_'  
-            elif x.probs[h] < 0.5:
-                p += str(int(5 - math.log(x.probs[h]) / math.log(0.0001) * 4) if x.probs[h] > 0.0001 else 0)
-            elif x.probs[h] >= 0.5:
-                p += str(int(5 + math.log(1 - x.probs[h]) / math.log(0.0001) * 4) if x.probs[h] < 0.9999 else 9)
+                p += '_'
+            elif x.probs[h] < 0.0001:
+                p += '-'
+            elif x.probs[h] > 0.9999:
+                p += '+'
+            else:
+                p += ALPHA[int(x.probs[h] * (len(ALPHA) - 0.0001))]
             q += 'n' if len(x.received_blocks) <= h or x.received_blocks[h] is None else 'y'
         o.append((h, p, q))
     return o
 
+
 def get_finalization_heights(n):
-   o = []
-   for x in n.agents:
-       o.append(x.max_finalized_height)
-   return o
+    o = []
+    for x in n.agents:
+        o.append(x.max_finalized_height)
+    return o
 
 
 # Check how often blocks that are assigned particular probabilities of
@@ -243,7 +269,7 @@ def run(steps=4000):
     n = networksim.NetworkSimulator()
     for i in range(NUM_VALIDATORS):
         n.agents.append(Validator(i, n))
-    n.generate_peers()
+    n.generate_peers(3)
     while len(all_signatures):
         all_signatures.pop()
     for x in future.keys():
@@ -255,29 +281,37 @@ def run(steps=4000):
     for i in range(steps):
         n.tick()
         if i % 500 == 0:
-            print get_opinions(n)[-60:]
+            minmax = 99999999999999999
+            for x in n.agents:
+                minmax = min(minmax, x.max_finalized_height - 10)
+            print get_opinions(n)[max(minmax, 0):]
             finalized0 = [(v.max_finalized_height, v.finalized_hashes) for v in n.agents]
-            finalized = sorted(finalized0, key=lambda x: len(x[1]))
-            for j in range(len(n.agents) - 1):
-                for k in range(len(finalized[j][1])):
-                    if finalized[j][1][k] is not None and finalized[j+1][1][k] is not None:
-                        if finalized[j][1][k] != finalized[j+1][1][k]:
-                            print finalized[j]
-                            print finalized[j+1]
-                            raise Exception("Finalization mismatch: %r %r" % (finalized[j][1][k], finalized[j+1][1][k]))
+            if CHECK_INTEGRITY:
+                finalized = sorted(finalized0, key=lambda x: len(x[1]))
+                for j in range(len(n.agents) - 1):
+                    for k in range(len(finalized[j][1])):
+                        if finalized[j][1][k] is not None and finalized[j+1][1][k] is not None:
+                            if finalized[j][1][k] != finalized[j+1][1][k]:
+                                print finalized[j]
+                                print finalized[j+1]
+                                raise Exception("Finalization mismatch: %r %r" % (finalized[j][1][k], finalized[j+1][1][k]))
             print 'Finalized status: %r' % [x[0] for x in finalized0]
-        if i == 10000 and NETSPLITS:
+            _all = finalized0[0][1]
+            _pos = len([x for x in _all if x])
+            _neg = len([x for x in _all if not x])
+            print 'Finalized blocks: %r (%r positive, %r negaitve)' % (len(_all), _pos, _neg)
+        if i == 10000 and NETSPLITS >= 1:
             print "###########################################################"
             print "Knocking off 20% of the network!!!!!"
             print "###########################################################"
             n.knock_offline_random(NUM_VALIDATORS // 5)
-        if i == 20000 and NETSPLITS:
+        if i == 20000 and NETSPLITS >= 2:
             print "###########################################################"
             print "Simluating a netsplit!!!!!"
             print "###########################################################"
             n.generate_peers()
             n.partition()
-        if i == 30000 and NETSPLITS:
+        if i == 30000 and NETSPLITS >= 1:
             print "###########################################################"
             print "Network health back to normal!"
             print "###########################################################"
