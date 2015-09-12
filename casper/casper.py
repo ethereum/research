@@ -258,7 +258,7 @@ def get_finalization_heights(n):
 # Check how often blocks that are assigned particular probabilities of
 # finalization by our algorithm are actually finalized
 def calibrate(finalized_hashes):
-    thresholds = [0, 0.25, 0.5, 0.75] + [1 - 0.5**k for k in range(10)] + [1]
+    thresholds = range(-10, 11)
     signed = [0] * (len(thresholds) - 1)
     _finalized = [0] * (len(thresholds) - 1)
     _discarded = [0] * (len(thresholds) - 1)
@@ -277,8 +277,8 @@ def calibrate(finalized_hashes):
                 _discarded[index] += 1
     for i in range(len(thresholds) - 1):
         if _finalized[i] + _discarded[i]:
-            print 'Probability from %f to %f: %f' % (thresholds[i], thresholds[i+1], _finalized[i] * 1.0 / (_finalized[i] + _discarded[i]))
-    print 'Percentage of blocks nonempty: %f%%' % (len([x for x in finalized_hashes if x]) * 100.0 / len(finalized_hashes))
+            print 'Probability from %f to %f: %f (%d of %d)' % (thresholds[i], thresholds[i+1], _finalized[i] * 1.0 / (_finalized[i] + _discarded[i]), _finalized[i], _finalized[i] + _discarded[i])
+    print 'Percentage of block heights filled: %f%%' % (len([x for x in finalized_hashes if x]) * 100.0 / len(finalized_hashes))
 
 
 def run(steps=4000):
