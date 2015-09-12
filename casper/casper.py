@@ -1,14 +1,22 @@
 import copy, random, hashlib
 from distributions import normal_distribution
 import networksim
-from voting_strategy import vote
+from voting_strategy import vote, default_vote
 import math
 
+# Number of validators
 NUM_VALIDATORS = 20
+# Block time
 BLKTIME = 40
+# 0 for no netsplits
+# 1 for simulating a netsplit where 20% of validators jump off
+# the network
+# 2 for simulating the above netsplit, plus a 50-50 netsplit,
+# plus reconvergence
 NETSPLITS = 2
+# Check the equality of finalized states
 CHECK_INTEGRITY = True
-
+# The genesis state root
 GENESIS_STATE = 0
 
 logging_level = 0
@@ -19,10 +27,14 @@ def log(s, lvl):
         print(s)
 
 
+# A signture specifies an initial height ("sign_from"), a finalized
+# state from all blocks before that height and a list of probability
+# bets from that height up to the latest height
 class Signature():
     def __init__(self, signer, probs, finalized_state, sign_from):
+        # The ID of the signer
         self.signer = signer
-        # List of maps from block hash to probability
+        # List of probability bets, expressed in log odds
         self.probs = probs
         # Hash of the signature (for db storage purposes)
         self.hash = random.randrange(10**14)
@@ -35,6 +47,7 @@ class Signature():
         return self.sign_from + len(self.probs)
 
 
+# Right now, a block simply specifies a proposer and a height.
 class Block():
     def __init__(self, maker, height):
         # The producer of the block
@@ -45,6 +58,7 @@ class Block():
         self.hash = random.randrange(10**20) + 10**21 + 10**23 * self.height
 
 
+# A request to receive a block at a particular height
 class BlockRequest():
     def __init__(self, sender, height):
         self.sender = sender
@@ -52,6 +66,8 @@ class BlockRequest():
         self.hash = random.randrange(10**14)
 
 
+# Toy state transition function (in production, do sequential
+# apply_transaction here)
 def state_transition(state, block):
     return state if block is None else (state ** 3 + block.hash ** 5) % 10**40
 
@@ -59,7 +75,7 @@ def state_transition(state, block):
 # A validator
 class Validator():
     def __init__(self, pos, network):
-        # Map from height to {node_id: latest_opinion}
+        # Map from height to {node_id: latest_bet}
         self.received_signatures = []
         # List of received blocks
         self.received_blocks = []
@@ -67,16 +83,14 @@ class Validator():
         self.probs = []
         # All objects that this validator has received; basically a database
         self.received_objects = {}
+        # Time when the object was received
         self.time_received = {}
         # The validator's ID, and its position in the queue
         self.pos = self.id = pos
-        # This validator's offset from the clock
+        # The offset of this validator's clock vs. real time
         self.time_offset = normal_distribution(0, 100)()
         # The highest height that this validator has seen
         self.max_height = 0
-        self.head = None
-        # The last time the validator made a block
-        self.last_time_made_block = -999999999999
         # The validator's hash chain
         self.finalized_hashes = []
         # Finalized states
@@ -87,50 +101,55 @@ class Validator():
         self.network = network
         # Last time signed
         self.last_time_signed = 0
-        # Next neight to mine
+        # Next height to mine
         self.next_height = self.pos
 
+    # Get the local time from the point of view of this validator, using the
+    # validator's offset from real time
     def get_time(self):
         return self.network.time + self.time_offset
 
+    # Broadcast an object to the network
     def broadcast(self, obj):
         self.network.broadcast(self, obj)
 
-    def sign(self, block):
+    # Create a signature
+    def sign(self):
         # Initialize the probability array, the core of the signature
         best_guesses = [None] * len(self.received_blocks)
         sign_from = max(0, self.max_finalized_height - 30)
         for i, b in list(enumerate(self.received_blocks))[sign_from:]:
-            if self.received_blocks[i] is None:
-                time_delta = self.get_time() - BLKTIME * i
-                my_opinion = 0.35 / (1 + max(0, time_delta) * 0.2 / BLKTIME) + 0.14
-            else:
-                time_delta = self.time_received[b.hash] - BLKTIME * i
-                my_opinion = 0.7 / (1 + abs(time_delta) * 0.2 / BLKTIME) + 0.15
-                # print 'tdpost', time_delta, my_opinion
-                if my_opinion == 0.5:
-                    my_opinion = 0.5001
+            # Compute this validator's own initial vote based on when the block
+            # was received, compared to what time the block should have arrived
+            received_time = self.time_received[b.hash] if b is not None else None
+            my_opinion = default_vote(BLKTIME * i, received_time, self.get_time(), blktime=BLKTIME)
+            # Get others' bets on this height
             votes = self.received_signatures[i].values() if i < len(self.received_signatures) else []
+            votes = [x for x in votes if x != 0]
+            # Fill in the not-yet-received votes with this validator's default bet
             votes += [my_opinion] * (NUM_VALIDATORS - len(votes))
-            vote_from_signatures = vote(votes)
-            bg = min(vote_from_signatures, 1 if self.received_blocks[i] is not None else my_opinion)
-            # In case we fall into an equilibrium trap at 0.5, eventually force divergence
-            if self.get_time() - BLKTIME * i > BLKTIME * 40:
-                fac = 1.0 / (1.0 + (self.get_time() - BLKTIME * i) / (BLKTIME * 40))
-                if 0.14 < bg < 1 - 0.5 * fac:
-                    bg = 0.14 + (bg - 0.14) * fac
+            vote_from_signatures = int(vote(votes))
+            # Add the bet to the list
+            bg = min(vote_from_signatures, 10 if self.received_blocks[i] is not None else my_opinion)
             best_guesses[i] = bg
-
-            if vote_from_signatures > 0.95 and self.received_blocks[i] is None:
+            # Request a block if we should have it, and should have had it for
+            # a long time, but don't
+            if vote_from_signatures > 3 and self.received_blocks[i] is None:
                 self.broadcast(BlockRequest(self.id, i))
-            if best_guesses[i] > 0.9999:
+            elif i < len(self.received_blocks) - 50 and self.received_blocks[i] is None:
+                if random.random() < 0.05:
+                    self.broadcast(BlockRequest(self.id, i))
+            # Block finalized
+            if best_guesses[i] >= 10:
                 while len(self.finalized_hashes) <= i:
                     self.finalized_hashes.append(None)
                 self.finalized_hashes[i] = self.received_blocks[i].hash
-            elif best_guesses[i] < 0.0001:
+            # Absense of the block finalized
+            elif best_guesses[i] <= -10:
                 while len(self.finalized_hashes) <= i:
                     self.finalized_hashes.append(None)
                 self.finalized_hashes[i] = False
+        # Add to the list of finalized states
         while self.max_finalized_height < len(self.finalized_hashes) - 1 \
                 and self.finalized_hashes[self.max_finalized_height + 1] is not None:
             self.max_finalized_height += 1
@@ -155,8 +174,8 @@ class Validator():
                 self.received_blocks.append(None)
             self.received_blocks[obj.height] = obj
             self.time_received[obj.hash] = self.get_time()
-            # If we have not yet produced a signature at this height, do so now
-            s = self.sign(obj)
+            # Upon receiving a new block, make a new signature
+            s = self.sign()
             self.network.broadcast(self, s)
             self.on_receive(s)
             self.network.broadcast(self, obj)
@@ -207,9 +226,6 @@ def who_heard_of(h, n):
     return o
 
 
-ALPHA = '0123456789'
-
-
 def get_opinions(n):
     o = []
     maxheight = 0
@@ -221,12 +237,12 @@ def get_opinions(n):
         for x in n.agents:
             if len(x.probs) <= h:
                 p += '_'
-            elif x.probs[h] < 0.0001:
+            elif x.probs[h] <= -10:
                 p += '-'
-            elif x.probs[h] > 0.9999:
+            elif x.probs[h] >= 10:
                 p += '+'
             else:
-                p += ALPHA[int(x.probs[h] * (len(ALPHA) - 0.0001))]
+                p += str(x.probs[h])+','
             q += 'n' if len(x.received_blocks) <= h or x.received_blocks[h] is None else 'y'
         o.append((h, p, q))
     return o
@@ -252,7 +268,7 @@ def calibrate(finalized_hashes):
                 continue
             actual_result = 1 if finalized_hashes[i + s.sign_from] else 0
             index = 0
-            while prob > thresholds[index + 1]:
+            while index + 2 < len(thresholds) and prob > thresholds[index + 1]:
                 index += 1
             signed[index] += 1
             if actual_result == 1:

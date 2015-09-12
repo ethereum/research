@@ -4,8 +4,6 @@ import random, sys
 def normal_distribution(mean, standev):
     def f():
         return int(random.normalvariate(mean, standev))
-        # total = sum([random.choice([2, 0, 0, -2]) for i in range(8)])
-        # return int(total * (standev / 4.0) + mean)
 
     return f
 
