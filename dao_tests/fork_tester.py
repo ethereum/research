@@ -41,6 +41,12 @@ state = mk_basic_state({
     "uncles_hash": '00' * 32
 }, Env())
 
+def get_dao_balance(state, address):
+    msg_data = CallData([ord(x) for x in dao_ct.encode('balanceOf', [address])])
+    msg = Message(normalize_address(address), normalize_address(dao), 0, 1000000, msg_data, code_address=normalize_address(dao))
+    output = ''.join(map(chr, apply_const_message(state, msg)))
+    return dao_ct.decode('balanceOf', output)[0]
+
 import sys
 state.log_listeners.append(lambda x: sys.stdout.write(str(dao_ct.listen(x))+'\n'))
 state.log_listeners.append(lambda x: sys.stdout.write(str(withdrawer_ct.listen(x))+'\n'))
@@ -50,10 +56,27 @@ print 'State created'
 # Check pre-balance
 
 pre_balance = state.get_balance(my_account)
-pre_dao_tokens = dao_ct.decode('balanceOf', ''.join(map(chr, apply_const_message(state, Message(normalize_address(my_account), normalize_address(dao), 0, 1000000, CallData([ord(x) for x in dao_ct.encode('balanceOf', [my_account])]), code_address=dao)))))[0]
+pre_dao_tokens = get_dao_balance(state, my_account)
+pre_withdrawer_balance = state.get_balance(withdrawer)
 
 print 'Pre ETH (wei) balance: %d' % pre_balance
 print 'Pre DAO (base unit) balance: %d' % pre_dao_tokens
+
+# Attempt to claim the ETH without approving (should fail)
+
+tx0 = Transaction(state.get_nonce(my_account), 0, 1000000, withdrawer, 0, withdrawer_ct.encode('withdraw', [])).sign('\x33' * 32)
+tx0._sender = normalize_address(my_account)
+apply_transaction(state, tx0)
+
+med_balance = state.get_balance(my_account)
+med_dao_tokens = get_dao_balance(state, my_account)
+med_withdrawer_balance = state.get_balance(withdrawer)
+
+assert med_balance == pre_balance
+assert med_dao_tokens == pre_dao_tokens
+assert med_withdrawer_balance == pre_withdrawer_balance > 0
+
+print 'ETH claim without approving failed, as expected'
 
 # Approve the withdrawal
 
@@ -76,7 +99,7 @@ apply_transaction(state, tx2)
 # Compare post_balance
 
 post_balance = state.get_balance(my_account)
-post_dao_tokens = dao_ct.decode('balanceOf', ''.join(map(chr, apply_const_message(state, Message(normalize_address(my_account), normalize_address(dao), 0, 1000000, CallData([ord(x) for x in dao_ct.encode('balanceOf', [my_account])]), code_address=dao)))))[0]
+post_dao_tokens = get_dao_balance(state, my_account)
 
 print 'Post ETH (wei) balance: %d' % post_balance
 print 'Post DAO (base unit) balance: %d' % post_dao_tokens
@@ -93,7 +116,7 @@ tx3._sender = normalize_address(my_account)
 apply_transaction(state, tx3)
 
 post_balance2 = state.get_balance(my_account)
-post_dao_tokens2 = dao_ct.decode('balanceOf', ''.join(map(chr, apply_const_message(state, Message(normalize_address(my_account), normalize_address(dao), 0, 1000000, CallData([ord(x) for x in dao_ct.encode('balanceOf', [my_account])]), code_address=dao)))))[0]
+post_dao_tokens2 = get_dao_balance(state, my_account)
 
 assert post_balance2 == post_balance
 assert post_dao_tokens2 == post_dao_tokens
@@ -148,3 +171,26 @@ post_curator_balance3 = state.get_balance(curator)
 assert post_curator_balance2 == post_curator_balance
 
 print 'Third withdrawal has no effect as expected'
+
+# Withdraw from an account with no DAO
+
+no_dao_account = '\x35' * 20
+
+pre_balance = state.get_balance(no_dao_account)
+pre_dao_tokens = get_dao_balance(state, no_dao_account)
+
+tx9 = Transaction(state.get_nonce(no_dao_account), 0, 1000000, dao, 0, dao_ct.encode('approve', [withdrawer, 100000 * 10**18])).sign('\x33' * 32)
+tx9._sender = no_dao_account
+apply_transaction(state, tx9)
+
+tx10 = Transaction(state.get_nonce(no_dao_account), 0, 1000000, withdrawer, 0, withdrawer_ct.encode('withdraw', [])).sign('\x33' * 32)
+tx10._sender = no_dao_account
+apply_transaction(state, tx10)
+
+post_balance = state.get_balance(no_dao_account)
+post_dao_tokens = get_dao_balance(state, no_dao_account)
+
+assert pre_balance == post_balance == 0
+assert pre_dao_tokens == post_dao_tokens
+
+print 'Withdrawal from a non-DAO-holding account has no effect'
