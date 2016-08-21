@@ -1,8 +1,10 @@
 from ethereum.casper_utils import RandaoManager, get_skips_and_block_making_time, \
-    generate_validation_code, call_casper, make_block, check_skips, get_timestamp, \
-    get_casper_ct, validator_sizes
+    generate_validation_code, call_casper, sign_block, check_skips, get_timestamp, \
+    get_casper_ct, validator_sizes, find_indices, get_dunkle_candidates
 from ethereum.utils import sha3, hash32, privtoaddr, ecsign, zpad, encode_int32, \
     big_endian_to_int
+from ethereum.transaction_queue import TransactionQueue
+from ethereum.block_creation import make_head_candidate
 from ethereum.block import Block
 from ethereum.transactions import Transaction
 from ethereum.chain import Chain
@@ -34,6 +36,8 @@ class Validator():
     def __init__(self, genesis, key, network, env, time_offset=5):
         # Create a chain object
         self.chain = Chain(genesis, env=env)
+        # Create a transaction queue
+        self.txqueue = TransactionQueue()
         # Use the validator's time as the chain's time
         self.chain.time = lambda: self.get_timestamp()
         # My private key
@@ -61,6 +65,8 @@ class Validator():
         self.time_offset = random.randrange(time_offset) - (time_offset // 2)
         # Determine the epoch length
         self.epoch_length = self.call_casper('getEpochLength')
+        # My minimum gas price
+        self.mingasprice = 20 * 10**9
         # Give this validator a unique ID
         self.id = len(ids)
         ids.append(self.id)
@@ -71,44 +77,23 @@ class Validator():
         return call_casper(self.chain.state, fun, args)
 
     def find_my_indices(self):
-        epoch = self.chain.state.block_number // self.epoch_length
-        print 'Finding indices for epoch %d' % epoch, self.call_casper('getEpoch')
-        for i in range(len(validator_sizes)):
-            valcount = self.call_casper('getHistoricalValidatorCount', [epoch, i])
-            print i, valcount, self.call_casper('getHistoricalValidatorCount', [0, i])
-            for j in range(valcount):
-                valcode = self.call_casper('getValidationCode', [i, j])
-                print (valcode, self.validation_code)
-                if valcode == self.validation_code:
-                    self.indices = i, j
-                    start = self.call_casper('getStartEpoch', [i, j])
-                    end = self.call_casper('getEndEpoch', [i, j])
-                    if start <= epoch < end:
-                        self.active = True
-                        self.next_skip_count = 0
-                        self.next_skip_timestamp = get_timestamp(self.chain, self.next_skip_count)
-                        print 'In current validator set at (%d, %d)' % (i, j)
-                        return
-                    else:
-                        self.indices = None
-                        self.active = False
-                        self.next_skip_count, self.next_skip_timestamp = 0, 0
-                        print 'Registered at (%d, %d) but not in current set' % (i, j)
-                        return
-        self.indices = None
-        self.active = False
-        self.next_skip_count, self.next_skip_timestamp = 0, 0
-        print 'Not in current validator set'
-
-    def get_uncles(self):
-        anc = self.chain.get_block(self.chain.get_blockhash_by_number(self.chain.state.block_number - CHECK_FOR_UNCLES_BACK))
-        if anc:
-            descendants = self.chain.get_descendants(anc)
+        i, j, success = find_indices(self.chain.state, self.validation_code)
+        if i is j is None:
+            self.indices = None
+            self.active = False
+            self.next_skip_count, self.next_skip_timestamp = 0, 0
+            print 'Not in current validator set'
+        elif not success:
+            self.indices = None
+            self.active = False
+            self.next_skip_count, self.next_skip_timestamp = 0, 0
+            print 'Registered at (%d, %d) but not in current set' % (i, j)
         else:
-            descendants = self.chain.get_descendants(self.chain.db.get('GENESIS_HASH'))
-        potential_uncles = [x for x in descendants if x not in self.chain and isinstance(x, Block)]
-        uncles = [x.header for x in potential_uncles if not call_casper(self.chain.state, 'isDunkleIncluded', [x.header.hash])]
-        return uncles
+            self.indices = [i, j]
+            self.next_skip_count = 0
+            self.next_skip_timestamp = get_timestamp(self.chain, self.next_skip_count)
+            self.active = True
+            print 'In current validator set at (%d, %d)' % (i, j)
 
     def get_timestamp(self):
         return int(self.network.time * 0.01) + self.time_offset
@@ -128,8 +113,13 @@ class Validator():
             self.network.broadcast(self, ChildRequest(obj.header.hash))
             self.update_head()
         elif isinstance(obj, Transaction):
-            if self.chain.add_transaction(obj):
+            print 'Receiving transaction', obj
+            if obj.gasprice >= self.mingasprice:
+                self.txqueue.add_transaction(obj)
+                print 'Added transaction, txqueue size %d' % len(self.txqueue.txs)
                 self.network.broadcast(self, obj)
+            else:
+                print 'Gasprice too low'
         self.received_objects[obj.hash] = True
         for x in self.chain.get_chain():
             assert x.hash in self.received_objects
@@ -155,25 +145,25 @@ class Validator():
                 if random.random() > 0.999:
                     print 'Simulating validator failure, block %d not created' % (self.chain.head.header.number + 1 if self.chain.head else 0)
                     return
-                # Make the block, make sure it's valid
-                pre_dunkle_count = call_casper(self.chain.state, 'getTotalDunklesIncluded', [])
-                dunkle_txs = []
-                for i, u in enumerate(self.get_uncles()[:4]):
-                    start_nonce = self.chain.state.get_nonce(self.address)
-                    txdata = casper_ct.encode('includeDunkle', [rlp.encode(u)])
-                    dunkle_txs.append(Transaction(start_nonce + i, 0, 650000, self.chain.config['CASPER_ADDR'], 0, txdata).sign(self.key))
-                for dtx in dunkle_txs[::-1]:
-                    self.chain.add_transaction(dtx, force=True)
-                blk = make_block(self.chain, self.key, self.randao, self.indices, self.next_skip_count)
+                # Make the block
+                s1 = self.chain.state.trie.root_hash
+                pre_dunkle_count = self.call_casper('getTotalDunklesIncluded')
+                dunkle_txs = get_dunkle_candidates(self.chain, self.chain.state)
+                blk = make_head_candidate(self.chain, self.txqueue)
+                randao = self.randao.get_parent(self.call_casper('getRandao', self.indices))
+                blk = sign_block(blk, self.key, randao, self.indices, self.next_skip_count)
+                # Make sure it's valid
                 global global_block_counter
                 global_block_counter += 1
                 for dtx in dunkle_txs:
                     assert dtx in blk.transactions, (dtx, blk.transactions)
                 print 'made block with timestamp %d and %d dunkles' % (blk.timestamp, len(dunkle_txs))
+                s2 = self.chain.state.trie.root_hash
+                assert s1 == s2
                 assert blk.timestamp >= self.next_skip_timestamp
                 assert self.chain.add_block(blk)
                 self.update_head()
-                post_dunkle_count = call_casper(self.chain.state, 'getTotalDunklesIncluded', [])
+                post_dunkle_count = self.call_casper('getTotalDunklesIncluded')
                 assert post_dunkle_count - pre_dunkle_count == len(dunkle_txs)
                 self.received_objects[blk.hash] = True
                 print 'Validator %d making block %d (%s)' % (self.id, blk.header.number, blk.header.hash[:8].encode('hex'))
@@ -202,6 +192,6 @@ class Validator():
         sigdata = encode_int32(v) + encode_int32(r) + encode_int32(s)
         txdata = casper_ct.encode('startWithdrawal', [self.indices[0], self.indices[1], sigdata])
         tx = Transaction(self.chain.state.get_nonce(self.address), gasprice, 650000, self.chain.config['CASPER_ADDR'], 0, txdata).sign(self.key)
-        self.chain.add_transaction(tx)
+        self.txqueue.add_transaction(tx, force=True)
         self.network.broadcast(self, tx)
         print 'Withdrawing!'

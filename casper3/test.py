@@ -4,7 +4,7 @@ import casper
 from ethereum.parse_genesis_declaration import mk_basic_state
 from ethereum.config import Env
 from ethereum.casper_utils import RandaoManager, generate_validation_code, call_casper, \
-    get_skips_and_block_making_time, sign_block, make_block, get_contract_code, \
+    get_skips_and_block_making_time, sign_block, get_contract_code, \
     casper_config, get_casper_ct, get_casper_code, get_rlp_decoder_code, \
     get_hash_without_ed_code, make_casper_genesis, validator_sizes, find_indices
 from ethereum.utils import sha3, privtoaddr
@@ -29,7 +29,7 @@ s = make_casper_genesis(validators=[(generate_validation_code(privtoaddr(k)), ds
                                     for k, ds, r in zip(keys, deposit_sizes, randaos)],
                         alloc={privtoaddr(k): {'balance': 10**18} for k in keys},
                         timestamp=2,
-                        epoch_length=40)
+                        epoch_length=50)
 g = s.to_snapshot()
 print 'Genesis state created'
 
@@ -65,5 +65,7 @@ for i in range(100000):
     if i == 4000:
         print 'Checking that validators have withdrawn'
         for v in validators[:5]:
-            assert call_casper(v.chain.state, 'getEndEpoch', []) <= 2
+            assert v.call_casper('getEndEpoch', v.indices) <= 2
+        for v in validators[5:]:
+            assert v.call_casper('getEndEpoch', v.indices) > 2
         print 'Check successful'
