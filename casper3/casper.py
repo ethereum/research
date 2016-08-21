@@ -1,6 +1,7 @@
 from ethereum.casper_utils import RandaoManager, get_skips_and_block_making_time, \
     generate_validation_code, call_casper, sign_block, check_skips, get_timestamp, \
-    get_casper_ct, validator_sizes, find_indices, get_dunkle_candidates
+    get_casper_ct, validator_sizes, find_indices, get_dunkle_candidates, \
+    make_withdrawal_signature
 from ethereum.utils import sha3, hash32, privtoaddr, ecsign, zpad, encode_int32, \
     big_endian_to_int
 from ethereum.transaction_queue import TransactionQueue
@@ -187,11 +188,15 @@ class Validator():
         print 'Head changed: %s, will attempt creating a block at %d' % (self.chain.head_hash.encode('hex'), self.next_skip_timestamp)
 
     def withdraw(self, gasprice=20 * 10**9):
-        h = sha3(b'withdrawwithdrawwithdrawwithdraw')
-        v, r, s = ecsign(h, self.key)
-        sigdata = encode_int32(v) + encode_int32(r) + encode_int32(s)
+        sigdata = make_withdrawal_signature(self.key)
         txdata = casper_ct.encode('startWithdrawal', [self.indices[0], self.indices[1], sigdata])
         tx = Transaction(self.chain.state.get_nonce(self.address), gasprice, 650000, self.chain.config['CASPER_ADDR'], 0, txdata).sign(self.key)
         self.txqueue.add_transaction(tx, force=True)
         self.network.broadcast(self, tx)
         print 'Withdrawing!'
+
+    def deposit(self, gasprice=20 * 10**9, value=validator_sizes[0]):
+        assert value * 10**18 >= self.chain.state.get_balance(self.address) + gasprice * 1000000
+        tx = Transaction(self.chain.state.get_nonce(self.address) * 10**18, gasprice, 1000000,
+                         casper_config['CASPER_ADDR'], value * 10**18,
+                         ct.encode('deposit', [self.validation_code, self.randao.get(9999)]))
