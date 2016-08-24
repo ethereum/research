@@ -1,6 +1,6 @@
 from ethereum.casper_utils import RandaoManager, get_skips_and_block_making_time, \
     generate_validation_code, call_casper, sign_block, check_skips, get_timestamp, \
-    get_casper_ct, validator_sizes, find_indices, get_dunkle_candidates, \
+    get_casper_ct, get_dunkle_candidates, \
     make_withdrawal_signature
 from ethereum.utils import sha3, hash32, privtoaddr, ecsign, zpad, encode_int32, \
     big_endian_to_int
@@ -54,12 +54,12 @@ class Validator():
         # The minimum eligible timestamp given a particular number of skips
         self.next_skip_count = 0
         self.next_skip_timestamp = 0
-        # This validator's indices in the state
-        self.indices = None
         # Is this validator active?
         self.active = False
         # Code that verifies signatures from this validator
         self.validation_code = generate_validation_code(privtoaddr(key))
+        # Validation code hash
+        self.vchash = sha3(self.validation_code)
         # Parents that this validator has already built a block on
         self.used_parents = {}
         # This validator's clock offset (for testing purposes)
@@ -71,30 +71,23 @@ class Validator():
         # Give this validator a unique ID
         self.id = len(ids)
         ids.append(self.id)
-        self.find_my_indices()
+        self.update_activity_status()
         self.cached_head = self.chain.head_hash
 
     def call_casper(self, fun, args=[]):
         return call_casper(self.chain.state, fun, args)
 
-    def find_my_indices(self):
-        i, j, success = find_indices(self.chain.state, self.validation_code)
-        if i is j is None:
-            self.indices = None
-            self.active = False
-            self.next_skip_count, self.next_skip_timestamp = 0, 0
-            print 'Not in current validator set'
-        elif not success:
-            self.indices = None
-            self.active = False
-            self.next_skip_count, self.next_skip_timestamp = 0, 0
-            print 'Registered at (%d, %d) but not in current set' % (i, j)
-        else:
-            self.indices = [i, j]
+    def update_activity_status(self):
+        start_epoch = self.call_casper('getStartEpoch', [self.vchash])
+        now_epoch = self.call_casper('getEpoch')
+        end_epoch = self.call_casper('getEndEpoch', [self.vchash])
+        if start_epoch <= now_epoch < end_epoch:
+            self.active = True
             self.next_skip_count = 0
             self.next_skip_timestamp = get_timestamp(self.chain, self.next_skip_count)
-            self.active = True
-            print 'In current validator set at (%d, %d)' % (i, j)
+            print 'In current validator set'
+        else:
+            self.active = False
 
     def get_timestamp(self):
         return int(self.network.time * 0.01) + self.time_offset
@@ -130,12 +123,12 @@ class Validator():
         # Conditions:
         # (i) you are an active validator,
         # (ii) you have not yet made a block with this parent
-        if self.indices and self.chain.head_hash not in self.used_parents:
+        if self.active and self.chain.head_hash not in self.used_parents:
             t = self.get_timestamp()
             # Is it early enough to create the block?
             if t >= self.next_skip_timestamp and (not self.chain.head or t > self.chain.head.header.timestamp):
                 # Wrong validator; in this case, just wait for the next skip count
-                if not check_skips(self.chain, self.indices, self.next_skip_count):
+                if not check_skips(self.chain, self.vchash, self.next_skip_count):
                     self.next_skip_count += 1
                     self.next_skip_timestamp = get_timestamp(self.chain, self.next_skip_count)
                     # print 'Incrementing proposed timestamp for block %d to %d' % \
@@ -151,8 +144,8 @@ class Validator():
                 pre_dunkle_count = self.call_casper('getTotalDunklesIncluded')
                 dunkle_txs = get_dunkle_candidates(self.chain, self.chain.state)
                 blk = make_head_candidate(self.chain, self.txqueue)
-                randao = self.randao.get_parent(self.call_casper('getRandao', self.indices))
-                blk = sign_block(blk, self.key, randao, self.indices, self.next_skip_count)
+                randao = self.randao.get_parent(self.call_casper('getRandao', [self.vchash]))
+                blk = sign_block(blk, self.key, randao, self.vchash, self.next_skip_count)
                 # Make sure it's valid
                 global global_block_counter
                 global_block_counter += 1
@@ -181,21 +174,21 @@ class Validator():
             return
         self.cached_head = self.chain.head_hash
         if self.chain.state.block_number % self.epoch_length == 0:
-            self.find_my_indices()
-        if self.indices:
+            self.update_activity_status()
+        if self.active:
             self.next_skip_count = 0
             self.next_skip_timestamp = get_timestamp(self.chain, self.next_skip_count)
         print 'Head changed: %s, will attempt creating a block at %d' % (self.chain.head_hash.encode('hex'), self.next_skip_timestamp)
 
     def withdraw(self, gasprice=20 * 10**9):
         sigdata = make_withdrawal_signature(self.key)
-        txdata = casper_ct.encode('startWithdrawal', [self.indices[0], self.indices[1], sigdata])
+        txdata = casper_ct.encode('startWithdrawal', [self.vchash, sigdata])
         tx = Transaction(self.chain.state.get_nonce(self.address), gasprice, 650000, self.chain.config['CASPER_ADDR'], 0, txdata).sign(self.key)
         self.txqueue.add_transaction(tx, force=True)
         self.network.broadcast(self, tx)
         print 'Withdrawing!'
 
-    def deposit(self, gasprice=20 * 10**9, value=validator_sizes[0]):
+    def deposit(self, gasprice=20 * 10**9):
         assert value * 10**18 >= self.chain.state.get_balance(self.address) + gasprice * 1000000
         tx = Transaction(self.chain.state.get_nonce(self.address) * 10**18, gasprice, 1000000,
                          casper_config['CASPER_ADDR'], value * 10**18,

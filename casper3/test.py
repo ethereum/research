@@ -6,7 +6,7 @@ from ethereum.config import Env
 from ethereum.casper_utils import RandaoManager, generate_validation_code, call_casper, \
     get_skips_and_block_making_time, sign_block, get_contract_code, \
     casper_config, get_casper_ct, get_casper_code, get_rlp_decoder_code, \
-    get_hash_without_ed_code, make_casper_genesis, validator_sizes, find_indices
+    get_hash_without_ed_code, make_casper_genesis
 from ethereum.utils import sha3, privtoaddr
 from ethereum.transactions import Transaction
 from ethereum.state_transition import apply_transaction
@@ -65,7 +65,7 @@ for i in range(100000):
     if i == 4000:
         print 'Checking that validators have withdrawn'
         for v in validators[:5]:
-            assert v.call_casper('getEndEpoch', v.indices) <= 2
+            assert v.call_casper('getEndEpoch', [v.vchash]) <= 2
         for v in validators[5:]:
-            assert v.call_casper('getEndEpoch', v.indices) > 2
+            assert v.call_casper('getEndEpoch', [v.vchash]) > 2
         print 'Check successful'
