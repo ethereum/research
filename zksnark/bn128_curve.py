@@ -7,7 +7,6 @@ b = FQ(3)
 b2 = FQ2([3, 0])
 b12 = FQ12([3] + [0] * 11) / FQ12([0] * 6 + [1] + [0] * 5)
 
-ate_loop_count = 29793968203157093288
 
 G1 = (FQ(1), FQ(2))
 # Second element corresponds to modsqrt(67) * i in our quadratic field representation
