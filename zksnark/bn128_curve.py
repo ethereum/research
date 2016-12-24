@@ -14,6 +14,8 @@ G2 = (FQ2([4, 0]), FQ2([16893045765507297706785249332518927989146279141265438554
 
 # Check that a point is on the curve defined by y**2 == x**3 + b
 def is_on_curve(pt, b):
+    if pt is None:
+        return True
     x, y = pt
     return y**2 - x**3 == b
 
@@ -81,3 +83,10 @@ def twist(pt):
 
 # Check that the twist creates a point that is on the curve
 assert is_on_curve(twist(G2), b12)
+
+# Check that the G12 curve works fine
+
+G12 = twist(G2)
+assert add(add(double(G12), G12), G12) == double(double(G12))
+assert double(G12) != G12
+assert add(multiply(G12, 9), multiply(G12, 5)) == add(multiply(G12, 12), multiply(G12, 2))
