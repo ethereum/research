@@ -7,9 +7,9 @@ field_modulus = 2188824287183927522224640574525727508869631115729782366268903789
 assert pow(2, field_modulus, field_modulus) == 2
 
 # The modulus of the polynomial in this representation of FQ2
-FQ2_modulus_coeffs = [82, 18] # Implied + [1]
+FQ2_modulus_coeffs = [82, -18] # Implied + [1]
 # And in FQ12
-FQ12_modulus_coeffs = [82, 0, 0, 0, 0, 0, 18, 0, 0, 0, 0, 0] # Implied + [1]
+FQ12_modulus_coeffs = [82, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0] # Implied + [1]
 
 # Extended euclidean algorithm to find modular inverses for
 # integers
@@ -236,6 +236,15 @@ assert f / f == one
 assert one / f + x / f == (one + x) / f
 assert one * f + x * f == (one + x) * f
 assert x ** (field_modulus ** 2 - 1) == one
+
+
+# The quadratic extension field
+class FQcomplex(FQP):
+    def __init__(self, coeffs):
+        self.coeffs = [FQ(c) for c in coeffs]
+        self.modulus_coeffs = [1, 0]
+        self.degree = 2
+        self.__class__.degree = 2
 
 # The 12th-degree extension field
 class FQ12(FQP):

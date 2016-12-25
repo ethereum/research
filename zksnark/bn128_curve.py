@@ -2,15 +2,23 @@ from bn128_field_elements import field_modulus, FQ, FQ2, FQ12
 
 curve_order = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 
+# Curve order should be prime
+assert pow(2, curve_order, curve_order) == 2
+# Curve order should be a factor of field_modulus**12 - 1
+assert (field_modulus ** 12 - 1) % curve_order == 0
+
 # Curve is y**2 = x**3 + 3
 b = FQ(3)
-b2 = FQ2([3, 0])
-b12 = FQ12([3] + [0] * 11) / FQ12([0] * 6 + [1] + [0] * 5)
+# Twisted curve over FQ**2
+b2 = FQ2([3, 0]) / FQ2([0, 1])
+# Extension curve over FQ**12; same b value as over FQ
+b12 = FQ12([3] + [0] * 11)
 
-
+# Generator for curve over FQ
 G1 = (FQ(1), FQ(2))
-# Second element corresponds to modsqrt(67) * i in our quadratic field representation
-G2 = (FQ2([4, 0]), FQ2([16893045765507297706785249332518927989146279141265438554111591828131739815230L, 16469166999615883226695964867118064280147127342783597836693979910667010785192]))
+# Generator for twisted curve over FQ2
+G2 = (FQ2([16260673061341949275257563295988632869519996389676903622179081103440260644990L, 11559732032986387107991004021392285783925812861821192530917403151452391805634L]),
+      FQ2([15530828784031078730107954109694902500959150953518636601196686752670329677317L, 4082367875863433681332203403145435568316851327593401208105741076214120093531L]))
 
 # Check that a point is on the curve defined by y**2 == x**3 + b
 def is_on_curve(pt, b):
@@ -68,10 +76,19 @@ assert multiply(G1, curve_order) is None
 assert add(add(double(G2), G2), G2) == double(double(G2))
 assert double(G2) != G2
 assert add(multiply(G2, 9), multiply(G2, 5)) == add(multiply(G2, 12), multiply(G2, 2))
+assert multiply(G2, curve_order) is None
 assert multiply(G2, 2 * field_modulus - curve_order) is not None
+assert is_on_curve(multiply(G2, 9), b2)
 
 # "Twist" a point in E(FQ2) into a point in E(FQ12)
 w = FQ12([0, 1] + [0] * 10)
+
+# Convert P => -P
+def neg(pt):
+    if pt is None:
+        return None
+    x, y = pt
+    return (x, -y)
 
 def twist(pt):
     if pt is None:
@@ -79,7 +96,7 @@ def twist(pt):
     x, y = pt
     nx = FQ12([x.coeffs[0]] + [0] * 5 + [x.coeffs[1]] + [0] * 5)
     ny = FQ12([y.coeffs[0]] + [0] * 5 + [y.coeffs[1]] + [0] * 5)
-    return (nx / w **2, ny / w**3)
+    return (nx * w **2, ny * w**3)
 
 # Check that the twist creates a point that is on the curve
 assert is_on_curve(twist(G2), b12)
@@ -90,3 +107,5 @@ G12 = twist(G2)
 assert add(add(double(G12), G12), G12) == double(double(G12))
 assert double(G12) != G12
 assert add(multiply(G12, 9), multiply(G12, 5)) == add(multiply(G12, 12), multiply(G12, 2))
+assert is_on_curve(multiply(G12, 9), b12)
+assert multiply(G12, curve_order) is None

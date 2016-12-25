@@ -1,7 +1,7 @@
 # NOT YET FINISHED! Pairing code has bugs in it, is NOT bilinear!
 
-from bn128_curve import double, add, multiply, is_on_curve, twist, b, b2, b12, curve_order, G1, G2
-from bn128_field_elements import field_modulus, FQ, FQ2, FQ12
+from bn128_curve import double, add, multiply, is_on_curve, neg, twist, b, b2, b12, curve_order, G1, G2, G12
+from bn128_field_elements import field_modulus, FQ, FQ2, FQ12, FQcomplex
 
 ate_loop_count = 29793968203157093288
 log_ate_loop_count = 63
@@ -15,10 +15,10 @@ def linefunc(P1, P2, T):
     xt, yt = T
     if x1 != x2:
         m = (y2 - y1) / (x2 - x1)
-        return (yt - y1) - m * (xt - x1)
+        return m * (xt - x1) - (yt - y1)
     elif y1 == y2:
         m = 3 * x1**2 / (2 * y1)
-        return (yt - y1) - m * (xt - x1)
+        return m * (xt - x1) - (yt - y1)
     else:
         return xt - x1
 
@@ -57,7 +57,9 @@ def miller_loop(Q, P):
             R = add(R, Q)
     assert R == multiply(Q, ate_loop_count)
     Q1 = (Q[0] ** field_modulus, Q[1] ** field_modulus)
+    assert is_on_curve(Q1, b12)
     nQ2 = (Q[0] ** (field_modulus ** 2), -Q[1] ** (field_modulus ** 2))
+    assert is_on_curve(nQ2, b12)
     f = f * linefunc(R, Q1, P)
     R = add(R, Q1)
     f = f * linefunc(R, nQ2, P)
