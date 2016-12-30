@@ -53,15 +53,15 @@ def miller_loop(Q, P):
         if ate_loop_count & (2**i):
             f = f * linefunc(R, Q, P)
             R = add(R, Q)
-    assert R == multiply(Q, ate_loop_count)
+    # assert R == multiply(Q, ate_loop_count)
     Q1 = (Q[0] ** field_modulus, Q[1] ** field_modulus)
-    assert is_on_curve(Q1, b12)
-    nQ2 = (Q[0] ** (field_modulus ** 2), -Q[1] ** (field_modulus ** 2))
-    assert is_on_curve(nQ2, b12)
+    # assert is_on_curve(Q1, b12)
+    nQ2 = (Q1[0] ** field_modulus, -Q1[1] ** field_modulus)
+    # assert is_on_curve(nQ2, b12)
     f = f * linefunc(R, Q1, P)
     R = add(R, Q1)
     f = f * linefunc(R, nQ2, P)
-    R = add(R, nQ2)
+    # R = add(R, nQ2) This line is in many specifications but it technically does nothing
     return f ** ((field_modulus ** 12 - 1) / curve_order)
 
 # Pairing computation
