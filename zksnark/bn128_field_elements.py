@@ -1,6 +1,12 @@
 import sys
 sys.setrecursionlimit(10000)
 
+# python3 compatibility
+try:
+    foo = long
+except:
+    long = int
+
 # The prime modulus of the field
 field_modulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 # See, it's prime!
@@ -61,10 +67,16 @@ class FQ():
         assert isinstance(on, (int, long))
         return FQ(self.n * inv(on, field_modulus) % field_modulus)
 
+    def __truediv__(self, other):
+        return self.__div__(other)
+
     def __rdiv__(self, other):
         on = other.n if isinstance(other, FQ) else other
         assert isinstance(on, (int, long)), on
         return FQ(inv(self.n, field_modulus) * on % field_modulus)
+
+    def __rtruediv__(self, other):
+        return self.__rdiv__(other)
 
     def __pow__(self, other):
         if other == 0:
@@ -72,9 +84,9 @@ class FQ():
         elif other == 1:
             return FQ(self.n)
         elif other % 2 == 0:
-            return (self * self) ** (other / 2)
+            return (self * self) ** (other // 2)
         else:
-            return ((self * self) ** int(other / 2)) * self
+            return ((self * self) ** int(other // 2)) * self
 
     def __eq__(self, other):
         if isinstance(other, FQ):
@@ -166,15 +178,18 @@ class FQP():
             assert isinstance(other, self.__class__)
             return self * other.inv()
 
+    def __truediv__(self, other):
+        return self.__div__(other)
+
     def __pow__(self, other):
         if other == 0:
             return self.__class__([1] + [0] * (self.degree - 1))
         elif other == 1:
             return self.__class__(self.coeffs)
         elif other % 2 == 0:
-            return (self * self) ** (other / 2)
+            return (self * self) ** (other // 2)
         else:
-            return ((self * self) ** int(other / 2)) * self
+            return ((self * self) ** int(other // 2)) * self
 
     # Extended euclidean algorithm used to find the modular inverse
     def inv(self):

@@ -2,14 +2,16 @@
 # in the randao-based single-chain Casper.
 import random
 
+# Reward for mining a block with nonzero skips
+NON_PRIMARY_REWARD = 0.5
 # Penalty for mining a dunkle
-DUNKLE_PENALTY = 1
+DUNKLE_PENALTY = 0.75
 # Penalty to a main-chain block which has a dunkle as a sister
-DUNKLE_SISTER_PENALTY = 0.8
+DUNKLE_SISTER_PENALTY = 0.375
 
 # Attacker stake power (out of 100). Try setting this value to any
 # amount, even values above 50!
-attacker_share = 40
+attacker_share = 60
 
 # A simulated Casper randao
 def randao_successor(parent, index):
@@ -78,7 +80,7 @@ class Chain():
         self.randao = new_randao
         self.time += skips
         self.length += 1
-        self.me += 1
+        self.me += NON_PRIMARY_REWARD if skips else 1
 
     def extend_them(self, skips):
         new_randao = randao_successor(self.randao, skips)
@@ -86,7 +88,7 @@ class Chain():
         self.randao = new_randao
         self.time += skips
         self.length += 1
-        self.them += 1
+        self.them += NON_PRIMARY_REWARD if skips else 1
 
     def add_my_dunkles(self, n):
         self.me -= n * DUNKLE_PENALTY
@@ -96,7 +98,8 @@ class Chain():
         self.them -= n * DUNKLE_PENALTY
         self.me -= n * DUNKLE_SISTER_PENALTY
 
-
+my_total_loss = 0
+their_total_loss = 0
 
 for strat_id in range(2**len(scenarios)):
     # Strategy map: scenario to 0 = publish, 1 = selfish-validate
@@ -105,7 +108,7 @@ for strat_id in range(2**len(scenarios)):
     # 0 = don't reveal until the "main chain" looks like it's close to catching up
     insta_reveal = strat_id % 2
 
-    print 'Testing strategy: %r, insta_reveal: %d', (strategy, insta_reveal)
+    print 'Testing strategy: %r, insta_reveal: %d' % (strategy, insta_reveal)
 
     pubchain = Chain(randao=random.randrange(10**20))
 
@@ -167,5 +170,11 @@ for strat_id in range(2**len(scenarios)):
             pass
         # print 'Score deltas: me %.2f them %.2f, time delta %d' % (pubchain.me - old_me, pubchain.them - old_them, time - old_time) 
 
-    gf = (pubchain.them - 100000. * (100 - attacker_share) / 100) / (pubchain.me - 100000 * attacker_share / 100)
+    my_loss = 100000 * attacker_share / 100 - pubchain.me
+    their_loss = 100000 * (100 - attacker_share) / 100 - pubchain.them
+    my_total_loss += my_loss
+    their_total_loss += their_loss
+    gf = their_loss / my_loss if my_loss > 0 else 999.99
     print 'My revenue: %d, their revenue: %d, griefing factor %.2f' % (pubchain.me, pubchain.them, gf)
+
+print 'Total griefing factor: %.2f' % (their_total_loss / my_total_loss)

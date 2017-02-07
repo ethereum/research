@@ -62,7 +62,7 @@ def miller_loop(Q, P):
     R = add(R, Q1)
     f = f * linefunc(R, nQ2, P)
     # R = add(R, nQ2) This line is in many specifications but it technically does nothing
-    return f ** ((field_modulus ** 12 - 1) / curve_order)
+    return f ** ((field_modulus ** 12 - 1) // curve_order)
 
 # Pairing computation
 def pairing(Q, P):
