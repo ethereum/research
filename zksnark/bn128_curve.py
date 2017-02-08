@@ -1,5 +1,6 @@
 from bn128_field_elements import field_modulus, FQ
 from optimized_field_elements import FQ2, FQ12
+# from bn128_field_elements import FQ2, FQ12
 
 curve_order = 21888242871839275222246405745257275088548364400416034343698204186575808495617
 

@@ -1,5 +1,6 @@
 from bn128_pairing import pairing, neg, G2, G1, multiply, FQ12, curve_order
 
+print('Starting tests')
 p1 = pairing(G2, G1)
 pn1 = pairing(G2, neg(G1))
 assert p1 * pn1 == FQ12.one()
