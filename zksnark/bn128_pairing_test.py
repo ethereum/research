@@ -1,5 +1,7 @@
-from bn128_pairing import pairing, neg, G2, G1, multiply, FQ12, curve_order
+from optimized_pairing import pairing, neg, G2, G1, multiply, FQ12, curve_order
+import time
 
+a = time.time()
 print('Starting tests')
 p1 = pairing(G2, G1)
 pn1 = pairing(G2, neg(G1))
@@ -23,3 +25,4 @@ p3 = pairing(multiply(G2, 27), multiply(G1, 37))
 po3 = pairing(G2, multiply(G1, 999))
 assert p3 == po3
 print('Composite check passed')
+print('Total time: %.3f' % (time.time() - a))

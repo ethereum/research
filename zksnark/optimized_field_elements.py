@@ -1,6 +1,8 @@
 field_modulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
 FQ2_modulus_coeffs = [82, -18] # Implied + [1]
+FQ2_mc_tuples = [(0, 82), (1, -18)]
 FQ12_modulus_coeffs = [82, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0] # Implied + [1]
+FQ12_mc_tuples = [(i, c) for i, c in enumerate(FQ12_modulus_coeffs) if c]
 
 # python3 compatibility
 try:
@@ -39,6 +41,31 @@ def poly_rounded_div(a, b):
             temp[c + i] = (temp[c + i] - o[c])
     return [x % field_modulus for x in o[:deg(o)+1]]
 
+def karatsuba(a, b, c, d):
+    L = len(a)
+    EXTENDED_LEN = L * 2 - 1
+    # phi = (a+b)(c+d)
+    # psi = (a-b)(c-d)
+    phi, psi, bd2 = [0] * EXTENDED_LEN, [0] * EXTENDED_LEN, [0] * EXTENDED_LEN
+    for i in range(L):
+        for j in range(L):
+            phi[i + j] += (a[i] + b[i]) * (c[j] + d[j])
+            psi[i + j] += (a[i] - b[i]) * (c[j] - d[j])
+            bd2[i + j] += b[i] * d[j] * 2
+    o = [0] * (L * 4 - 1)
+    # L = (phi + psi - bd2) / 2
+    # M = (phi - psi) / 2
+    # H = bd2 / 2
+    for i in range(L * 2 - 1):
+        o[i] += phi[i] + psi[i] - bd2[i]
+        o[i + L] += phi[i] - psi[i]
+        o[i + L * 2] += bd2[i]
+    inv_2 = (field_modulus + 1) // 2
+    return [a * inv_2 if a % 2 else a // 2 for a in o]
+
+o = karatsuba([1, 3], [3, 1], [1, 3], [3, 1])
+assert [x % field_modulus for x in o] == [1, 6, 15, 20, 15, 6, 1]
+
 # A class for elements in polynomial extension fields
 class FQP():
     def __init__(self, coeffs, modulus_coeffs): 
@@ -61,15 +88,18 @@ class FQP():
         if isinstance(other, (int, long)):
             return self.__class__([c * other % field_modulus for c in self.coeffs])
         else:
-            assert isinstance(other, self.__class__)
-            b = [0 for i in range(self.degree * 2 - 1)]
-            for i in range(self.degree):
-                for j in range(self.degree):
-                    b[i + j] += self.coeffs[i] * other.coeffs[j]
-            while len(b) > self.degree:
-                exp, top = len(b) - self.degree - 1, b.pop()
-                for i in range(self.degree):
-                    b[exp + i] -= top * self.modulus_coeffs[i]
+            # assert isinstance(other, self.__class__)
+            b = [0] * (self.degree * 2 - 1)
+            inner_enumerate = list(enumerate(other.coeffs))
+            for i, eli in enumerate(self.coeffs):
+                for j, elj in inner_enumerate:
+                    b[i + j] += eli * elj
+            # MID = len(self.coeffs) // 2
+            # b = karatsuba(self.coeffs[:MID], self.coeffs[MID:], other.coeffs[:MID], other.coeffs[MID:])
+            for exp in range(self.degree - 2, -1, -1):
+                top = b.pop()
+                for i, c in self.mc_tuples:
+                    b[exp + i] -= top * c
             return self.__class__([x % field_modulus for x in b])
 
     def __rmul__(self, other):
@@ -86,14 +116,14 @@ class FQP():
         return self.__div__(other)
 
     def __pow__(self, other):
-        if other == 0:
-            return self.__class__([1] + [0] * (self.degree - 1))
-        elif other == 1:
-            return self.__class__(self.coeffs)
-        elif other % 2 == 0:
-            return (self * self) ** (other // 2)
-        else:
-            return ((self * self) ** int(other // 2)) * self
+        o = self.__class__([1] + [0] * (self.degree - 1))
+        t = self
+        while other > 0:
+            if other & 1:
+                o = o * t
+            other >>= 1
+            t = t * t
+        return o
 
     # Extended euclidean algorithm used to find the modular inverse
     def inv(self):
@@ -143,6 +173,7 @@ class FQ2(FQP):
     def __init__(self, coeffs):
         self.coeffs = coeffs
         self.modulus_coeffs = FQ2_modulus_coeffs
+        self.mc_tuples = FQ2_mc_tuples
         self.degree = 2
         self.__class__.degree = 2
 
@@ -164,6 +195,7 @@ class FQcomplex(FQP):
     def __init__(self, coeffs):
         self.coeffs = coeffs
         self.modulus_coeffs = [1, 0]
+        self.mc_tuples = [(0, 1)]
         self.degree = 2
         self.__class__.degree = 2
 
@@ -172,5 +204,6 @@ class FQ12(FQP):
     def __init__(self, coeffs):
         self.coeffs = coeffs
         self.modulus_coeffs = FQ12_modulus_coeffs
+        self.mc_tuples = FQ12_mc_tuples
         self.degree = 12
         self.__class__.degree = 12
