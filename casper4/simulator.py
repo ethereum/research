@@ -1,3 +1,6 @@
+# Implements Minimal Slashing Conditions, description here:
+# https://docs.google.com/document/d/1ecFPYhe7YsKNQUAx48S8hoyK9Y4Rbe9be_lCe_vj2ek
+
 import random
 
 NODE_COUNT = 10
