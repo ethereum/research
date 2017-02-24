@@ -1,5 +1,3 @@
-# NOTE: This script is totally untested and likely has many bugs.
-# Be warned!
 import random
 
 NODE_COUNT = 10
