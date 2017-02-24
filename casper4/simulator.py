@@ -4,11 +4,11 @@ import random
 
 NODE_COUNT = 20
 BLOCK_TIME = 100
-EPOCH_LENGTH = 100
-AVG_LATENCY = 30
+EPOCH_LENGTH = 25
+AVG_LATENCY = 50
 
 def poisson_latency(latency):
-    return lambda: int(random.gammavariate(1, 1) * latency)
+    return lambda: 1 + int(random.gammavariate(1, 1) * latency)
 
 class Network():
     def __init__(self, latency):
@@ -18,9 +18,9 @@ class Network():
         self.msg_arrivals = {}
 
     def broadcast(self, msg):
-        delay = self.latency()
         for i, n in enumerate(self.nodes):
-            if self.time + delay not in self.msg_arrivals[i]:
+            delay = self.latency()
+            if self.time + delay not in self.msg_arrivals:
                 self.msg_arrivals[self.time + delay] = []
             self.msg_arrivals[self.time + delay].append((i, msg))
 
@@ -28,7 +28,7 @@ class Network():
         if self.time in self.msg_arrivals:
             for node_index, msg in self.msg_arrivals[self.time]:
                 self.nodes[node_index].on_receive(msg)
-        del self.msg_arrivals[self.time]
+            del self.msg_arrivals[self.time]
         for n in self.nodes:
             n.tick(self.time)
         self.time += 1
@@ -69,7 +69,7 @@ GENESIS = Block()
 class Node():
     def __init__(self, network, id):
         # List of highest-commit descendants along with their commit counts, in oldest-to-newest order
-        self.checkpoints = [GENESIS]
+        self.checkpoints = [GENESIS.hash]
         # Received blocks
         self.received = {GENESIS.hash: GENESIS}
         # Messages that will be processed once a given message is received
@@ -85,16 +85,22 @@ class Node():
         self.current_epoch = 0
         # My highest committed epoch and hash
         self.highest_committed_epoch = -1
-        self.highest_committed_hash = None
+        self.highest_committed_hash = GENESIS.hash
         # Network I am connected to
         self.network = network
         network.nodes.append(self)
         # Longest tail from each checkpoint
-        self.tails = {}
+        self.tails = {GENESIS.hash: GENESIS}
         # Tail that each block belongs to
-        self.tail_membership = {}
+        self.tail_membership = {GENESIS.hash: GENESIS.hash}
         # This node's ID
         self.id = id
+
+    @property
+    def head(self):
+        latest_checkpoint = self.checkpoints[-1]
+        latest_block = self.tails[latest_checkpoint]
+        return latest_block
 
     # Get the checkpoint immediately before a given checkpoint
     def get_checkpoint_parent(self, block):
@@ -129,7 +135,7 @@ class Node():
         # If we didn't receive the block's parent yet, wait
         if block.prevhash not in self.received:
             self.add_dependency(block.prevhash, block)
-            return
+            return False
         # We recived the block
         self.received[block.hash] = block
         # If the block is an epoch block of a higher epoch
@@ -148,9 +154,12 @@ class Node():
         # Otherwise...
         else:
             # See if it's part of the longest tail, if so set the tail accordingly
+            assert block.prevhash in self.received
+            assert block.prevhash in self.tail_membership
             self.tail_membership[block.hash] = self.tail_membership[block.prevhash]
             if block.number > self.tails[self.tail_membership[block.hash]].number:
                 self.tails[self.tail_membership[block.hash]] = block
+        return True
 
     # Pick a checkpoint by number of commits first, epoch number
     # (ie. longest chain rule) second
@@ -201,7 +210,7 @@ class Node():
         # If the block has not yet been received, wait
         if prepare.hash not in self.received:
             self.add_dependency(prepare.hash, prepare)
-            return
+            return False
         # Add to the prepare count
         if prepare.hash not in self.prepare_count:
             self.prepare_count[prepare.hash] = {}
@@ -225,45 +234,52 @@ class Node():
                 self.highest_committed_epoch = prepare.view
                 self.highest_committed_hash = prepare.hash
                 self.current_epoch = prepare.view + 1
+        return True
 
     # Called on receiving a commit message
     def accept_commit(self, commit):
         # If the block has not yet been received, wait
         if commit.hash not in self.received:
             self.add_dependency(commit.hash, commit)
-            return
+            return False
         # If there have not yet been enough prepares, wait
         if commit.hash not in self.committable:
             self.add_dependency("commit:"+str(commit.hash), commit)
-            return
+            return False
         # Add commits, and update checkpoints if needed
         self.commits[commit.hash] += 1
         if self.commits[commit.hash] % 10 == 0:
             self.check_checkpoints(self.received[commit.hash])
+        return True
 
     # Called on receiving any object
     def on_receive(self, obj):
+        if obj.hash in self.received:
+            return False
         if isinstance(obj, Block):
-            self.accept_block(obj)
+            o = self.accept_block(obj)
         elif isinstance(obj, Prepare):
-            self.accept_prepare(obj)
+            o = self.accept_prepare(obj)
         elif isinstance(obj, Commit):
-            self.accept_commit(obj)
-        self.received[obj.hash] = obj
-        if obj.hash in self.dependencies:
-            for d in self.dependencies[obj.hash]:
-                self.on_receive(d)
-            del self.dependencies[obj.hash]
+            o = self.accept_commit(obj)
+        # If the object was successfully processed
+        # (ie. not flagged as having unsatisfied dependencies)
+        if o:
+            self.received[obj.hash] = obj
+            if obj.hash in self.dependencies:
+                for d in self.dependencies[obj.hash]:
+                    self.on_receive(d)
+                del self.dependencies[obj.hash]
 
     # Called every round
-    def tick(self):
-        if self.id == (self.time // BLOCK_TIME) % NODE_COUNT and self.time % BLOCK_TIME == 0:
-            latest_checkpoint = self.checkpoints[-1]
-            latest_block = self.tails[latest_checkpoint]
-            new_block = Block(latest_block)
+    def tick(self, _time):
+        if self.id == (_time // BLOCK_TIME) % NODE_COUNT and _time % BLOCK_TIME == 0:
+            new_block = Block(self.head)
             self.network.broadcast(new_block)
 
-n = Network(poisson_latency(AVG_LATENCY))
-nodes = [Node(n, i) for i in range(NODE_COUNT)]
+network = Network(poisson_latency(AVG_LATENCY))
+nodes = [Node(network, i) for i in range(NODE_COUNT)]
 for t in range(10000):
-    n.tick()
+    network.tick()
+    if t % 100 == 0:
+        print([n.head.number for n in nodes])
