@@ -2,10 +2,10 @@
 # Be warned!
 import random
 
-NODE_COUNT = 20
+NODE_COUNT = 10
 BLOCK_TIME = 100
-EPOCH_LENGTH = 25
-AVG_LATENCY = 50
+EPOCH_LENGTH = 5
+AVG_LATENCY = 250
 
 def poisson_latency(latency):
     return lambda: 1 + int(random.gammavariate(1, 1) * latency)
@@ -50,13 +50,15 @@ class Block():
 class Prepare():
     def __init__(self, view, _hash, view_source):
         self.view = view
-        self.hash = _hash
+        self.hash = random.randrange(10**30)
+        self.blockhash = _hash
         self.view_source = view_source
 
 class Commit():
     def __init__(self, view, _hash):
         self.view = view
-        self.hash = _hash
+        self.hash = random.randrange(10**30)
+        self.blockhash = _hash
 
 GENESIS = Block()
 
@@ -106,7 +108,7 @@ class Node():
     def get_checkpoint_parent(self, block):
         if block.number == 0:
             return None
-        return self.receives[self.tail_membership[block.prevhash]]
+        return self.received[self.tail_membership[block.prevhash]]
 
     # If we received an object but did not receive some dependencies
     # needed to process it, save it to be processed later
@@ -130,6 +132,12 @@ class Node():
                 return True
             desc = self.get_checkpoint_parent(desc)
 
+    def get_last_committed_checkpoint(self):    
+        z = len(self.checkpoints) - 1
+        while self.score_checkpoint(self.received[self.checkpoints[z]]) < 1:
+            z -= 1
+        return self.checkpoints[z]
+
     # Called on receiving a block
     def accept_block(self, block):
         # If we didn't receive the block's parent yet, wait
@@ -138,14 +146,7 @@ class Node():
             return False
         # We recived the block
         self.received[block.hash] = block
-        # If the block is an epoch block of a higher epoch
-        if block.number == (self.current_epoch + 1) * EPOCH_LENGTH:
-            # Increment our epoch
-            self.current_epoch = block.epoch
-            # If our highest committed hash is in the main chain (in most cases
-            # it should be), then send a prepare
-            if self.is_ancestor(self.highest_committed_hash, self.checkpoints[-1]):
-                self.network.broadcast(Prepare(self.current_epoch, block.hash, self.received[self.checkpoints[-1]].epoch))
+        # print(self.id, 'got a block', block.number, block.hash)
         # If it's an epoch block (in general)
         if block.number % EPOCH_LENGTH == 0:
             #  Start a tail object for it
@@ -159,12 +160,30 @@ class Node():
             self.tail_membership[block.hash] = self.tail_membership[block.prevhash]
             if block.number > self.tails[self.tail_membership[block.hash]].number:
                 self.tails[self.tail_membership[block.hash]] = block
+        self.check_checkpoints(self.received[self.tail_membership[block.hash]])
+        self.maybe_prepare_last_checkpoint()
         return True
+
+    def maybe_prepare_last_checkpoint(self):
+        target_block = self.received[self.checkpoints[-1]]
+        # If the block is an epoch block of a higher epoch than what we've seen so far
+        if target_block.epoch > self.current_epoch:
+            print('now in epoch %d' % target_block.epoch)
+            # Increment our epoch
+            self.current_epoch = target_block.epoch
+            # If our highest committed hash is in the main chain (in most cases
+            # it should be), then send a prepare
+            last_committed_checkpoint = self.get_last_committed_checkpoint()
+            if self.is_ancestor(self.highest_committed_hash, last_committed_checkpoint):
+                print('Preparing %d for epoch %d with view source %d' %
+                      (target_block.hash, target_block.epoch, self.received[last_committed_checkpoint].epoch))
+                self.network.broadcast(Prepare(target_block.epoch, target_block.hash, self.received[last_committed_checkpoint].epoch))
+                assert self.received[target_block.hash]
 
     # Pick a checkpoint by number of commits first, epoch number
     # (ie. longest chain rule) second
     def score_checkpoint(self, block):
-        return self.commits.get(block, 0) + 0.000000001 * block.number
+        return self.commits.get(block.hash, 0) + 0.000000001 * self.tails[block.hash].number
 
     # See if a given epoch block requires us to reorganize our checkpoint list
     def check_checkpoints(self, block):
@@ -174,12 +193,12 @@ class Node():
             # if score_checkpoint(block) < score_checkpoint(prev_checkpoint):
             return
         # Figure out how many of our checkpoints we need to revert
-        z = len(self.checkpoints - 1)
-        new_score = score_checkpoint(block)
-        while new_score > score_checkpoint(self.checkpoints[z]):
+        z = len(self.checkpoints) - 1
+        new_score = self.score_checkpoint(block)
+        while new_score > self.score_checkpoint(self.received[self.checkpoints[z]]):
             z -= 1
         # If none, do nothing
-        if z == len(self.checkpoints - 1):
+        if z == len(self.checkpoints) - 1 and block.number <= self.received[self.checkpoints[z-1]].number:
             return
         # Delete the checkpoints that need to be superseded
         self.checkpoints = self.checkpoints[:z + 1]
@@ -188,68 +207,74 @@ class Node():
             # Find the descendant with the highest score (commits first, epoch second)
             max_score = 0
             max_descendant = None
-            for _hash in self.descendants:
-                if self.is_ancestor(self.checkpoints[z], _hash):
-                    new_score = score_checkpoint(self.received[_hash])
+            for _hash in self.tails:
+                if self.is_ancestor(self.checkpoints[-1], _hash) and _hash != self.checkpoints[-1]:
+                    new_score = self.score_checkpoint(self.received[_hash])
                     if new_score > max_score:
                         max_score = new_score
                         max_descendant = _hash
             # Append to the chain that checkpoint, and all checkpoints between the
             # last checkpoint and the new one
             if max_descendant:
-                new_chain = [max_descendant.hash]
-                while new_chain[0].hash != self.checkpoints[z].hash:
-                    new_chain.insert(0, self.get_checkpoint_parent(new_chain[0]))
-                self.checkpoints.append(new_chain[1:])
+                new_chain = [max_descendant]
+                while new_chain[0] != self.checkpoints[-1]:
+                    new_chain.insert(0, self.get_checkpoint_parent(self.received[new_chain[0]]).hash)
+                self.checkpoints.extend(new_chain[1:])
             # If there were no suitable descendants found, break
             else:
                 break
+        print('New checkpoints: %r' % [self.received[b].epoch for b in self.checkpoints])
     
     # Called on receiving a prepare message
     def accept_prepare(self, prepare):
+        if self.id == 0:
+            print('got a prepare', prepare.view, prepare.view_source, prepare.blockhash, prepare.blockhash in self.received)
         # If the block has not yet been received, wait
-        if prepare.hash not in self.received:
-            self.add_dependency(prepare.hash, prepare)
+        if prepare.blockhash not in self.received:
+            self.add_dependency(prepare.blockhash, prepare)
             return False
         # Add to the prepare count
-        if prepare.hash not in self.prepare_count:
-            self.prepare_count[prepare.hash] = {}
-        self.prepare_count[prepare.hash][prepare.view_source] = self.prepare_count[prepare.hash].get(prepare.view_source, 0) + 1
+        if prepare.blockhash not in self.prepare_count:
+            self.prepare_count[prepare.blockhash] = {}
+        self.prepare_count[prepare.blockhash][prepare.view_source] = self.prepare_count[prepare.blockhash].get(prepare.view_source, 0) + 1
         # If there are enough prepares...
-        if self.prepare_count[prepare.hash][prepare.view_source] > (NODE_COUNT * 2) // 3:
+        if self.prepare_count[prepare.blockhash][prepare.view_source] > (NODE_COUNT * 2) // 3 and \
+                prepare.blockhash not in self.committable:
             # Mark it as committable
-            self.committable[prepare.hash] = True
+            self.committable[prepare.blockhash] = True
             # Start counting commits
-            self.commits[prepare.hash] = 0
+            self.commits[prepare.blockhash] = 0
             # If there are dependencies (ie. commits that arrived before there
             # were enough prepares), since there are now enough prepares we
             # can process them
-            if "commit:"+str(prepare.hash) in self.dependencies:
-                for c in self.dependencies["commit:"+str(prepare.hash)]:
+            if "commit:"+str(prepare.blockhash) in self.dependencies:
+                for c in self.dependencies["commit:"+str(prepare.blockhash)]:
                     self.accept_commit(c)
-                del self.dependencies["commit:"+str(prepare.hash)]
+                del self.dependencies["commit:"+str(prepare.blockhash)]
             # Broadcast a commit
             if self.current_epoch == prepare.view:
-                self.network.broadcast(Commit(prepare.view, prepare.hash))
+                self.network.broadcast(Commit(prepare.view, prepare.blockhash))
+                print('Committing %d for epoch %d' % (prepare.blockhash, prepare.view))
                 self.highest_committed_epoch = prepare.view
-                self.highest_committed_hash = prepare.hash
-                self.current_epoch = prepare.view + 1
+                self.highest_committed_hash = prepare.blockhash
+                self.current_epoch = prepare.view + 0.5
         return True
 
     # Called on receiving a commit message
     def accept_commit(self, commit):
+        if self.id == 0:
+            print('got a commmit', commit.view, commit.blockhash, commit.blockhash in self.received, commit.blockhash in self.committable)
         # If the block has not yet been received, wait
-        if commit.hash not in self.received:
-            self.add_dependency(commit.hash, commit)
+        if commit.blockhash not in self.received:
+            self.add_dependency(commit.blockhash, commit)
             return False
         # If there have not yet been enough prepares, wait
-        if commit.hash not in self.committable:
-            self.add_dependency("commit:"+str(commit.hash), commit)
+        if commit.blockhash not in self.committable:
+            self.add_dependency("commit:"+str(commit.blockhash), commit)
             return False
         # Add commits, and update checkpoints if needed
-        self.commits[commit.hash] += 1
-        if self.commits[commit.hash] % 10 == 0:
-            self.check_checkpoints(self.received[commit.hash])
+        self.commits[commit.blockhash] += 1
+        self.check_checkpoints(self.received[commit.blockhash])
         return True
 
     # Called on receiving any object
@@ -276,10 +301,13 @@ class Node():
         if self.id == (_time // BLOCK_TIME) % NODE_COUNT and _time % BLOCK_TIME == 0:
             new_block = Block(self.head)
             self.network.broadcast(new_block)
+            self.on_receive(new_block)
 
 network = Network(poisson_latency(AVG_LATENCY))
 nodes = [Node(network, i) for i in range(NODE_COUNT)]
-for t in range(10000):
+for t in range(25000):
     network.tick()
-    if t % 100 == 0:
-        print([n.head.number for n in nodes])
+    if t % 1000 == 999:
+        print('Heads:', [n.head.number for n in nodes])
+        print('Checkpoints:',  nodes[0].checkpoints)
+        print('Commits:', [nodes[0].commits.get(c, 0) for c in nodes[0].checkpoints])
