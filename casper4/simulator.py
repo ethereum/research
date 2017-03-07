@@ -1,11 +1,16 @@
-# Implements Minimal Slashing Conditions, description here:
+# NOTE: This script is totally untested and *absolutely* has bugs.
+# Be warned!
+
+# Implements Minimal Slashing Conditions and dynamic validator rotation, description here:
 # https://docs.google.com/document/d/1ecFPYhe7YsKNQUAx48S8hoyK9Y4Rbe9be_lCe_vj2ek
 
 import random
 
-NODE_COUNT = 10
+POOL_SIZE = 10
+VALIDATOR_IDS = range(0, POOL_SIZE*2)
 BLOCK_TIME = 100
 EPOCH_LENGTH = 5
+INITIAL_VALIDATORS = range(0, POOL_SIZE)
 AVG_LATENCY = 250
 
 def poisson_latency(latency):
@@ -35,31 +40,68 @@ class Network():
         self.time += 1
 
 class Block():
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, finalized_dynasties=None):
+        self.hash = random.randrange(10**30)
+
+        # If we are genesis block, set initial values
         if not parent:
             self.number = 0
             self.prevhash = 0
-        else:    
-            self.number = parent.number + 1
-            self.prevhash = parent.hash
-        self.hash = random.randrange(10**30)
+            self.prev_dynasty = self.current_dynasty = Dynasty(INITIAL_VALIDATORS)
+            self.next_dynasty = self.generate_next_dynasty(self.current_dynasty.number)
+            return
+
+        # Set our block number and our prevhash
+        self.number = parent.number + 1
+        self.prevhash = parent.hash
+
+        # If the current_dynasty was finalized, generate a new dynasty
+        if parent.current_dynasty in finalized_dynasties:
+            self.prev_dynasty = parent.current_dynasty
+            self.current_dynasty = parent.next_dynasty
+            self.next_dynasty = self.generate_next_dynasty(parent.current_dynasty.number)
+            return
+
+        # `current_dynasty` has not yet been finalized so we don't rotate validators
+        self.prev_dynasty = parent.prev_dynasty
+        self.current_dynasty = parent.current_dynasty
+        self.next_dynasty = parent.next_dynasty
 
     @property
     def epoch(self):
         return self.number // EPOCH_LENGTH
 
+    def generate_next_dynasty(self, prev_dynasty_number):
+        random.seed(self.hash)
+        next_dynasty = Dynasty(random.sample(VALIDATOR_IDS, POOL_SIZE), prev_dynasty_number+1)
+        random.seed()
+        return next_dynasty
+
 class Prepare():
-    def __init__(self, view, _hash, view_source):
+    def __init__(self, view, _hash, view_source, sender):
         self.view = view
         self.hash = random.randrange(10**30)
         self.blockhash = _hash
         self.view_source = view_source
+        self.sender = sender
 
 class Commit():
-    def __init__(self, view, _hash):
+    def __init__(self, view, _hash, sender):
         self.view = view
         self.hash = random.randrange(10**30)
         self.blockhash = _hash
+        self.sender = sender
+
+class Dynasty():
+    def __init__(self, validators, number=0):
+        self.validators = validators
+        self.number = number
+
+    def __hash__(self):
+        return hash(str(self.number) + str(self.validators))
+
+    def __eq__(self, other):
+        return (str(self.number) + str(self.validators)) == (str(other.number) + str(other.validators))
 
 GENESIS = Block()
 
@@ -83,7 +125,10 @@ class Node():
         self.committable = {}
         # Commits for any given checkpoint
         # Genesis is an immutable start of the chain
-        self.commits = {GENESIS.hash: 101}
+        self.commits = {GENESIS.hash: INITIAL_VALIDATORS}
+        # Set of finalized dynasties
+        self.finalized_dynasties = set()
+        self.finalized_dynasties.add(Dynasty(INITIAL_VALIDATORS))
         # My current epoch
         self.current_epoch = 0
         # My highest committed epoch and hash
@@ -133,7 +178,7 @@ class Node():
                 return True
             desc = self.get_checkpoint_parent(desc)
 
-    def get_last_committed_checkpoint(self):    
+    def get_last_committed_checkpoint(self):
         z = len(self.checkpoints) - 1
         while self.score_checkpoint(self.received[self.checkpoints[z]]) < 1:
             z -= 1
@@ -178,13 +223,15 @@ class Node():
             if self.is_ancestor(self.highest_committed_hash, last_committed_checkpoint):
                 print('Preparing %d for epoch %d with view source %d' %
                       (target_block.hash, target_block.epoch, self.received[last_committed_checkpoint].epoch))
-                self.network.broadcast(Prepare(target_block.epoch, target_block.hash, self.received[last_committed_checkpoint].epoch))
+                self.network.broadcast(Prepare(target_block.epoch, target_block.hash, self.received[last_committed_checkpoint].epoch, self.id))
                 assert self.received[target_block.hash]
 
     # Pick a checkpoint by number of commits first, epoch number
     # (ie. longest chain rule) second
     def score_checkpoint(self, block):
-        return self.commits.get(block.hash, 0) + 0.000000001 * self.tails[block.hash].number
+        # Only count current_dynasty commits for the checkpoint score
+        number_of_commits = len(list(set(block.current_dynasty.validators) & set(self.commits.get(block.hash, []))))
+        return number_of_commits + 0.000000001 * self.tails[block.hash].number
 
     # See if a given epoch block requires us to reorganize our checkpoint list
     def check_checkpoints(self, block):
@@ -225,7 +272,7 @@ class Node():
             else:
                 break
         print('New checkpoints: %r' % [self.received[b].epoch for b in self.checkpoints])
-    
+
     # Called on receiving a prepare message
     def accept_prepare(self, prepare):
         if self.id == 0:
@@ -234,17 +281,22 @@ class Node():
         if prepare.blockhash not in self.received:
             self.add_dependency(prepare.blockhash, prepare)
             return False
+        # If the sender is not in it's corresponding dynasty, ignore the prepare
+        if prepare.sender not in self.received[prepare.blockhash].current_dynasty.validators and \
+                prepare.sender not in self.received[prepare.blockhash].prev_dynasty.validators:
+            return False
         # Add to the prepare count
         if prepare.blockhash not in self.prepare_count:
             self.prepare_count[prepare.blockhash] = {}
         self.prepare_count[prepare.blockhash][prepare.view_source] = self.prepare_count[prepare.blockhash].get(prepare.view_source, 0) + 1
-        # If there are enough prepares...
-        if self.prepare_count[prepare.blockhash][prepare.view_source] > (NODE_COUNT * 2) // 3 and \
+        # If there are enough prepares and the previous dynasty is finalized...
+        if self.prepare_count[prepare.blockhash][prepare.view_source] > (POOL_SIZE * 2) // 3 and \
+                self.received[prepare.blockhash].prev_dynasty in self.finalized_dynasties and \
                 prepare.blockhash not in self.committable:
             # Mark it as committable
             self.committable[prepare.blockhash] = True
             # Start counting commits
-            self.commits[prepare.blockhash] = 0
+            self.commits[prepare.blockhash] = []
             # If there are dependencies (ie. commits that arrived before there
             # were enough prepares), since there are now enough prepares we
             # can process them
@@ -254,7 +306,7 @@ class Node():
                 del self.dependencies["commit:"+str(prepare.blockhash)]
             # Broadcast a commit
             if self.current_epoch == prepare.view:
-                self.network.broadcast(Commit(prepare.view, prepare.blockhash))
+                self.network.broadcast(Commit(prepare.view, prepare.blockhash, self.id))
                 print('Committing %d for epoch %d' % (prepare.blockhash, prepare.view))
                 self.highest_committed_epoch = prepare.view
                 self.highest_committed_hash = prepare.blockhash
@@ -269,12 +321,26 @@ class Node():
         if commit.blockhash not in self.received:
             self.add_dependency(commit.blockhash, commit)
             return False
+        # If the sender is not in it's corresponding dynasty, ignore the commit
+        if commit.sender not in self.received[commit.blockhash].current_dynasty.validators and \
+                commit.sender not in self.received[commit.blockhash].prev_dynasty.validators:
+            return False
         # If there have not yet been enough prepares, wait
         if commit.blockhash not in self.committable:
             self.add_dependency("commit:"+str(commit.blockhash), commit)
             return False
-        # Add commits, and update checkpoints if needed
-        self.commits[commit.blockhash] += 1
+        # Add the commit by recording the sender
+        self.commits[commit.blockhash].append(commit.sender)
+        # Check if the block is finalized
+        current_dynasty_commits = list(set(self.received[commit.blockhash].current_dynasty.validators) & set(self.commits[commit.blockhash]))
+        prev_dynasty_commits = list(set(self.received[commit.blockhash].prev_dynasty.validators) & set(self.commits[commit.blockhash]))
+        if len(current_dynasty_commits) > (POOL_SIZE * 2) // 3 and len(prev_dynasty_commits) > (POOL_SIZE * 2) // 3:
+            # Because the block has been finalized let's record its dynasty as finalized
+            finalized_dynasty = self.received[commit.blockhash].current_dynasty
+            self.finalized_dynasties.add(finalized_dynasty)
+            print('Finalizing dynasty number %d for block number %d' %
+                  (finalized_dynasty.number, self.received[commit.blockhash].number))
+        # Update the checkpoints if needed
         self.check_checkpoints(self.received[commit.blockhash])
         return True
 
@@ -299,16 +365,18 @@ class Node():
 
     # Called every round
     def tick(self, _time):
-        if self.id == (_time // BLOCK_TIME) % NODE_COUNT and _time % BLOCK_TIME == 0:
-            new_block = Block(self.head)
+        if self.id == (_time // BLOCK_TIME) % POOL_SIZE and _time % BLOCK_TIME == 0:
+            new_block = Block(self.head, self.finalized_dynasties)
             self.network.broadcast(new_block)
             self.on_receive(new_block)
 
 network = Network(poisson_latency(AVG_LATENCY))
-nodes = [Node(network, i) for i in range(NODE_COUNT)]
+nodes = [Node(network, i) for i in VALIDATOR_IDS]
 for t in range(25000):
     network.tick()
     if t % 1000 == 999:
         print('Heads:', [n.head.number for n in nodes])
-        print('Checkpoints:',  nodes[0].checkpoints)
+        print('Checkpoints:', nodes[0].checkpoints)
         print('Commits:', [nodes[0].commits.get(c, 0) for c in nodes[0].checkpoints])
+        print('Finalized Dynasties:', nodes[0].finalized_dynasties)
+        print('Current Dynasties:', [(i, node.tails[node.checkpoints[-1]].current_dynasty.number) for i, node in enumerate(nodes)])
