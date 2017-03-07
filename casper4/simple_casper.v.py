@@ -75,11 +75,14 @@ owner: address
 total_destroyed: wei_value
 
 def __init__():
+    # Set Casper parameters
     self.interest_rate = 0.000001
     self.block_time = 7
     self.epoch_length = 256
     self.withdrawal_delay = 2500000
+    # Temporary backdoor for testing purposes (to allow recovering destroyed deposits)
     self.owner = 0x1db3439a222c519ab44bb1144fc28167b4fa6ee6
+    # Add an initial validator
     self.validators[0] = {
         deposit: as_wei(3, finney),
         dynasty_start: 0,
@@ -90,6 +93,7 @@ def __init__():
         max_prepared: 0,
         max_committed: 0
     }
+    # Initialize the epoch counter
     self.current_epoch = block.number / self.epoch_length
 
 # Called at the start of any epoch
@@ -367,6 +371,12 @@ def prepare_non_justification_slash(index: num, epoch: num, hash: bytes32, epoch
         max_committed: 0,
     }
 
+# Temporary backdoor for testing purposes (to allow recovering destroyed deposits)
 def owner_withdraw():
     send(self.owner, self.total_destroyed)
     self.total_destroyed = 0
+
+# Change backdoor address (set to zero to remove entirely)
+def change_owner(new_owner: address):
+    if self.owner == msg.sender:
+        self.owner = new_owner
