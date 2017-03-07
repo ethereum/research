@@ -6,7 +6,7 @@ import random
 NODE_COUNT = 10
 BLOCK_TIME = 100
 EPOCH_LENGTH = 5
-AVG_LATENCY = 250
+AVG_LATENCY = 255
 
 def poisson_latency(latency):
     return lambda: 1 + int(random.gammavariate(1, 1) * latency)
