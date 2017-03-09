@@ -1,16 +1,14 @@
-# NOTE: This script is totally untested and *absolutely* has bugs.
-# Be warned!
-
-# Implements Minimal Slashing Conditions and dynamic validator rotation, description here:
-# https://docs.google.com/document/d/1ecFPYhe7YsKNQUAx48S8hoyK9Y4Rbe9be_lCe_vj2ek
+# Implements Minimal Slashing Conditions and dynamic validator sets, descriptions here:
+# Slashing Conditions: https://docs.google.com/document/d/1ecFPYhe7YsKNQUAx48S8hoyK9Y4Rbe9be_lCe_vj2ek
+# Dynamic Validator Sets: https://medium.com/@VitalikButerin/safety-under-dynamic-validator-sets-ef0c3bbdf9f6#.igylifcm9
 
 import random
 
 POOL_SIZE = 10
 VALIDATOR_IDS = range(0, POOL_SIZE*2)
+INITIAL_VALIDATORS = range(0, POOL_SIZE)
 BLOCK_TIME = 100
 EPOCH_LENGTH = 5
-INITIAL_VALIDATORS = range(0, POOL_SIZE)
 AVG_LATENCY = 250
 
 def poisson_latency(latency):
@@ -42,7 +40,6 @@ class Network():
 class Block():
     def __init__(self, parent=None, finalized_dynasties=None):
         self.hash = random.randrange(10**30)
-
         # If we are genesis block, set initial values
         if not parent:
             self.number = 0
@@ -50,22 +47,19 @@ class Block():
             self.prev_dynasty = self.current_dynasty = Dynasty(INITIAL_VALIDATORS)
             self.next_dynasty = self.generate_next_dynasty(self.current_dynasty.number)
             return
-
         # Set our block number and our prevhash
         self.number = parent.number + 1
         self.prevhash = parent.hash
-
-        # If the current_dynasty was finalized, generate a new dynasty
+        # Generate a random next dynasty
+        self.next_dynasty = self.generate_next_dynasty(parent.current_dynasty.number)
+        # If the current_dynasty was finalized, we advance to the next dynasty
         if parent.current_dynasty in finalized_dynasties:
             self.prev_dynasty = parent.current_dynasty
             self.current_dynasty = parent.next_dynasty
-            self.next_dynasty = self.generate_next_dynasty(parent.current_dynasty.number)
             return
-
         # `current_dynasty` has not yet been finalized so we don't rotate validators
         self.prev_dynasty = parent.prev_dynasty
         self.current_dynasty = parent.current_dynasty
-        self.next_dynasty = parent.next_dynasty
 
     @property
     def epoch(self):
@@ -229,8 +223,10 @@ class Node():
     # Pick a checkpoint by number of commits first, epoch number
     # (ie. longest chain rule) second
     def score_checkpoint(self, block):
-        # Only count current_dynasty commits for the checkpoint score
-        number_of_commits = len(list(set(block.current_dynasty.validators) & set(self.commits.get(block.hash, []))))
+        # Choose the dynasty (current or previous) with the minimum number of commits
+        current_dynasty_number_of_commits = len(list(set(block.current_dynasty.validators) & set(self.commits.get(block.hash, []))))
+        prev_dynasty_number_of_commits = len(list(set(block.prev_dynasty.validators) & set(self.commits.get(block.hash, []))))
+        number_of_commits = min(current_dynasty_number_of_commits, prev_dynasty_number_of_commits)
         return number_of_commits + 0.000000001 * self.tails[block.hash].number
 
     # See if a given epoch block requires us to reorganize our checkpoint list
@@ -281,7 +277,7 @@ class Node():
         if prepare.blockhash not in self.received:
             self.add_dependency(prepare.blockhash, prepare)
             return False
-        # If the sender is not in it's corresponding dynasty, ignore the prepare
+        # If the sender is not in the prepare's dynasty, ignore the prepare
         if prepare.sender not in self.received[prepare.blockhash].current_dynasty.validators and \
                 prepare.sender not in self.received[prepare.blockhash].prev_dynasty.validators:
             return False
@@ -321,7 +317,7 @@ class Node():
         if commit.blockhash not in self.received:
             self.add_dependency(commit.blockhash, commit)
             return False
-        # If the sender is not in it's corresponding dynasty, ignore the commit
+        # If the sender is not in the commit's dynasty, ignore the commit
         if commit.sender not in self.received[commit.blockhash].current_dynasty.validators and \
                 commit.sender not in self.received[commit.blockhash].prev_dynasty.validators:
             return False
@@ -378,5 +374,5 @@ for t in range(25000):
         print('Heads:', [n.head.number for n in nodes])
         print('Checkpoints:', nodes[0].checkpoints)
         print('Commits:', [nodes[0].commits.get(c, 0) for c in nodes[0].checkpoints])
-        print('Finalized Dynasties:', nodes[0].finalized_dynasties)
-        print('Current Dynasties:', [(i, node.tails[node.checkpoints[-1]].current_dynasty.number) for i, node in enumerate(nodes)])
+        print('Blocks Dynasties:', [(nodes[0].received[c].current_dynasty.number) for c in nodes[0].checkpoints])
+        print('All Node Dynasties:', [(node.tails[node.checkpoints[-1]].current_dynasty.number) for node in nodes])
