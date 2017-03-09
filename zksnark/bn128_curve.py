@@ -12,15 +12,15 @@ assert (field_modulus ** 12 - 1) % curve_order == 0
 # Curve is y**2 = x**3 + 3
 b = FQ(3)
 # Twisted curve over FQ**2
-b2 = FQ2([3, 0]) / FQ2([0, 1])
+b2 = FQ2([3, 0]) / FQ2([9, 1])
 # Extension curve over FQ**12; same b value as over FQ
 b12 = FQ12([3] + [0] * 11)
 
 # Generator for curve over FQ
 G1 = (FQ(1), FQ(2))
 # Generator for twisted curve over FQ2
-G2 = (FQ2([16260673061341949275257563295988632869519996389676903622179081103440260644990, 11559732032986387107991004021392285783925812861821192530917403151452391805634]),
-      FQ2([15530828784031078730107954109694902500959150953518636601196686752670329677317, 4082367875863433681332203403145435568316851327593401208105741076214120093531]))
+G2 = (FQ2([10857046999023057135944570762232829481370756359578518086990519993285655852781, 11559732032986387107991004021392285783925812861821192530917403151452391805634]),
+      FQ2([8495653923123431417604973247489272438418190587263600148770280649306958101930, 4082367875863433681332203403145435568316851327593401208105741076214120093531]))
 
 # Check that a point is on the curve defined by y**2 == x**3 + b
 def is_on_curve(pt, b):
@@ -95,9 +95,15 @@ def neg(pt):
 def twist(pt):
     if pt is None:
         return None
-    x, y = pt
-    nx = FQ12([x.coeffs[0]] + [0] * 5 + [x.coeffs[1]] + [0] * 5)
-    ny = FQ12([y.coeffs[0]] + [0] * 5 + [y.coeffs[1]] + [0] * 5)
+    _x, _y = pt
+    # Field isomorphism from Z[p] / x**2 to Z[p] / x**2 - 18*x + 82
+    xcoeffs = [_x.coeffs[0] - _x.coeffs[1] * 9, _x.coeffs[1]]
+    ycoeffs = [_y.coeffs[0] - _y.coeffs[1] * 9, _y.coeffs[1]]
+    # Isomorphism into subfield of Z[p] / w**12 - 18 * w**6 + 82,
+    # where w**6 = x
+    nx = FQ12([xcoeffs[0]] + [0] * 5 + [xcoeffs[1]] + [0] * 5)
+    ny = FQ12([ycoeffs[0]] + [0] * 5 + [ycoeffs[1]] + [0] * 5)
+    # Divide x coord by w**2 and y coord by w**3
     return (nx * w **2, ny * w**3)
 
 # Check that the twist creates a point that is on the curve

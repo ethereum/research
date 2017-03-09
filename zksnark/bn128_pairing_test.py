@@ -1,4 +1,5 @@
 from optimized_pairing import pairing, neg, G2, G1, multiply, FQ12, curve_order
+# from bn128_pairing import pairing, neg, G2, G1, multiply, FQ12, curve_order
 import time
 
 a = time.time()

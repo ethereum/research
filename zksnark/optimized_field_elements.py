@@ -1,6 +1,4 @@
 field_modulus = 21888242871839275222246405745257275088696311157297823662689037894645226208583
-FQ2_modulus_coeffs = [82, -18] # Implied + [1]
-FQ2_mc_tuples = [(0, 82), (1, -18)]
 FQ12_modulus_coeffs = [82, 0, 0, 0, 0, 0, -18, 0, 0, 0, 0, 0] # Implied + [1]
 FQ12_mc_tuples = [(i, c) for i, c in enumerate(FQ12_modulus_coeffs) if c]
 
@@ -172,8 +170,8 @@ class FQP():
 class FQ2(FQP):
     def __init__(self, coeffs):
         self.coeffs = coeffs
-        self.modulus_coeffs = FQ2_modulus_coeffs
-        self.mc_tuples = FQ2_mc_tuples
+        self.modulus_coeffs = [1, 0]
+        self.mc_tuples = [(0, 1)]
         self.degree = 2
         self.__class__.degree = 2
 
@@ -188,16 +186,6 @@ assert f / f == one
 assert one / f + x / f == (one + x) / f
 assert one * f + x * f == (one + x) * f
 assert x ** (field_modulus ** 2 - 1) == one
-
-
-# The quadratic extension field
-class FQcomplex(FQP):
-    def __init__(self, coeffs):
-        self.coeffs = coeffs
-        self.modulus_coeffs = [1, 0]
-        self.mc_tuples = [(0, 1)]
-        self.degree = 2
-        self.__class__.degree = 2
 
 # The 12th-degree extension field
 class FQ12(FQP):
