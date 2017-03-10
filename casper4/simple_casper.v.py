@@ -74,6 +74,9 @@ owner: address
 # Total deposits destroyed
 total_destroyed: wei_value
 
+# RLP decoder address
+rlp_decoder: address
+
 def __init__():
     # Set Casper parameters
     self.interest_rate = 0.000001
@@ -95,6 +98,8 @@ def __init__():
     }
     # Initialize the epoch counter
     self.current_epoch = block.number / self.epoch_length
+    # Set the RLP decoder address
+    self.rlp_decoder = 0x2dadb850a35439906b82be11dfe3e00d5f944213
 
 # Called at the start of any epoch
 def initialize_epoch(epoch: num):
