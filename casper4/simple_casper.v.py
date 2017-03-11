@@ -82,7 +82,8 @@ def __init__():
     self.interest_rate = 0.000001
     self.block_time = 7
     self.epoch_length = 256
-    self.withdrawal_delay = 2500000
+    # Only ~11.5 days, for testing purposes
+    self.withdrawal_delay = 1000000
     # Temporary backdoor for testing purposes (to allow recovering destroyed deposits)
     self.owner = 0x1db3439a222c519ab44bb1144fc28167b4fa6ee6
     # Add an initial validator
@@ -99,7 +100,7 @@ def __init__():
     # Initialize the epoch counter
     self.current_epoch = block.number / self.epoch_length
     # Set the RLP decoder address
-    self.rlp_decoder = 0x2dadb850a35439906b82be11dfe3e00d5f944213
+    self.rlp_decoder = 0x38920146f10f3956fc09970beededcb2d9638711
 
 # Called at the start of any epoch
 def initialize_epoch(epoch: num):
@@ -166,8 +167,20 @@ def withdraw(index: num):
 # Process a prepare message
 def prepare(index: num, epoch: num, hash: bytes32, ancestry_hash: bytes32,
             epoch_source: num, source_ancestry_hash: bytes32, sig: bytes <= 96):
-    # Signature check
-    sighash = sha3(concat("prepare", as_bytes32(epoch), hash, ancestry_hash, as_bytes32(epoch_source), source_ancestry_hash))
+    # Get hash for signature, and implicitly assert that it is an RLP list
+    # consisting solely of RLP elements
+    sighash = extract32(raw_call(self.sighasher, self.prepare_msg, gas=50000, outsize=32), 0)
+    values = raw_call(self.rlp_decoder, self.prepare_msg, gas=50000, outsize=2048)
+    # Extract parameters
+    epoch = extract32(values, extract32(value, 0, type=num128), type=num128)
+    hash = extract32(values, extract32(value, 32, type=num128), type=bytes32)
+    ancestry_hash = extract32(values, extract32(value, 64, type=num128), type=bytes32)
+    source_epoch = extract32(values, extract32(value, 96, type=num128), type=num128)
+    source_ancestry_hash = extract32(values, extract32(value, 128, type=num128), type=bytes32)
+    sig = slice(values, start=extract32(value, 160, type=num128), end=extract32(value, 192, type=num128))
+    # Assert that there are only 6 elements
+    assert as_num128(extract32(value, 0)) == 224
+    # For now, the sig is a simple ECDSA sig
     assert len(sig) == 96
     assert ecrecover(sighash,
                      as_num256(extract32(sig, 0)),

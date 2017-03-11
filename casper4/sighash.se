@@ -45,7 +45,7 @@ newmemindex = 1000
 if newlen < 56:
     ~mstore8(newmemindex, 192 + newlen)
     ~calldatacopy(newmemindex + 1, startpos, newlen)
-    ~return(newmemindex, 1 + newlen)
+    return(~sha3(newmemindex, 1 + newlen))
 else:
     _log = 0
     _newlen = newlen
@@ -55,4 +55,4 @@ else:
     ~mstore8(newmemindex, 247 + _log)
     ~mstore(newmemindex + 1, newlen * (256 ** (32 - _log)))
     ~calldatacopy(newmemindex + 1 + _log, startpos, newlen)
-    ~return(newmemindex, 1 + _log + newlen)
+    return(~sha3(newmemindex, 1 + _log + newlen))
