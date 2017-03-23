@@ -1,5 +1,5 @@
 # Information about validators
-validators: public({
+validators: {
     # Amount of wei the validator holds
     deposit: wei_value,
     # The dynasty the validator is joining
@@ -7,7 +7,7 @@ validators: public({
     # The dynasty the validator is leaving
     dynasty_end: num,
     # The timestamp at which the validator can withdraw
-    withdrawal_time: timestamp,
+    withdrawal_epoch: num,
     # The address which the validator's signatures must verify to (to be later replaced with validation code)
     addr: address,
     # Addess to withdraw to
@@ -16,7 +16,7 @@ validators: public({
     max_prepared: num,
     # The max epoch at which the validator committed
     max_committed: num
-}[num])
+}[num]
 
 # The current dynasty (validator set changes between dynasties)
 dynasty: public(num)
@@ -95,7 +95,7 @@ def __init__():
         deposit: as_wei_value(3, finney),
         dynasty_start: 0,
         dynasty_end: 1000000000000000000000000000000,
-        withdrawal_time: 1000000000000000000000000000000,
+        withdrawal_epoch: 1000000000000000000000000000000,
         addr: 0x1db3439a222c519ab44bb1144fc28167b4fa6ee6,
         withdrawal_addr: 0x1db3439a222c519ab44bb1144fc28167b4fa6ee6,
         max_prepared: 0,
@@ -127,7 +127,7 @@ def deposit(validation_addr: address, withdrawal_addr: address):
         deposit: msg.value,
         dynasty_start: self.dynasty + 2,
         dynasty_end: 1000000000000000000000000000000,
-        withdrawal_time: 1000000000000000000000000000000,
+        withdrawal_epoch: 1000000000000000000000000000000,
         addr: validation_addr,
         withdrawal_addr: withdrawal_addr,
         max_prepared: 0,
@@ -136,34 +136,51 @@ def deposit(validation_addr: address, withdrawal_addr: address):
     self.nextValidatorIndex += 1
     self.second_next_dynasty_wei_delta += msg.value
 
-# Exit the validator set, and start the withdrawal procedure
-def start_withdrawal(index: num, sig: bytes <= 96):
+# Exit the validator set. A logged out validator can log back in later, or
+# if they do not log in for an entire withdrawal period, they can get their
+# money out
+def logout(validator_index: num, sig: bytes <= 96):
     assert self.current_epoch == block.number / self.epoch_length
     # Signature check
     assert len(sig) == 96
     assert ecrecover(sha3("withdraw"),
                      as_num256(extract32(sig, 0)),
                      as_num256(extract32(sig, 32)),
-                     as_num256(extract32(sig, 64))) == self.validators[index].addr
+                     as_num256(extract32(sig, 64))) == self.validators[validator_index].addr
     # Check that we haven't already withdrawn
-    assert self.validators[index].dynasty_end >= self.dynasty + 2
+    assert self.validators[validator_index].dynasty_end >= self.dynasty + 2
     # Set the end dynasty
-    self.validators[index].dynasty_end = self.dynasty + 2
-    self.second_next_dynasty_wei_delta -= msg.value
+    self.validators[validator_index].dynasty_end = self.dynasty + 2
+    self.second_next_dynasty_wei_delta -= self.validators[validator_index].deposit
     # Set the withdrawal date
-    #self.validators[index].withdrawal_time = block.timestamp + self.withdrawal_delay
+    self.validators[validator_index].withdrawal_epoch = self.current_epoch + self.withdrawal_delay / self.block_time / self.epoch_length
+
+# Log back in
+def login(validator_index: num, sig: bytes <= 96):
+    assert self.current_epoch == block.number / self.epoch_length
+    # Signature check
+    assert len(sig) == 96
+    assert ecrecover(sha3("withdraw"),
+                     as_num256(extract32(sig, 0)),
+                     as_num256(extract32(sig, 32)),
+                     as_num256(extract32(sig, 64))) == self.validators[validator_index].addr
+    # Check that we are logged out
+    assert self.validators[validator_index].dynasty_end < self.dynasty
+    self.validators[validator_index].dynasty_start = self.dynasty + 2
+    self.validators[validator_index].dynasty_end = 1000000000000000000000000000000
+    self.second_next_dynasty_wei_delta += self.validators[validator_index].deposit
 
 # Withdraw deposited ether
-def withdraw(index: num):
+def withdraw(validator_index: num):
     # Check that we can withdraw
-    #assert block.timestamp >= self.validators[index].withdrawal_time
+    assert self.current_epoch >= self.validators[validator_index].withdrawal_epoch
     # Withdraw
-    send(self.validators[index].withdrawal_addr, self.validators[index].deposit)
-    self.validators[index] = {
+    send(self.validators[validator_index].withdrawal_addr, self.validators[validator_index].deposit)
+    self.validators[validator_index] = {
         deposit: 0,
         dynasty_start: 0,
         dynasty_end: 0,
-        withdrawal_time: 0,
+        withdrawal_epoch: 0,
         addr: None,
         withdrawal_addr: None,
         max_prepared: 0,
@@ -308,7 +325,7 @@ def double_prepare_slash(validator_index: num, prepare1: bytes <= 1000, prepare2
         deposit: 0,
         dynasty_start: 0,
         dynasty_end: 0,
-        withdrawal_time: 0,
+        withdrawal_epoch: 0,
         addr: None,
         withdrawal_addr: None,
         max_prepared: 0,
@@ -352,7 +369,7 @@ def prepare_commit_inconsistency_slash(validator_index: num, prepare_msg: bytes 
         deposit: 0,
         dynasty_start: 0,
         dynasty_end: 0,
-        withdrawal_time: 0,
+        withdrawal_epoch: 0,
         addr: None,
         withdrawal_addr: None,
         max_prepared: 0,
@@ -385,7 +402,7 @@ def commit_non_justification_slash(validator_index: num, commit_msg: bytes <= 10
         deposit: 0,
         dynasty_start: 0,
         dynasty_end: 0,
-        withdrawal_time: 0,
+        withdrawal_epoch: 0,
         addr: None,
         withdrawal_addr: None,
         max_prepared: 0,
@@ -429,7 +446,7 @@ def prepare_non_justification_slash(validator_index: num, prepare_msg: bytes <= 
         deposit: 0,
         dynasty_start: 0,
         dynasty_end: 0,
-        withdrawal_time: 0,
+        withdrawal_epoch: 0,
         addr: None,
         withdrawal_addr: None,
         max_prepared: 0,

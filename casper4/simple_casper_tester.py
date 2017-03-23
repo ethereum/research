@@ -24,12 +24,11 @@ sighasher = s.contract(open('sighash.se.py').read(), language='serpent')
 casper_code = open('simple_casper.v.py').read().replace('0x1db3439a222c519ab44bb1144fc28167b4fa6ee6', '0x'+utils.encode_hex(t.a0)) \
                                                .replace('0x38920146f10f3956fc09970beededcb2d9638712', '0x'+utils.encode_hex(sighasher))
 
-print(casper_code)
-print(utils.encode_hex(sighasher))
-
-print(len(compiler.compile(casper_code)))
+print('Casper code length', len(compiler.compile(casper_code)))
 
 casper = s.abi_contract(casper_code, language='viper', startgas=5555555)
+
+print('Gas consumed', s.state.receipts[-1].gas_used - s.state.receipts[-2].gas_used)
 
 def mk_prepare(epoch, hash, ancestry_hash, source_epoch, source_ancestry_hash, key):
     sighash = utils.sha3(rlp.encode([epoch, hash, ancestry_hash, source_epoch, source_ancestry_hash]))
