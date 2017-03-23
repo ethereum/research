@@ -1,5 +1,5 @@
 # Information about validators
-validators: {
+validators: public({
     # Amount of wei the validator holds
     deposit: wei_value,
     # The dynasty the validator is joining
@@ -16,7 +16,7 @@ validators: {
     max_prepared: num,
     # The max epoch at which the validator committed
     max_committed: num
-}[num]
+}[num])
 
 # The current dynasty (validator set changes between dynasties)
 dynasty: public(num)
@@ -108,6 +108,8 @@ def __init__():
     self.sighasher = 0x38920146f10f3956fc09970beededcb2d9638712
     # Set an initial root of the epoch hash chain
     self.consensus_messages[0].ancestry_hash_justified[0x0000000000000000000000000000000000000000000000000000000000000000] = True
+    # Set initial total deposit counter
+    self.total_deposits[0] = as_wei_value(3, finney)
 
 # Called at the start of any epoch
 def initialize_epoch(epoch: num):
@@ -136,39 +138,42 @@ def deposit(validation_addr: address, withdrawal_addr: address):
     self.nextValidatorIndex += 1
     self.second_next_dynasty_wei_delta += msg.value
 
-# Exit the validator set. A logged out validator can log back in later, or
-# if they do not log in for an entire withdrawal period, they can get their
-# money out
-def logout(validator_index: num, sig: bytes <= 96):
+# Log in or log out from the validator set. A logged out validator can log
+# back in later, if they do not log in for an entire withdrawal period,
+# they can get their money out
+def flick_status(validator_index: num, logout_msg: bytes <= 1024):
     assert self.current_epoch == block.number / self.epoch_length
+    # Get hash for signature, and implicitly assert that it is an RLP list
+    # consisting solely of RLP elements
+    sighash = extract32(raw_call(self.sighasher, logout_msg, gas=200000, outsize=32), 0)
+    # Extract parameters
+    values = RLPList(logout_msg, [num, bool, bytes])
+    epoch = values[0]
+    login_flag = values[1]
+    sig = values[2]
+    assert self.current_epoch == epoch
     # Signature check
     assert len(sig) == 96
-    assert ecrecover(sha3("withdraw"),
+    assert ecrecover(sighash,
                      as_num256(extract32(sig, 0)),
                      as_num256(extract32(sig, 32)),
                      as_num256(extract32(sig, 64))) == self.validators[validator_index].addr
-    # Check that we haven't already withdrawn
-    assert self.validators[validator_index].dynasty_end >= self.dynasty + 2
-    # Set the end dynasty
-    self.validators[validator_index].dynasty_end = self.dynasty + 2
-    self.second_next_dynasty_wei_delta -= self.validators[validator_index].deposit
-    # Set the withdrawal date
-    self.validators[validator_index].withdrawal_epoch = self.current_epoch + self.withdrawal_delay / self.block_time / self.epoch_length
-
-# Log back in
-def login(validator_index: num, sig: bytes <= 96):
-    assert self.current_epoch == block.number / self.epoch_length
-    # Signature check
-    assert len(sig) == 96
-    assert ecrecover(sha3("withdraw"),
-                     as_num256(extract32(sig, 0)),
-                     as_num256(extract32(sig, 32)),
-                     as_num256(extract32(sig, 64))) == self.validators[validator_index].addr
-    # Check that we are logged out
-    assert self.validators[validator_index].dynasty_end < self.dynasty
-    self.validators[validator_index].dynasty_start = self.dynasty + 2
-    self.validators[validator_index].dynasty_end = 1000000000000000000000000000000
-    self.second_next_dynasty_wei_delta += self.validators[validator_index].deposit
+    # Logging in
+    if login_flag:
+        # Check that we are logged out
+        assert self.validators[validator_index].dynasty_end < self.dynasty
+        self.validators[validator_index].dynasty_start = self.dynasty + 2
+        self.validators[validator_index].dynasty_end = 1000000000000000000000000000000
+        self.second_next_dynasty_wei_delta += self.validators[validator_index].deposit
+    # Logging out
+    else:
+        # Check that we haven't already withdrawn
+        assert self.validators[validator_index].dynasty_end >= self.dynasty + 2
+        # Set the end dynasty
+        self.validators[validator_index].dynasty_end = self.dynasty + 2
+        self.second_next_dynasty_wei_delta -= self.validators[validator_index].deposit
+        # Set the withdrawal date
+        self.validators[validator_index].withdrawal_epoch = self.current_epoch + self.withdrawal_delay / self.block_time / self.epoch_length
 
 # Withdraw deposited ether
 def withdraw(validator_index: num):
@@ -271,7 +276,7 @@ def commit(validator_index: num, commit_msg: bytes <= 1024):
     in_prev_dynasty = (ds <= (dc - 1)) and ((dc - 1) < de)
     assert in_current_dynasty or in_prev_dynasty
     # Check that we have not yet committed for this epoch
-    assert self.validators[validator_index].max_committed == epoch - 1
+    #assert self.validators[validator_index].max_committed == epoch - 1
     # Pay the reward if the blockhash is correct
     if True: #~blockhash(epoch * self.epoch_length) == hash:
         reward = floor(self.validators[validator_index].deposit * self.interest_rate * self.block_time / 2)
