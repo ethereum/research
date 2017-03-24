@@ -1,0 +1,61 @@
+macro calldatachar($x):
+    div(calldataload($x), 2**248)
+
+# sum([2**x for x in [0x31, 0x32, 0x33, 0x3a, 0x3b, 0x3c, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x54, 0x55, 0xf0, 0xff])
+mask = 57897811465722876096115075801844696845150819816717215668290421542284681019392
+
+data approved_addrs[]
+
+def submit(addr: address):
+    # Copy external contract code
+    extcode = string(~extcodesize(addr))
+    ~extcodecopy(addr, extcode, 0, ~extcodesize(addr))
+    ops = array(~extcodesize(addr))
+    pushargs = array(~extcodesize(addr))
+    # Loop through the code
+    with i = 0:
+        with op = 0:
+            while i < len(extcode):
+                with c = ~mod(~mload(extcode + i - 31), 256):
+                    # Banned opcode
+                    if ~and(2**c, mask):
+                        ~invalid()
+                    # PUSH
+                    if 0x60 <= c and c <= 0x7f:
+                        pushargs[op] = ~div(~mload(extcode + i + 1), 256 ** (0x7f - c))
+                        i += c - 0x5e
+                    # Call, callcode, delegatecall
+                    elif c == 0xf1 or c == 0xf2 or c == 0xf4:
+                        # Pattern-match two ways of setting the gas parameter:
+                        #
+                        # 1. PUSH<value>
+                        # 2. sub(gas, PUSH<value>)
+                        if op >= 2 and ops[op - 1] >= 0x60 and ops[op - 1] <= 0x7f:
+                            address_entry = op - 2
+                        elif op >= 4 and ops[op - 1] == 0x03 and ops[op - 2] == 0x5a and ops[op - 3] >= 0x60 and ops[op - 3] <= 0x7f:
+                            address_entry = op - 4
+                        else:
+                            ~invalid()
+                        # Operation before the gas parameter must satisfy one of three conditions:
+                        #
+                        # 1. It is a PUSH of an already approved address
+                        # 2. It is the address itself, through the ADDRESS opcode (ie. self-calling is permitted)
+                        # 3. It is a PUSH1, ie. less than 256 (ie. a present or future precompile)
+                        if self.approved_addrs[pushargs[address_entry]]:
+                            success = 1
+                        elif ops[address_entry] == 0x30:
+                            success = 1
+                        elif ops[address_entry] == 0x60:
+                            success = 1
+                        if not success:
+                            ~invalid()
+                        i += 1
+                    else:
+                        i += 1
+                    ops[op] = c
+                    op += 1
+    self.approved_addrs[addr] = 1
+    return(1: bool)
+
+def check(addr: address):
+    return(self.approved_addrs[addr]:bool)
