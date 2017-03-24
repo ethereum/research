@@ -57,5 +57,5 @@ def submit(addr: address):
     self.approved_addrs[addr] = 1
     return(1: bool)
 
-def check(addr: address):
+def const check(addr: address):
     return(self.approved_addrs[addr]:bool)

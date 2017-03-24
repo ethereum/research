@@ -120,3 +120,4 @@ print('Send %d wei to %s' % (t.startgas * t.gasprice,
 
 print('Contract address: 0x'+utils.encode_hex(utils.mk_contract_address(t.sender, 0)))
 print('Code: 0x'+utils.encode_hex(rlp.encode(t)))
+print('ABI declaration: '+repr(serpent.mk_full_signature('check_for_impurity.se')))
