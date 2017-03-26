@@ -105,7 +105,7 @@ def __init__():
     # Initialize the epoch counter
     self.current_epoch = block.number / self.epoch_length
     # Set the sighash calculator address
-    self.sighasher = 0x38920146f10f3956fc09970beededcb2d9638712
+    self.sighasher = 0x476c2ca9a7f3b16feca86512276271faf63b6a24
     # Set an initial root of the epoch hash chain
     self.consensus_messages[0].ancestry_hash_justified[0x0000000000000000000000000000000000000000000000000000000000000000] = True
     # Set initial total deposit counter
