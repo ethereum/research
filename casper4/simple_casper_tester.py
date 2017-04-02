@@ -9,7 +9,7 @@ s = t.state()
 t.languages['viper'] = compiler.Compiler()
 t.gas_limit = 9999999
 
-EPOCH_LENGTH = 256
+EPOCH_LENGTH = 100
 
 # Install RLP decoder library
 s.state.set_balance('0xfe2ec957647679d210034b65e9c7db2452910b0c', 9350880000000000)
@@ -56,23 +56,27 @@ def mk_status_flicker(epoch, login, key):
 # Begin the test
 
 print("Starting tests")
+casper.initiate()
 # Initialize the first epoch
-s.state.block_number = EPOCH_LENGTH
+s.state.block_number = EPOCH_LENGTH 
 casper.initialize_epoch(1)
 assert casper.get_nextValidatorIndex() == 1
 start = s.snapshot()
 print("Epoch initialized")
+print("Reward factor: %.8f" % (casper.get_reward_factor() * 2 / 3))
 # Send a prepare message
 casper.prepare(0, mk_prepare(1, '\x35' * 32, '\x00' * 32, 0, '\x00' * 32, t.k0))
 epoch_1_anchash = utils.sha3(b'\x35' * 32 + b'\x00' * 32)
 assert casper.get_consensus_messages__hash_justified(1, b'\x35' * 32)
 assert casper.get_consensus_messages__ancestry_hash_justified(1, epoch_1_anchash)
+print('Gas consumed for a prepare', s.state.receipts[-1].gas_used - s.state.receipts[-2].gas_used)
 print("Prepare message processed")
 # Send a commit message
 casper.commit(0, mk_commit(1, '\x35' * 32, t.k0))
 # Check that we committed
 assert casper.get_consensus_messages__committed(1)
 print("Commit message processed")
+print('Gas consumed for a commit', s.state.receipts[-1].gas_used - s.state.receipts[-2].gas_used)
 # Initialize the second epoch 
 s.state.block_number += EPOCH_LENGTH
 casper.initialize_epoch(2)
@@ -130,11 +134,12 @@ p5 = mk_prepare(5, '\x78' * 32, epoch_4_anchash, 3, epoch_3_anchash, t.k0)
 casper.prepare(0, p5)
 # Test the COMMIT_REQ slashing condition
 kommit = mk_commit(5, b'\x80' * 32, t.k0)
-s.state.block_number += EPOCH_LENGTH * 30
+epoch_inc = 1 + int(86400 / 14 / EPOCH_LENGTH)
+s.state.block_number += EPOCH_LENGTH * epoch_inc
 print("Speeding up time to test remaining two slashing conditions")
-for i in range(6, 36):
+for i in range(6, 6 + epoch_inc):
     casper.initialize_epoch(i)
-print("Epochs up to 36 initialized")
+print("Epochs up to %d initialized" % (6 + epoch_inc))
 snapshot = s.snapshot()
 casper.commit_non_justification_slash(0, kommit)
 s.revert(snapshot)
@@ -146,7 +151,11 @@ except:
 assert not success
 print("COMMIT_REQ slashing condition works")
 # Test the PREPARE_REQ slashing condition
-casper.derive_ancestry(epoch_3_anchash, epoch_2_anchash, epoch_1_anchash)
+casper.derive_parenthood(epoch_3_anchash, b'\x67' * 32, epoch_4_anchash)
+assert casper.get_ancestry(epoch_3_anchash, epoch_4_anchash) == 1
+assert casper.get_ancestry(epoch_4_anchash, epoch_5_anchash) == 1
+casper.derive_ancestry(epoch_3_anchash, epoch_4_anchash, epoch_5_anchash)
+assert casper.get_ancestry(epoch_3_anchash, epoch_5_anchash) == 2
 snapshot = s.snapshot()
 casper.prepare_non_justification_slash(0, p4)
 s.revert(snapshot)
@@ -166,7 +175,7 @@ assert casper.get_current_epoch() == 1
 assert casper.get_consensus_messages__ancestry_hash_justified(0, b'\x00' * 32)
 print("Epoch 1 initialized")
 for k in (t.k1, t.k2, t.k3, t.k4, t.k5, t.k6):
-    casper.deposit(utils.privtoaddr(k), utils.privtoaddr(k), value=3 * 10**15)
+    casper.deposit(utils.privtoaddr(k), utils.privtoaddr(k), value=3 * 10**18)
 print("Processed 6 deposits")
 casper.prepare(0, mk_prepare(1, b'\x10' * 32, b'\x00' * 32, 0, b'\x00' * 32, t.k0))
 casper.commit(0, mk_commit(1, b'\x10' * 32, t.k0))
@@ -186,9 +195,9 @@ s.state.block_number += EPOCH_LENGTH
 casper.initialize_epoch(3)
 print("Epoch 3 initialized")
 assert casper.get_dynasty() == 2
-assert 3 * 10**15 <= casper.get_total_deposits(0) < 4 * 10**15
-assert 3 * 10**15 <= casper.get_total_deposits(1) < 4 * 10**15
-assert 21 * 10**15 <= casper.get_total_deposits(2) < 22 * 10**15
+assert 3 * 10**18 <= casper.get_total_deposits(0) < 4 * 10**18
+assert 3 * 10**18 <= casper.get_total_deposits(1) < 4 * 10**18
+assert 21 * 10**18 <= casper.get_total_deposits(2) < 22 * 10**18
 print("Confirmed new total_deposits")
 try:
     # Try to log out, but sign with the wrong key
@@ -245,8 +254,8 @@ s.state.block_number += EPOCH_LENGTH
 casper.initialize_epoch(5)
 print("Epoch 5 initialized")
 assert casper.get_dynasty() == 4
-assert 21 * 10**15 <= casper.get_total_deposits(3) <= 22 * 10**15
-assert 12 * 10**15 <= casper.get_total_deposits(4) <= 13 * 10**15
+assert 21 * 10**18 <= casper.get_total_deposits(3) <= 22 * 10**18
+assert 12 * 10**18 <= casper.get_total_deposits(4) <= 13 * 10**18
 epoch_5_anchash = utils.sha3(b'\x50' * 32 + epoch_4_anchash)
 # Do three prepares
 for i, k in enumerate([t.k0, t.k1, t.k2]):
@@ -270,8 +279,13 @@ casper.initialize_epoch(6)
 assert casper.get_dynasty() == 5
 print("Epoch 6 initialized")
 # Log back in
+old_deposit_start = casper.get_dynasty_start_epoch(casper.get_validators__dynasty_start(4))
+old_deposit_end = casper.get_dynasty_start_epoch(casper.get_validators__dynasty_end(4) + 1)
+old_deposit = casper.get_validators__deposit(4)
 casper.flick_status(4, mk_status_flicker(6, 1, t.k4))
+new_deposit = casper.get_validators__deposit(4)
 print("One validator logging back in")
+print("Penalty from %d epochs: %.4f" % (old_deposit_end - old_deposit_start, 1 - new_deposit / old_deposit))
 assert casper.get_validators__dynasty_start(4) == 7
 # Here three prepares and three commits should be sufficient!
 epoch_6_anchash = utils.sha3(b'\x60' * 32 + epoch_5_anchash)
@@ -299,8 +313,8 @@ s.state.block_number += EPOCH_LENGTH
 casper.initialize_epoch(8)
 assert casper.get_dynasty() == 7
 print("Epoch 8 initialized")
-assert 12 * 10**15 <= casper.get_total_deposits(6) <= 13 * 10**15
-assert 15 * 10**15 <= casper.get_total_deposits(7) <= 16 * 10**15
+assert 12 * 10**18 <= casper.get_total_deposits(6) <= 13 * 10**18
+assert 15 * 10**18 <= casper.get_total_deposits(7) <= 16 * 10**18
 epoch_8_anchash = utils.sha3(b'\x80' * 32 + epoch_7_anchash)
 # Do three prepares
 for i, k in enumerate([t.k0, t.k1, t.k2]):
