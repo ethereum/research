@@ -25,7 +25,7 @@ assert s.state.get_code('0x476c2ca9a7f3b16feca86512276271faf63b6a24')
 
 # Install Casper
 
-casper_code = open('simple_casper.v.py').read().replace('0x1db3439a222c519ab44bb1144fc28167b4fa6ee6', '0x'+utils.encode_hex(t.a0))
+casper_code = open('simple_casper.v.py').read().replace('0x1db3439a222c519ab44bb1144fc28167b4fa6ee6', utils.checksum_encode(t.a0))
 
 print('Casper code length', len(compiler.compile(casper_code)))
 

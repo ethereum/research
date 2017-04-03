@@ -91,6 +91,12 @@ reward_at_1m_eth: decimal
 # Have I already been initialized?
 initialized: bool
 
+# Log topic for prepare
+prepare_log_topic: bytes32
+
+# Log topic for commit
+commit_log_topic: bytes32
+
 def initiate():
     assert not self.initialized
     self.initialized = True
@@ -118,7 +124,7 @@ def initiate():
     # Initialize the epoch counter
     self.current_epoch = block.number / self.epoch_length
     # Set the sighash calculator address
-    self.sighasher = 0x476c2ca9a7f3b16feca86512276271faf63b6a24
+    self.sighasher = 0x476c2cA9a7f3B16FeCa86512276271FAf63B6a24
     # Set an initial root of the epoch hash chain
     self.consensus_messages[0].ancestry_hash_justified[0x0000000000000000000000000000000000000000000000000000000000000000] = True
     # Set initial total deposit counter
@@ -127,6 +133,9 @@ def initiate():
     self.consensus_messages[0].deposit_scale_factor = 1000000000000000000.0
     # Total ETH given out assuming 1m ETH deposits
     self.reward_at_1m_eth = 12.5
+    # Log topics for prepare and commit
+    self.prepare_log_topic = sha3("prepare()")
+    self.commit_log_topic = sha3("commit()")
 
 # Called at the start of any epoch
 def initialize_epoch(epoch: num):
@@ -300,6 +309,7 @@ def prepare(validator_index: num, prepare_msg: bytes <= 1024):
         self.consensus_messages[epoch].hash_justified[hash] = True
     # Add a parent-child relation between ancestry hashes to the ancestry table
     self.ancestry[ancestry_hash][new_ancestry_hash] = 1
+    raw_log([self.prepare_log_topic], prepare_msg)
 
 # Process a commit message
 def commit(validator_index: num, commit_msg: bytes <= 1024):
@@ -348,6 +358,7 @@ def commit(validator_index: num, commit_msg: bytes <= 1024):
             self.consensus_messages[epoch].prev_dyn_commits[hash] >= self.total_deposits[self.dynasty - 1] * 2 / 3) and \
             not self.consensus_messages[epoch].committed:
         self.consensus_messages[epoch].committed = True
+    raw_log([self.commit_log_topic], commit_msg)
 
 # Cannot make two prepares in the same epoch
 def double_prepare_slash(validator_index: num, prepare1: bytes <= 1000, prepare2: bytes <= 1000):
