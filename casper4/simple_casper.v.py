@@ -55,7 +55,7 @@ consensus_messages: public({
 ancestry: public(num[bytes32][bytes32])
 
 # Number of validators
-nextValidatorIndex: public(num)
+next_validator_index: public(num)
 
 # Time between blocks
 block_time: timedelta
@@ -120,7 +120,7 @@ def initiate():
         max_prepared: 0,
         max_committed: 0
     }
-    self.nextValidatorIndex = 1
+    self.next_validator_index = 1
     # Initialize the epoch counter
     self.current_epoch = block.number / self.epoch_length
     # Set the sighash calculator address
@@ -169,7 +169,7 @@ def initialize_epoch(epoch: num):
 # Send a deposit to join the validator set
 def deposit(validation_addr: address, withdrawal_addr: address):
     assert self.current_epoch == block.number / self.epoch_length
-    self.validators[self.nextValidatorIndex] = {
+    self.validators[self.next_validator_index] = {
         deposit: msg.value,
         dynasty_start: self.dynasty + 2,
         dynasty_end: 1000000000000000000000000000000,
@@ -179,7 +179,7 @@ def deposit(validation_addr: address, withdrawal_addr: address):
         max_prepared: 0,
         max_committed: 0,
     }
-    self.nextValidatorIndex += 1
+    self.next_validator_index += 1
     self.second_next_dynasty_wei_delta += msg.value
 
 # Log in or log out from the validator set. A logged out validator can log
