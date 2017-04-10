@@ -60,7 +60,7 @@ casper.initiate()
 # Initialize the first epoch
 s.state.block_number = EPOCH_LENGTH 
 casper.initialize_epoch(1)
-assert casper.get_nextValidatorIndex() == 1
+assert casper.get_next_validator_index() == 1
 start = s.snapshot()
 print("Epoch initialized")
 print("Reward factor: %.8f" % (casper.get_reward_factor() * 2 / 3))
