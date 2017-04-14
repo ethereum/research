@@ -356,14 +356,18 @@ def prepare(validator_index: num, prepare_msg: bytes <= 1024):
     # self.validators[validator_index].max_prepared = epoch
     # Record that this prepare took place
     new_ancestry_hash = sha3(concat(hash, ancestry_hash))
+    curdyn_prepares = self.consensus_messages[epoch].prepares[sighash]
     if in_current_dynasty:
-        self.consensus_messages[epoch].prepares[sighash] += this_validators_deposit
+        curdyn_prepares += this_validators_deposit
+        self.consensus_messages[epoch].prepares[sighash] = curdyn_prepares
+    prevdyn_prepares = self.consensus_messages[epoch].prev_dyn_prepares[sighash]
     if in_prev_dynasty:
-        self.consensus_messages[epoch].prev_dyn_prepares[sighash] += this_validators_deposit
+        prevdyn_prepares += this_validators_deposit
+        self.consensus_messages[epoch].prev_dyn_prepares[sighash] = prevdyn_prepares
     # If enough prepares with the same epoch_source and hash are made,
     # then the hash value is justified for commitment
-    if (self.consensus_messages[epoch].prepares[sighash] >= self.total_deposits[self.dynasty] * 2 / 3 and \
-            self.consensus_messages[epoch].prev_dyn_prepares[sighash] >= self.total_deposits[self.dynasty - 1] * 2 / 3) and \
+    if (curdyn_prepares >= self.total_deposits[self.dynasty] * 2 / 3 and \
+            prevdyn_prepares >= self.total_deposits[self.dynasty - 1] * 2 / 3) and \
             not self.consensus_messages[epoch].ancestry_hash_justified[new_ancestry_hash]:
         self.consensus_messages[epoch].ancestry_hash_justified[new_ancestry_hash] = True
         self.consensus_messages[epoch].hash_justified[hash] = True
@@ -403,18 +407,19 @@ def commit(validator_index: num, commit_msg: bytes <= 1024):
     assert self.validators[validator_index].prev_commit_epoch == prev_commit_epoch
     assert prev_commit_epoch < epoch
     self.validators[validator_index].prev_commit_epoch = epoch
+    this_validators_deposit = self.validators[validator_index].deposit
     # Pay the reward if the blockhash is correct
     if True:  #if blockhash(epoch * self.epoch_length) == hash:
-        reward = floor(self.validators[validator_index].deposit * self.reward_factor)
+        reward = floor(this_validators_deposit * self.reward_factor)
         self.validators[validator_index].deposit += reward
         self.total_deposits[self.dynasty] += reward
     # Can't commit for this epoch again
     # self.validators[validator_index].max_committed = epoch
     # Record that this commit took place
     if in_current_dynasty:
-        self.consensus_messages[epoch].commits[hash] += self.validators[validator_index].deposit
+        self.consensus_messages[epoch].commits[hash] += this_validators_deposit
     if in_prev_dynasty:
-        self.consensus_messages[epoch].prev_dyn_commits[hash] += self.validators[validator_index].deposit
+        self.consensus_messages[epoch].prev_dyn_commits[hash] += this_validators_deposit
     # Record if sufficient commits have been made for the block to be finalized
     if (self.consensus_messages[epoch].commits[hash] >= self.total_deposits[self.dynasty] * 2 / 3 and \
             self.consensus_messages[epoch].prev_dyn_commits[hash] >= self.total_deposits[self.dynasty - 1] * 2 / 3) and \
