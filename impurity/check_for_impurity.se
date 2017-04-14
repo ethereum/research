@@ -1,8 +1,8 @@
 macro calldatachar($x):
     div(calldataload($x), 2**248)
 
-# sum([2**x for x in [0x31, 0x32, 0x33, 0x3a, 0x3b, 0x3c, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x54, 0x55, 0xf0, 0xff])
-mask = 57897811465722876096115075801844696845150819816717215668290421542284681019392
+# sum([2**x for x in [0x31, 0x32, 0x33, 0x3a, 0x3b, 0x3c, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d, 0x4e, 0x4f, 0x54, 0x55, 0xf0, 0xff]])
+mask = 57897811465722876096115075801844696845150819816717216876035649536196444422144
 
 data approved_addrs[]
 
@@ -26,14 +26,23 @@ def submit(addr: address):
                         i += c - 0x5e
                     # Call, callcode, delegatecall
                     elif c == 0xf1 or c == 0xf2 or c == 0xf4:
-                        # Pattern-match two ways of setting the gas parameter:
+                        # Pattern-match four ways of setting the gas parameter:
                         #
                         # 1. PUSH<value>
-                        # 2. sub(gas, PUSH<value>)
+                        # 2. sub(GAS, PUSH<value>)
+                        # 3. GAS
+                        # 4. SWAP1 <address> (<gas> ... )
+                        # 5. DUP
                         if op >= 2 and ops[op - 1] >= 0x60 and ops[op - 1] <= 0x7f:
                             address_entry = op - 2
                         elif op >= 4 and ops[op - 1] == 0x03 and ops[op - 2] == 0x5a and ops[op - 3] >= 0x60 and ops[op - 3] <= 0x7f:
                             address_entry = op - 4
+                        elif op >= 2 and ops[op - 1] == 0x5a:
+                            address_entry = op - 2
+                        elif op >= 2 and ops[op - 1] == 0x90:
+                            address_entry = op - 2
+                        elif op >= 2 and ops[op - 1] >= 0x80 and ops[op - 1] < 0x90:
+                            address_entry = op - 2
                         else:
                             ~invalid()
                         # Operation before the gas parameter must satisfy one of three conditions:

@@ -4,6 +4,8 @@ validators: public({
     deposit: wei_value,
     # The dynasty the validator is joining
     dynasty_start: num,
+    # The dynasty the validator joined for the first time
+    original_dynasty_start: num,
     # The dynasty the validator is leaving
     dynasty_end: num,
     # The timestamp at which the validator can withdraw
@@ -12,16 +14,16 @@ validators: public({
     addr: address,
     # Addess to withdraw to
     withdrawal_addr: address,
-    # The max epoch at which the validator prepared
-    max_prepared: num,
-    # The max epoch at which the validator committed
-    max_committed: num
+    # Previous epoch in which this validator committed
+    prev_commit_epoch: num
 }[num])
 
 # The current dynasty (validator set changes between dynasties)
 dynasty: public(num)
+
 # Amount of wei added to the total deposits in the next dynasty
 next_dynasty_wei_delta: wei_value
+
 # Amount of wei added to the total deposits in the dynasty after that
 second_next_dynasty_wei_delta: wei_value
 
@@ -31,10 +33,15 @@ total_deposits: public(wei_value[num])
 # Mapping of dynasty to start epoch of that dynasty
 dynasty_start_epoch: public(num[num])
 
+# Mapping of epoch to what dynasty it is
+dynasty_in_epoch: public(num[num])
+
 # Information for use in processing cryptoeconomic commitments
 consensus_messages: public({
     # How many prepares are there for this hash (hash of message hash + view source) from the current dynasty
     prepares: wei_value[bytes32],
+    # Bitmap of which validator IDs have already prepared
+    prepare_bitmap: num256[num][bytes32],
     # From the previous dynasty
     prev_dyn_prepares: wei_value[bytes32],
     # Is a prepare referencing the given ancestry hash justified?
@@ -50,6 +57,10 @@ consensus_messages: public({
     # Value used to calculate the per-epoch fee that validators should be charged
     deposit_scale_factor: decimal
 }[num]) # index: epoch
+
+# A bitmap, where the ith bit of dynasty_mark[arg1][arg2] shows
+# whether or not validator arg1 is active during dynasty arg2*256+i
+dynasty_mask: num256[num][num]
 
 # ancestry[x][y] = k > 0: x is a kth generation ancestor of y
 ancestry: public(num[bytes32][bytes32])
@@ -108,17 +119,17 @@ def initiate():
     # Only ~1 day, for testing purposes
     self.insufficiency_slash_delay = 86400
     # Temporary backdoor for testing purposes (to allow recovering destroyed deposits)
-    self.owner = 0x1db3439a222c519ab44bb1144fc28167b4fa6ee6
+    self.owner = 0x1Db3439a222C519ab44bb1144fC28167b4Fa6EE6
     # Add an initial validator
     self.validators[0] = {
         deposit: as_wei_value(3, ether),
         dynasty_start: 0,
         dynasty_end: 1000000000000000000000000000000,
+        original_dynasty_start: 0,
         withdrawal_epoch: 1000000000000000000000000000000,
-        addr: 0x1db3439a222c519ab44bb1144fc28167b4fa6ee6,
-        withdrawal_addr: 0x1db3439a222c519ab44bb1144fc28167b4fa6ee6,
-        max_prepared: 0,
-        max_committed: 0
+        addr: 0x1Db3439a222C519ab44bb1144fC28167b4Fa6EE6,
+        withdrawal_addr: 0x1Db3439a222C519ab44bb1144fC28167b4Fa6EE6,
+        prev_commit_epoch: 0,
     }
     self.nextValidatorIndex = 1
     # Initialize the epoch counter
@@ -127,6 +138,7 @@ def initiate():
     self.sighasher = 0x476c2cA9a7f3B16FeCa86512276271FAf63B6a24
     # Set an initial root of the epoch hash chain
     self.consensus_messages[0].ancestry_hash_justified[0x0000000000000000000000000000000000000000000000000000000000000000] = True
+    # self.consensus_messages[0].committed = True
     # Set initial total deposit counter
     self.total_deposits[0] = as_wei_value(3, ether)
     # Set deposit scale factor
@@ -151,6 +163,7 @@ def initialize_epoch(epoch: num):
         self.next_dynasty_wei_delta = self.second_next_dynasty_wei_delta
         self.second_next_dynasty_wei_delta = 0
         self.dynasty_start_epoch[self.dynasty] = epoch
+    self.dynasty_in_epoch[epoch] = self.dynasty
     # Compute square root factor
     ether_deposited_as_number = self.total_deposits[self.dynasty] / as_wei_value(1, ether)
     sqrt = ether_deposited_as_number / 2.0
@@ -172,12 +185,12 @@ def deposit(validation_addr: address, withdrawal_addr: address):
     self.validators[self.nextValidatorIndex] = {
         deposit: msg.value,
         dynasty_start: self.dynasty + 2,
+        original_dynasty_start: self.dynasty + 2,
         dynasty_end: 1000000000000000000000000000000,
         withdrawal_epoch: 1000000000000000000000000000000,
         addr: validation_addr,
         withdrawal_addr: withdrawal_addr,
-        max_prepared: 0,
-        max_committed: 0,
+        prev_commit_epoch: 0,
     }
     self.nextValidatorIndex += 1
     self.second_next_dynasty_wei_delta += msg.value
@@ -206,6 +219,8 @@ def flick_status(validator_index: num, logout_msg: bytes <= 1024):
     if login_flag:
         # Check that we are logged out
         assert self.validators[validator_index].dynasty_end < self.dynasty
+        # Check that we logged out for less than 3840 dynasties (min: ~2 months)
+        assert self.validators[validator_index].dynasty_end >= self.dynasty - 3840
         # Apply the per-epoch deposit penalty
         prev_login_epoch = self.dynasty_start_epoch[self.validators[validator_index].dynasty_start]
         prev_logout_epoch = self.dynasty_start_epoch[self.validators[validator_index].dynasty_end + 1]
@@ -214,7 +229,22 @@ def flick_status(validator_index: num, logout_msg: bytes <= 1024):
                     (self.consensus_messages[prev_logout_epoch].deposit_scale_factor /
                      self.consensus_messages[prev_login_epoch].deposit_scale_factor))
         # Log back in
-        self.validators[validator_index].dynasty_start = self.dynasty + 2
+        # Go through the dynasty mask to clear out the ineligible dynasties
+        old_ds = self.validators[validator_index].dynasty_end
+        new_ds = self.dynasty + 2
+        for i in range(old_ds / 256, old_ds / 256 + 16):
+            if old_ds > i * 256:
+                s = old_ds % 256
+            else:
+                s = 0
+            if new_ds < i * 256 + 256:
+                e = new_ds % 256
+            else:
+                e = 256
+            self.dynasty_mask[validator_index][i] = num256_sub(shift(as_num256(1), e), shift(as_num256(1), s))
+            if e < 256:
+                break
+        self.validators[validator_index].dynasty_start = new_ds
         self.validators[validator_index].dynasty_end = 1000000000000000000000000000000
         self.second_next_dynasty_wei_delta += self.validators[validator_index].deposit
     # Logging out
@@ -226,6 +256,19 @@ def flick_status(validator_index: num, logout_msg: bytes <= 1024):
         self.second_next_dynasty_wei_delta -= self.validators[validator_index].deposit
         # Set the withdrawal date
         self.validators[validator_index].withdrawal_epoch = self.current_epoch + self.withdrawal_delay / self.block_time / self.epoch_length
+
+# Removes a validator from the validator pool
+def delete_validator(validator_index: num):
+    self.validators[validator_index] = {
+        deposit: 0,
+        dynasty_start: 0,
+        dynasty_end: 0,
+        original_dynasty_start: 0,
+        withdrawal_epoch: 0,
+        addr: None,
+        withdrawal_addr: None,
+        prev_commit_epoch: 0,
+    }
 
 # Withdraw deposited ether
 def withdraw(validator_index: num):
@@ -240,16 +283,30 @@ def withdraw(validator_index: num):
                  self.consensus_messages[prev_login_epoch].deposit_scale_factor))
     # Withdraw
     send(self.validators[validator_index].withdrawal_addr, self.validators[validator_index].deposit)
-    self.validators[validator_index] = {
-        deposit: 0,
-        dynasty_start: 0,
-        dynasty_end: 0,
-        withdrawal_epoch: 0,
-        addr: None,
-        withdrawal_addr: None,
-        max_prepared: 0,
-        max_committed: 0,
-    }
+    self.delete_validator(validator_index)
+
+# Checks if a given validator could have prepared in a given epoch
+def check_eligible_in_epoch(validator_index: num, epoch: num) -> num(const):
+    # Time limit for submitting a prepare
+    assert epoch > self.current_epoch - 3840
+    # Original starting dynasty of the validator; fail if before
+    do = self.validators[validator_index].original_dynasty_start
+    # Ending dynasty of the current login period
+    de = self.validators[validator_index].dynasty_end
+    # Dynasty of the prepare
+    dc = self.dynasty_in_epoch[epoch]
+    # Dynasty before the prepare (for prev dynasty checking)
+    dp = dc - 1
+    # Check against mask to see if the dynasty was eligible before
+    cur_in_mask = bitwise_and(self.dynasty_mask[validator_index][dc / 256], shift(as_num256(1), dc % 256))
+    prev_in_mask = bitwise_and(self.dynasty_mask[validator_index][dp / 256], shift(as_num256(1), dp % 256))
+    o = 0
+    # Return result as bitmask, bit 1 = in_current_dynasty, bit 0 = in_prev_dynasty
+    if ((do <= dc and cur_in_mask == as_num256(0)) and dc < de):
+        o += 2
+    if ((do <= dp and prev_in_mask == as_num256(0)) and dp < de):
+        o += 1
+    return o
 
 # Process a prepare message
 def prepare(validator_index: num, prepare_msg: bytes <= 1024):
@@ -271,35 +328,38 @@ def prepare(validator_index: num, prepare_msg: bytes <= 1024):
                      extract32(sig, 0, type=num256),
                      extract32(sig, 32, type=num256),
                      extract32(sig, 64, type=num256)) == self.validators[validator_index].addr
-    # Check that we are in the right epoch
-    assert self.current_epoch == block.number / self.epoch_length
-    assert self.current_epoch == epoch
+    # Check that we are in an epoch after we started validating
+    assert self.current_epoch >= self.dynasty_start_epoch[self.validators[validator_index].dynasty_start]
+    # Check that this prepare has not yet been made
+    assert not bitwise_and(self.consensus_messages[epoch].prepare_bitmap[sighash][validator_index / 256],
+                           shift(as_num256(1), validator_index % 256))
     # Check that we are at least (epoch length / 4) blocks into the epoch
     # assert block.number % self.epoch_length >= self.epoch_length / 4
     # Check that this validator was active in either the previous dynasty or the current one
-    ds = self.validators[validator_index].dynasty_start
-    de = self.validators[validator_index].dynasty_end
-    dc = self.dynasty
-    in_current_dynasty = (ds <= dc) and (dc < de)
-    in_prev_dynasty = (ds <= (dc - 1)) and ((dc - 1) < de)
+    epochcheck = self.check_eligible_in_epoch(validator_index, epoch)
+    in_current_dynasty = epochcheck >= 2
+    in_prev_dynasty = (epochcheck % 2) == 1
     assert in_current_dynasty or in_prev_dynasty
     # Check that the prepare is on top of a justified prepare
     assert self.consensus_messages[source_epoch].ancestry_hash_justified[source_ancestry_hash]
     # Check that we have not yet prepared for this epoch
-    #assert self.validators[validator_index].max_prepared == epoch - 1
-    # Pay the reward if the blockhash is correct
-    if True:  #if blockhash(epoch * self.epoch_length) == hash:
-        reward = floor(self.validators[validator_index].deposit * self.reward_factor)
+    # Pay the reward if the prepare was submitted in time and the blockhash is correct
+    this_validators_deposit = self.validators[validator_index].deposit
+    if self.current_epoch == epoch:  #if blockhash(epoch * self.epoch_length) == hash:
+        reward = floor(this_validators_deposit * self.reward_factor)
         self.validators[validator_index].deposit += reward
         self.total_deposits[self.dynasty] += reward
     # Can't prepare for this epoch again
-    self.validators[validator_index].max_prepared = epoch
+    self.consensus_messages[epoch].prepare_bitmap[sighash][validator_index / 256] = \
+        bitwise_or(self.consensus_messages[epoch].prepare_bitmap[sighash][validator_index / 256],
+                   shift(as_num256(1), validator_index % 256))
+    # self.validators[validator_index].max_prepared = epoch
     # Record that this prepare took place
     new_ancestry_hash = sha3(concat(hash, ancestry_hash))
     if in_current_dynasty:
-        self.consensus_messages[epoch].prepares[sighash] += self.validators[validator_index].deposit
+        self.consensus_messages[epoch].prepares[sighash] += this_validators_deposit
     if in_prev_dynasty:
-        self.consensus_messages[epoch].prev_dyn_prepares[sighash] += self.validators[validator_index].deposit
+        self.consensus_messages[epoch].prev_dyn_prepares[sighash] += this_validators_deposit
     # If enough prepares with the same epoch_source and hash are made,
     # then the hash value is justified for commitment
     if (self.consensus_messages[epoch].prepares[sighash] >= self.total_deposits[self.dynasty] * 2 / 3 and \
@@ -308,17 +368,19 @@ def prepare(validator_index: num, prepare_msg: bytes <= 1024):
         self.consensus_messages[epoch].ancestry_hash_justified[new_ancestry_hash] = True
         self.consensus_messages[epoch].hash_justified[hash] = True
     # Add a parent-child relation between ancestry hashes to the ancestry table
-    self.ancestry[ancestry_hash][new_ancestry_hash] = 1
+    if not self.ancestry[ancestry_hash][new_ancestry_hash]:
+        self.ancestry[ancestry_hash][new_ancestry_hash] = 1
     raw_log([self.prepare_log_topic], prepare_msg)
 
 # Process a commit message
 def commit(validator_index: num, commit_msg: bytes <= 1024):
     sighash = extract32(raw_call(self.sighasher, commit_msg, gas=200000, outsize=32), 0)
     # Extract parameters
-    values = RLPList(commit_msg, [num, bytes32, bytes])
+    values = RLPList(commit_msg, [num, bytes32, num, bytes])
     epoch = values[0]
     hash = values[1]
-    sig = values[2]
+    prev_commit_epoch = values[2]
+    sig = values[3]
     # Check the signature
     assert len(sig) == 96
     assert ecrecover(sighash,
@@ -333,21 +395,21 @@ def commit(validator_index: num, commit_msg: bytes <= 1024):
     # Check that the commit is justified
     assert self.consensus_messages[epoch].hash_justified[hash]
     # Check that this validator was active in either the previous dynasty or the current one
-    ds = self.validators[validator_index].dynasty_start
-    de = self.validators[validator_index].dynasty_end
-    dc = self.dynasty
-    in_current_dynasty = (ds <= dc) and (dc < de)
-    in_prev_dynasty = (ds <= (dc - 1)) and ((dc - 1) < de)
+    epochcheck = self.check_eligible_in_epoch(validator_index, epoch)
+    in_current_dynasty = epochcheck >= 2
+    in_prev_dynasty = (epochcheck % 2) == 1
     assert in_current_dynasty or in_prev_dynasty
     # Check that we have not yet committed for this epoch
-    #assert self.validators[validator_index].max_committed == epoch - 1
+    assert self.validators[validator_index].prev_commit_epoch == prev_commit_epoch
+    assert prev_commit_epoch < epoch
+    self.validators[validator_index].prev_commit_epoch = epoch
     # Pay the reward if the blockhash is correct
     if True:  #if blockhash(epoch * self.epoch_length) == hash:
         reward = floor(self.validators[validator_index].deposit * self.reward_factor)
         self.validators[validator_index].deposit += reward
         self.total_deposits[self.dynasty] += reward
     # Can't commit for this epoch again
-    self.validators[validator_index].max_committed = epoch
+    # self.validators[validator_index].max_committed = epoch
     # Record that this commit took place
     if in_current_dynasty:
         self.consensus_messages[epoch].commits[hash] += self.validators[validator_index].deposit
@@ -391,16 +453,7 @@ def double_prepare_slash(validator_index: num, prepare1: bytes <= 1000, prepare2
     send(msg.sender, validator_deposit / 25)
     self.total_destroyed += validator_deposit * 24 / 25
     self.total_deposits[self.dynasty] -= (validator_deposit - validator_deposit / 25)
-    self.validators[validator_index] = {
-        deposit: 0,
-        dynasty_start: 0,
-        dynasty_end: 0,
-        withdrawal_epoch: 0,
-        addr: None,
-        withdrawal_addr: None,
-        max_prepared: 0,
-        max_committed: 0,
-    }
+    self.delete_validator(validator_index)
 
 def prepare_commit_inconsistency_slash(validator_index: num, prepare_msg: bytes <= 1024, commit_msg: bytes <= 1024):
     # Get hash for signature, and implicitly assert that it is an RLP list
@@ -409,12 +462,12 @@ def prepare_commit_inconsistency_slash(validator_index: num, prepare_msg: bytes 
     sighash2 = extract32(raw_call(self.sighasher, commit_msg, gas=200000, outsize=32), 0)
     # Extract parameters
     values1 = RLPList(prepare_msg, [num, bytes32, bytes32, num, bytes32, bytes])
-    values2 = RLPList(commit_msg, [num, bytes32, bytes])
+    values2 = RLPList(commit_msg, [num, bytes32, num, bytes])
     prepare_epoch = values1[0]
     prepare_source_epoch = values1[3]
     sig1 = values1[5]
     commit_epoch = values2[0]
-    sig2 = values2[2]
+    sig2 = values2[3]
     # Check the signatures
     assert ecrecover(sighash1,
                      as_num256(extract32(sig1, 0)),
@@ -435,24 +488,15 @@ def prepare_commit_inconsistency_slash(validator_index: num, prepare_msg: bytes 
     send(msg.sender, validator_deposit / 25)
     self.total_destroyed += validator_deposit * 24 / 25
     self.total_deposits[self.dynasty] -= validator_deposit
-    self.validators[validator_index] = {
-        deposit: 0,
-        dynasty_start: 0,
-        dynasty_end: 0,
-        withdrawal_epoch: 0,
-        addr: None,
-        withdrawal_addr: None,
-        max_prepared: 0,
-        max_committed: 0,
-    }
+    self.delete_validator(validator_index)
 
 def commit_non_justification_slash(validator_index: num, commit_msg: bytes <= 1024):
     sighash = extract32(raw_call(self.sighasher, commit_msg, gas=200000, outsize=32), 0)
     # Extract parameters
-    values = RLPList(commit_msg, [num, bytes32, bytes])
+    values = RLPList(commit_msg, [num, bytes32, num, bytes])
     epoch = values[0]
     hash = values[1]
-    sig = values[2]
+    sig = values[3]
     # Check the signature
     assert len(sig) == 96
     assert ecrecover(sighash,
@@ -468,16 +512,7 @@ def commit_non_justification_slash(validator_index: num, commit_msg: bytes <= 10
     send(msg.sender, validator_deposit / 25)
     self.total_destroyed += validator_deposit * 24 / 25
     self.total_deposits[self.dynasty] -= validator_deposit
-    self.validators[validator_index] = {
-        deposit: 0,
-        dynasty_start: 0,
-        dynasty_end: 0,
-        withdrawal_epoch: 0,
-        addr: None,
-        withdrawal_addr: None,
-        max_prepared: 0,
-        max_committed: 0,
-    }
+    self.delete_validator(validator_index)
 
 # Fill in the table for which hash is what-degree ancestor of which other hash
 def derive_parenthood(older: bytes32, hash: bytes32, newer: bytes32):
@@ -523,16 +558,7 @@ def prepare_non_justification_slash(validator_index: num, prepare_msg: bytes <= 
     send(msg.sender, validator_deposit / 25)
     self.total_destroyed += validator_deposit * 24 / 25
     self.total_deposits[self.dynasty] -= validator_deposit
-    self.validators[validator_index] = {
-        deposit: 0,
-        dynasty_start: 0,
-        dynasty_end: 0,
-        withdrawal_epoch: 0,
-        addr: None,
-        withdrawal_addr: None,
-        max_prepared: 0,
-        max_committed: 0,
-    }
+    self.delete_validator(validator_index)
 
 # Temporary backdoor for testing purposes (to allow recovering destroyed deposits)
 def owner_withdraw():
