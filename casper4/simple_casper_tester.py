@@ -1,6 +1,7 @@
 from ethereum import tester as t
 from ethereum import utils, state_transition, transactions, abi
 from viper import compiler
+import serpent
 from ethereum.slogging import LogRecorder, configure_logging, set_level
 config_string = ':info,eth.vm.log:trace,eth.vm.op:trace,eth.vm.stack:trace,eth.vm.exit:trace,eth.pb.msg:trace,eth.pb.tx:debug'
 #configure_logging(config_string=config_string)
@@ -18,6 +19,15 @@ def inject_tx(txhex):
     contract_address = utils.mk_contract_address(tx.sender, 0)
     assert s.state.get_code(contract_address)
     return contract_address
+
+code_template = """
+~calldatacopy(0, 0, 128)
+~call(3000, 1, 0, 0, 128, 0, 32)
+return(~mload(0) == %s)
+"""
+
+def mk_validation_code(address):
+    return serpent.compile(code_template % (utils.checksum_encode(address)))
 
 # Install RLP decoder library
 rlp_decoder_address = inject_tx( '0xf90237808506fc23ac00830330888080b902246102128061000e60003961022056600060007f010000000000000000000000000000000000000000000000000000000000000060003504600060c082121515585760f882121561004d5760bf820336141558576001905061006e565b600181013560f783036020035260005160f6830301361415585760f6820390505b5b368112156101c2577f010000000000000000000000000000000000000000000000000000000000000081350483602086026040015260018501945060808112156100d55760018461044001526001828561046001376001820191506021840193506101bc565b60b881121561014357608081038461044001526080810360018301856104600137608181141561012e5760807f010000000000000000000000000000000000000000000000000000000000000060018401350412151558575b607f81038201915060608103840193506101bb565b60c08112156101b857600182013560b782036020035260005160388112157f010000000000000000000000000000000000000000000000000000000000000060018501350402155857808561044001528060b6838501038661046001378060b6830301830192506020810185019450506101ba565bfe5b5b5b5061006f565b601f841315155857602060208502016020810391505b6000821215156101fc578082604001510182826104400301526020820391506101d8565b808401610420528381018161044003f350505050505b6000f31b2d4f')
@@ -37,10 +47,14 @@ ct = abi.ContractTranslator([{'name': 'check(address)', 'type': 'function', 'con
 assert utils.big_endian_to_int(s.send(t.k0, purity_checker_address, 0, ct.encode('submit', [rlp_decoder_address]))) == 1
 assert utils.big_endian_to_int(s.send(t.k0, purity_checker_address, 0, ct.encode('submit', [sighasher_address]))) == 1
 
+k1_valcode_addr = s.send(t.k0, "", 0, mk_validation_code(t.a0))
+assert utils.big_endian_to_int(s.send(t.k0, purity_checker_address, 0, ct.encode('submit', [k1_valcode_addr]))) == 1
+
 # Install Casper
 
-casper_code = open('simple_casper.v.py').read().replace('0x1Db3439a222C519ab44bb1144fC28167b4Fa6EE6', utils.checksum_encode(t.a0)) \
-                                               .replace('0x476c2cA9a7f3B16FeCa86512276271FAf63B6a24', utils.checksum_encode(sighasher_address))
+casper_code = open('simple_casper.v.py').read().replace('0x1Db3439a222C519ab44bb1144fC28167b4Fa6EE6', utils.checksum_encode(k1_valcode_addr)) \
+                                               .replace('0x476c2cA9a7f3B16FeCa86512276271FAf63B6a24', utils.checksum_encode(sighasher_address)) \
+                                               .replace('0xD7a3BD6C9eA32efF147d067f907AE6b22d436F91', utils.checksum_encode(purity_checker_address))
 
 print('Casper code length', len(compiler.compile(casper_code)))
 
@@ -49,15 +63,6 @@ casper = s.abi_contract(casper_code, language='viper', startgas=5555555)
 print('Gas consumed to launch Casper', s.state.receipts[-1].gas_used - s.state.receipts[-2].gas_used)
 
 # Helper functions for making a prepare, commit, login and logout message
-
-code_template = """
-~calldatacopy(0, 0, 128)
-~call(3000, 1, 0, 0, 128, 0, 32)
-return(~mload(0) == %s)
-"""
-
-def mk_validation_code(address):
-    return serpent.compile(code_template % (utils.checksum_encode(address)))
 
 def mk_prepare(epoch, hash, ancestry_hash, source_epoch, source_ancestry_hash, key):
     sighash = utils.sha3(rlp.encode([epoch, hash, ancestry_hash, source_epoch, source_ancestry_hash]))
@@ -209,7 +214,9 @@ assert casper.get_current_epoch() == 1
 assert casper.get_consensus_messages__ancestry_hash_justified(0, b'\x00' * 32)
 print("Epoch 1 initialized")
 for k in (t.k1, t.k2, t.k3, t.k4, t.k5, t.k6):
-    casper.deposit(utils.privtoaddr(k), utils.privtoaddr(k), value=3 * 10**18)
+    valcode_addr = s.send(t.k0, '', 0, mk_validation_code(utils.privtoaddr(k)))
+    assert utils.big_endian_to_int(s.send(t.k0, purity_checker_address, 0, ct.encode('submit', [valcode_addr]))) == 1
+    casper.deposit(valcode_addr, utils.privtoaddr(k), value=3 * 10**18)
 print("Processed 6 deposits")
 casper.prepare(0, mk_prepare(1, b'\x10' * 32, b'\x00' * 32, 0, b'\x00' * 32, t.k0))
 casper.commit(0, mk_commit(1, b'\x10' * 32, 0, t.k0))

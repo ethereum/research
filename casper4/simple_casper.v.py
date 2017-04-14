@@ -92,6 +92,8 @@ total_destroyed: wei_value
 # Sighash calculator library address
 sighasher: address
 
+# Purity checker library address
+purity_checker: address
 
 # Reward for preparing or committing, as fraction of deposit size
 reward_factor: public(decimal)
@@ -136,6 +138,8 @@ def initiate():
     self.current_epoch = block.number / self.epoch_length
     # Set the sighash calculator address
     self.sighasher = 0x476c2cA9a7f3B16FeCa86512276271FAf63B6a24
+    # Set the purity checker address
+    self.purity_checker = 0xD7a3BD6C9eA32efF147d067f907AE6b22d436F91
     # Set an initial root of the epoch hash chain
     self.consensus_messages[0].ancestry_hash_justified[0x0000000000000000000000000000000000000000000000000000000000000000] = True
     # self.consensus_messages[0].committed = True
@@ -182,6 +186,7 @@ def initialize_epoch(epoch: num):
 # Send a deposit to join the validator set
 def deposit(validation_addr: address, withdrawal_addr: address):
     assert self.current_epoch == block.number / self.epoch_length
+    assert extract32(raw_call(self.purity_checker, concat('\xa1\x90>\xab', as_bytes32(validation_addr)), gas=500000, outsize=32), 0) != as_bytes32(0)
     self.validators[self.nextValidatorIndex] = {
         deposit: msg.value,
         dynasty_start: self.dynasty + 2,
@@ -210,11 +215,7 @@ def flick_status(validator_index: num, logout_msg: bytes <= 1024):
     sig = values[2]
     assert self.current_epoch == epoch
     # Signature check
-    assert len(sig) == 96
-    assert ecrecover(sighash,
-                     as_num256(extract32(sig, 0)),
-                     as_num256(extract32(sig, 32)),
-                     as_num256(extract32(sig, 64))) == self.validators[validator_index].addr
+    assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Logging in
     if login_flag:
         # Check that we are logged out
@@ -323,11 +324,7 @@ def prepare(validator_index: num, prepare_msg: bytes <= 1024):
     sig = values[5]
     # For now, the sig is a simple ECDSA sig
     # Check the signature
-    assert len(sig) == 96
-    assert ecrecover(sighash,
-                     extract32(sig, 0, type=num256),
-                     extract32(sig, 32, type=num256),
-                     extract32(sig, 64, type=num256)) == self.validators[validator_index].addr
+    assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Check that we are in an epoch after we started validating
     assert self.current_epoch >= self.dynasty_start_epoch[self.validators[validator_index].dynasty_start]
     # Check that this prepare has not yet been made
@@ -386,11 +383,7 @@ def commit(validator_index: num, commit_msg: bytes <= 1024):
     prev_commit_epoch = values[2]
     sig = values[3]
     # Check the signature
-    assert len(sig) == 96
-    assert ecrecover(sighash,
-                     extract32(sig, 0, type=num256),
-                     extract32(sig, 32, type=num256),
-                     extract32(sig, 64, type=num256)) == self.validators[validator_index].addr
+    assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Check that we are in the right epoch
     assert self.current_epoch == block.number / self.epoch_length
     assert self.current_epoch == epoch
@@ -441,14 +434,8 @@ def double_prepare_slash(validator_index: num, prepare1: bytes <= 1000, prepare2
     epoch2 = values2[0]
     sig2 = values2[5]
     # Check the signatures
-    assert ecrecover(sighash1,
-                     as_num256(extract32(sig1, 0)),
-                     as_num256(extract32(sig1, 32)),
-                     as_num256(extract32(sig1, 64))) == self.validators[validator_index].addr
-    assert ecrecover(sighash2,
-                     as_num256(extract32(sig2, 0)),
-                     as_num256(extract32(sig2, 32)),
-                     as_num256(extract32(sig2, 64))) == self.validators[validator_index].addr
+    assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash1, sig1), gas=500000, outsize=32), 0) == as_bytes32(1)
+    assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash2, sig2), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Check that they're from the same epoch
     assert epoch1 == epoch2
     # Check that they're not the same message
@@ -474,14 +461,8 @@ def prepare_commit_inconsistency_slash(validator_index: num, prepare_msg: bytes 
     commit_epoch = values2[0]
     sig2 = values2[3]
     # Check the signatures
-    assert ecrecover(sighash1,
-                     as_num256(extract32(sig1, 0)),
-                     as_num256(extract32(sig1, 32)),
-                     as_num256(extract32(sig1, 64))) == self.validators[validator_index].addr
-    assert ecrecover(sighash2,
-                     as_num256(extract32(sig2, 0)),
-                     as_num256(extract32(sig2, 32)),
-                     as_num256(extract32(sig2, 64))) == self.validators[validator_index].addr
+    assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash1, sig1), gas=500000, outsize=32), 0) == as_bytes32(1)
+    assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash2, sig2), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Check that they're not the same message
     assert sighash1 != sighash2
     # Check that the prepare refers to something older than the commit
@@ -504,10 +485,7 @@ def commit_non_justification_slash(validator_index: num, commit_msg: bytes <= 10
     sig = values[3]
     # Check the signature
     assert len(sig) == 96
-    assert ecrecover(sighash,
-                     extract32(sig, 0, type=num256),
-                     extract32(sig, 32, type=num256),
-                     extract32(sig, 64, type=num256)) == self.validators[validator_index].addr
+    assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Check that the commit is old enough
     assert self.current_epoch == block.number / self.epoch_length
     assert (self.current_epoch - epoch) * self.epoch_length * self.block_time > self.insufficiency_slash_delay
@@ -543,10 +521,7 @@ def prepare_non_justification_slash(validator_index: num, prepare_msg: bytes <= 
     source_ancestry_hash = values[4]
     sig = values[5]
     # Check the signature
-    assert ecrecover(sighash,
-                     extract32(sig, 0, type=num256),
-                     extract32(sig, 32, type=num256),
-                     extract32(sig, 64, type=num256)) == self.validators[validator_index].addr
+    assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Check that the view change is old enough
     assert self.current_epoch == block.number / self.epoch_length
     assert (self.current_epoch - epoch) * self.block_time * self.epoch_length > self.insufficiency_slash_delay
