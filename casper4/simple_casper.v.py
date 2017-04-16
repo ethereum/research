@@ -203,16 +203,17 @@ def deposit(validation_addr: address, withdrawal_addr: address):
 # Log in or log out from the validator set. A logged out validator can log
 # back in later, if they do not log in for an entire withdrawal period,
 # they can get their money out
-def flick_status(validator_index: num, logout_msg: bytes <= 1024):
+def flick_status(logout_msg: bytes <= 1024):
     assert self.current_epoch == block.number / self.epoch_length
     # Get hash for signature, and implicitly assert that it is an RLP list
     # consisting solely of RLP elements
     sighash = extract32(raw_call(self.sighasher, logout_msg, gas=200000, outsize=32), 0)
     # Extract parameters
-    values = RLPList(logout_msg, [num, bool, bytes])
-    epoch = values[0]
-    login_flag = values[1]
-    sig = values[2]
+    values = RLPList(logout_msg, [num, num, bool, bytes])
+    validator_index = values[0]
+    epoch = values[1]
+    login_flag = values[2]
+    sig = values[3]
     assert self.current_epoch == epoch
     # Signature check
     assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
@@ -310,25 +311,28 @@ def check_eligible_in_epoch(validator_index: num, epoch: num) -> num(const):
     return o
 
 # Process a prepare message
-def prepare(validator_index: num, prepare_msg: bytes <= 1024):
+def prepare(prepare_msg: bytes <= 1024):
     # Get hash for signature, and implicitly assert that it is an RLP list
     # consisting solely of RLP elements
     sighash = extract32(raw_call(self.sighasher, prepare_msg, gas=200000, outsize=32), 0)
     # Extract parameters
-    values = RLPList(prepare_msg, [num, bytes32, bytes32, num, bytes32, bytes])
-    epoch = values[0]
-    hash = values[1]
-    ancestry_hash = values[2]
-    source_epoch = values[3]
-    source_ancestry_hash = values[4]
-    sig = values[5]
-    # For now, the sig is a simple ECDSA sig
+    values = RLPList(prepare_msg, [num, num, bytes32, bytes32, num, bytes32, bytes])
+    validator_index = values[0]
+    epoch = values[1]
+    hash = values[2]
+    ancestry_hash = values[3]
+    source_epoch = values[4]
+    source_ancestry_hash = values[5]
+    sig = values[6]
+    new_ancestry_hash = sha3(concat(hash, ancestry_hash))
+    # Hash for purposes of identifying this (epoch, hash, ancestry_hash, source_epoch, source_ancestry_hash) combination
+    sourcing_hash = sha3(concat(as_bytes32(epoch), hash, ancestry_hash, as_bytes32(source_epoch), source_ancestry_hash))
     # Check the signature
     assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Check that we are in an epoch after we started validating
     assert self.current_epoch >= self.dynasty_start_epoch[self.validators[validator_index].dynasty_start]
     # Check that this prepare has not yet been made
-    assert not bitwise_and(self.consensus_messages[epoch].prepare_bitmap[sighash][validator_index / 256],
+    assert not bitwise_and(self.consensus_messages[epoch].prepare_bitmap[sourcing_hash][validator_index / 256],
                            shift(as_num256(1), validator_index % 256))
     # Check that we are at least (epoch length / 4) blocks into the epoch
     # assert block.number % self.epoch_length >= self.epoch_length / 4
@@ -347,20 +351,19 @@ def prepare(validator_index: num, prepare_msg: bytes <= 1024):
         self.validators[validator_index].deposit += reward
         self.total_deposits[self.dynasty] += reward
     # Can't prepare for this epoch again
-    self.consensus_messages[epoch].prepare_bitmap[sighash][validator_index / 256] = \
-        bitwise_or(self.consensus_messages[epoch].prepare_bitmap[sighash][validator_index / 256],
+    self.consensus_messages[epoch].prepare_bitmap[sourcing_hash][validator_index / 256] = \
+        bitwise_or(self.consensus_messages[epoch].prepare_bitmap[sourcing_hash][validator_index / 256],
                    shift(as_num256(1), validator_index % 256))
     # self.validators[validator_index].max_prepared = epoch
     # Record that this prepare took place
-    new_ancestry_hash = sha3(concat(hash, ancestry_hash))
-    curdyn_prepares = self.consensus_messages[epoch].prepares[sighash]
+    curdyn_prepares = self.consensus_messages[epoch].prepares[sourcing_hash]
     if in_current_dynasty:
         curdyn_prepares += this_validators_deposit
-        self.consensus_messages[epoch].prepares[sighash] = curdyn_prepares
-    prevdyn_prepares = self.consensus_messages[epoch].prev_dyn_prepares[sighash]
+        self.consensus_messages[epoch].prepares[sourcing_hash] = curdyn_prepares
+    prevdyn_prepares = self.consensus_messages[epoch].prev_dyn_prepares[sourcing_hash]
     if in_prev_dynasty:
         prevdyn_prepares += this_validators_deposit
-        self.consensus_messages[epoch].prev_dyn_prepares[sighash] = prevdyn_prepares
+        self.consensus_messages[epoch].prev_dyn_prepares[sourcing_hash] = prevdyn_prepares
     # If enough prepares with the same epoch_source and hash are made,
     # then the hash value is justified for commitment
     if (curdyn_prepares >= self.total_deposits[self.dynasty] * 2 / 3 and \
@@ -374,14 +377,15 @@ def prepare(validator_index: num, prepare_msg: bytes <= 1024):
     raw_log([self.prepare_log_topic], prepare_msg)
 
 # Process a commit message
-def commit(validator_index: num, commit_msg: bytes <= 1024):
+def commit(commit_msg: bytes <= 1024):
     sighash = extract32(raw_call(self.sighasher, commit_msg, gas=200000, outsize=32), 0)
     # Extract parameters
-    values = RLPList(commit_msg, [num, bytes32, num, bytes])
-    epoch = values[0]
-    hash = values[1]
-    prev_commit_epoch = values[2]
-    sig = values[3]
+    values = RLPList(commit_msg, [num, num, bytes32, num, bytes])
+    validator_index = values[0]
+    epoch = values[1]
+    hash = values[2]
+    prev_commit_epoch = values[3]
+    sig = values[4]
     # Check the signature
     assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Check that we are in the right epoch
@@ -421,18 +425,20 @@ def commit(validator_index: num, commit_msg: bytes <= 1024):
     raw_log([self.commit_log_topic], commit_msg)
 
 # Cannot make two prepares in the same epoch
-def double_prepare_slash(validator_index: num, prepare1: bytes <= 1000, prepare2: bytes <= 1000):
+def double_prepare_slash(prepare1: bytes <= 1000, prepare2: bytes <= 1000):
     # Get hash for signature, and implicitly assert that it is an RLP list
     # consisting solely of RLP elements
     sighash1 = extract32(raw_call(self.sighasher, prepare1, gas=200000, outsize=32), 0)
     sighash2 = extract32(raw_call(self.sighasher, prepare2, gas=200000, outsize=32), 0)
     # Extract parameters
-    values1 = RLPList(prepare1, [num, bytes32, bytes32, num, bytes32, bytes])
-    values2 = RLPList(prepare2, [num, bytes32, bytes32, num, bytes32, bytes])
-    epoch1 = values1[0]
-    sig1 = values1[5]
-    epoch2 = values2[0]
-    sig2 = values2[5]
+    values1 = RLPList(prepare1, [num, num, bytes32, bytes32, num, bytes32, bytes])
+    values2 = RLPList(prepare2, [num, num, bytes32, bytes32, num, bytes32, bytes])
+    validator_index = values1[0]
+    epoch1 = values1[1]
+    sig1 = values1[6]
+    assert validator_index == values2[0]
+    epoch2 = values2[1]
+    sig2 = values2[6]
     # Check the signatures
     assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash1, sig1), gas=500000, outsize=32), 0) == as_bytes32(1)
     assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash2, sig2), gas=500000, outsize=32), 0) == as_bytes32(1)
@@ -447,24 +453,24 @@ def double_prepare_slash(validator_index: num, prepare1: bytes <= 1000, prepare2
     self.total_deposits[self.dynasty] -= (validator_deposit - validator_deposit / 25)
     self.delete_validator(validator_index)
 
-def prepare_commit_inconsistency_slash(validator_index: num, prepare_msg: bytes <= 1024, commit_msg: bytes <= 1024):
+def prepare_commit_inconsistency_slash(prepare_msg: bytes <= 1024, commit_msg: bytes <= 1024):
     # Get hash for signature, and implicitly assert that it is an RLP list
     # consisting solely of RLP elements
     sighash1 = extract32(raw_call(self.sighasher, prepare_msg, gas=200000, outsize=32), 0)
     sighash2 = extract32(raw_call(self.sighasher, commit_msg, gas=200000, outsize=32), 0)
     # Extract parameters
-    values1 = RLPList(prepare_msg, [num, bytes32, bytes32, num, bytes32, bytes])
-    values2 = RLPList(commit_msg, [num, bytes32, num, bytes])
-    prepare_epoch = values1[0]
-    prepare_source_epoch = values1[3]
-    sig1 = values1[5]
-    commit_epoch = values2[0]
-    sig2 = values2[3]
+    values1 = RLPList(prepare_msg, [num, num, bytes32, bytes32, num, bytes32, bytes])
+    values2 = RLPList(commit_msg, [num, num, bytes32, num, bytes])
+    validator_index = values1[0]
+    prepare_epoch = values1[1]
+    prepare_source_epoch = values1[4]
+    sig1 = values1[6]
+    assert validator_index == values2[0]
+    commit_epoch = values2[1]
+    sig2 = values2[4]
     # Check the signatures
     assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash1, sig1), gas=500000, outsize=32), 0) == as_bytes32(1)
     assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash2, sig2), gas=500000, outsize=32), 0) == as_bytes32(1)
-    # Check that they're not the same message
-    assert sighash1 != sighash2
     # Check that the prepare refers to something older than the commit
     assert prepare_source_epoch < commit_epoch
     # Check that the prepare is newer than the commit
@@ -476,13 +482,14 @@ def prepare_commit_inconsistency_slash(validator_index: num, prepare_msg: bytes 
     self.total_deposits[self.dynasty] -= validator_deposit
     self.delete_validator(validator_index)
 
-def commit_non_justification_slash(validator_index: num, commit_msg: bytes <= 1024):
+def commit_non_justification_slash(commit_msg: bytes <= 1024):
     sighash = extract32(raw_call(self.sighasher, commit_msg, gas=200000, outsize=32), 0)
     # Extract parameters
-    values = RLPList(commit_msg, [num, bytes32, num, bytes])
-    epoch = values[0]
-    hash = values[1]
-    sig = values[3]
+    values = RLPList(commit_msg, [num, num, bytes32, num, bytes])
+    validator_index = values[0]
+    epoch = values[1]
+    hash = values[2]
+    sig = values[4]
     # Check the signature
     assert len(sig) == 96
     assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
@@ -508,18 +515,19 @@ def derive_ancestry(oldest: bytes32, middle: bytes32, recent: bytes32):
     assert self.ancestry[oldest][middle]
     self.ancestry[oldest][recent] = self.ancestry[oldest][middle] + self.ancestry[middle][recent]
 
-def prepare_non_justification_slash(validator_index: num, prepare_msg: bytes <= 1024) -> num:
+def prepare_non_justification_slash(prepare_msg: bytes <= 1024) -> num:
     # Get hash for signature, and implicitly assert that it is an RLP list
     # consisting solely of RLP elements
     sighash = extract32(raw_call(self.sighasher, prepare_msg, gas=200000, outsize=32), 0)
     # Extract parameters
-    values = RLPList(prepare_msg, [num, bytes32, bytes32, num, bytes32, bytes])
-    epoch = values[0]
-    hash = values[1]
-    ancestry_hash = values[2]
-    source_epoch = values[3]
-    source_ancestry_hash = values[4]
-    sig = values[5]
+    values = RLPList(prepare_msg, [num, num, bytes32, bytes32, num, bytes32, bytes])
+    validator_index = values[0]
+    epoch = values[1]
+    hash = values[2]
+    ancestry_hash = values[3]
+    source_epoch = values[4]
+    source_ancestry_hash = values[5]
+    sig = values[6]
     # Check the signature
     assert extract32(raw_call(self.validators[validator_index].addr, concat(sighash, sig), gas=500000, outsize=32), 0) == as_bytes32(1)
     # Check that the view change is old enough
