@@ -191,7 +191,7 @@ vector<int> lagrange_interp(vector<int> ys, vector<int> xs) {
     return subroot_linear_combination(xs, factors);
 }
 
-const int SIZE = 1024;
+const int SIZE = 4096;
 
 
 int main() {
@@ -214,10 +214,11 @@ int main() {
     cout << "\n";
     cout << eval_poly_at(prod, 189) << " " << gexptable[glogtable[eval_poly_at(xs, 189)] + glogtable[eval_poly_at(ys, 189)]] << "\n";*/
     vector<int> poly = lagrange_interp(ys, xs);
+    vector<int> logpoly = poly_to_logs(poly);
     cout << eval_poly_at(poly, 1700) << "\n";
     unsigned int o = 0;
     for (int i = SIZE; i < SIZE * 2; i++) {
-        o += eval_poly_at(poly, i);
+        o += eval_log_poly_at(logpoly, i);
     }
     cout << o << "\n";
     //cout << eval_poly_at(poly, 0) << " " << ys[0] << "\n";
