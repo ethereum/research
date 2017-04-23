@@ -1,12 +1,12 @@
 import random
 import datetime
 
-diffs = [257.74 * 10**12]
-hashpower = diffs[0] / 14.7
-times = [1491920186]
+diffs = [286.86 * 10**12]
+hashpower = diffs[0] / 15.0
+times = [1492650109]
 
 
-for i in range(3517029, 6010000):
+for i in range(3566076, 6010000):
     blocktime = random.expovariate(hashpower / diffs[-1])
     adjfac = max(1 - int(blocktime / 10), -99) / 2048.
     newdiff = diffs[-1] * (1 + adjfac)

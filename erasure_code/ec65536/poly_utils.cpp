@@ -36,19 +36,21 @@ int eval_poly_at(vector<int> poly, int x) {
 }
 
 vector<int> lagrange_interp(vector<int> ys, vector<int> xs) {
-    deque<int> root;
-    root.push_back(1);
-    for (int i = 0; i < xs.size(); i++) {
+    int xs_size = xs.size();
+    vector<int> root(xs_size + 1);
+    root[xs_size] = 1;
+    for (int i = 0; i < xs_size; i++) {
         int logx = glogtable[xs[i]];
-        root.push_front(0);
-        for (int j = 0; j < root.size() - 1; j++) {
-            if (root[j + 1] and xs[i])
-                root[j] ^= gexptable[glogtable[root[j+1]] + logx];
+        int offset = xs_size - i - 1;
+        root[offset] = 0;
+        for (int j = 0; j < i + 1; j++) {
+            if (root[j + 1 + offset] and xs[i])
+                root[j + offset] ^= gexptable[glogtable[root[j+1 + offset]] + logx];
         }
     }
-    vector<vector<int> > nums;
-    for (int i = 0; i < xs.size(); i++) {
-        vector<int> output(root.size() - 1);
+    vector<int> b(xs_size);
+    vector<int> output(root.size() - 1);
+    for (int i = 0; i < xs_size; i++) {
         output[root.size() - 2] = 1;
         int logx = glogtable[xs[i]];
         for (int j = root.size() - 2; j > 0; j--) { 
@@ -57,18 +59,11 @@ vector<int> lagrange_interp(vector<int> ys, vector<int> xs) {
             else
                 output[j - 1] = root[j];
         }
-        nums.push_back(output);
-    }
-    vector<int> denoms;
-    for (int i = 0; i < xs.size(); i++) {
-        denoms.push_back(eval_poly_at(nums[i], xs[i]));
-    }
-    vector<int> b(xs.size());
-    for (int i = 0; i < xs.size(); i++) {
-        int log_yslice = glogtable[ys[i]] - glogtable[denoms[i]] + 65535;
-        for (int j = 0; j < xs.size(); j++) {
-            if(nums[i][j] and ys[i])
-                b[j] ^= gexptable[glogtable[nums[i][j]] + log_yslice];
+        int denom = eval_poly_at(output, xs[i]);
+        int log_yslice = glogtable[ys[i]] - glogtable[denom] + 65535;
+        for (int j = 0; j < xs_size; j++) {
+            if(output[j] and ys[i])
+                b[j] ^= gexptable[glogtable[output[j]] + log_yslice];
         }
     }
     return b;

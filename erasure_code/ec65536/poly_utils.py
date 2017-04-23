@@ -70,8 +70,9 @@ def lagrange_interp(pieces, xs):
         for j in range(len(root)-1):
             if root[j+1] and x:
                 root[j] ^= gexptable[glogtable[root[j+1]] + logx]
+    #print(root)
     assert len(root) == len(pieces) + 1
-    print(root)
+    # print(root)
     # Generate per-value numerator polynomials, eg. for x=x2,
     # (x - x1) * (x - x3) * ... * (x - xn), by dividing the master
     # polynomial back by each x coordinate
@@ -86,7 +87,7 @@ def lagrange_interp(pieces, xs):
                 output[j-1] = root[j]
         assert len(output) == len(pieces)
         nums.append(output)
-    print(nums)
+    #print(nums)
     # Generate denominators by evaluating numerator polys at each x
     denoms = [eval_poly_at(nums[i], xs[i]) for i in range(len(xs))]
     # Generate output polynomial, which is the sum of the per-value numerator
