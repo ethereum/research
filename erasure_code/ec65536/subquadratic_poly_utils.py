@@ -74,7 +74,10 @@ def lagrange_interp(pieces, xs):
     # denoms = [eval_poly_at(d, xs[i]) for i in range(len(xs))]
     # Generate output polynomial, which is the sum of the per-value numerator
     # polynomials rescaled to have the right y values
-    return multi_root_derive(xs, [galois_div(p, d) for p, d in zip(pieces, denoms)])
+    factors = [galois_div(p, d) for p, d in zip(pieces, denoms)]
+    o = multi_root_derive(xs, factors)
+    print(o)
+    return o
 
 def multi_root_derive(xs, muls):
     if len(xs) == 1:
