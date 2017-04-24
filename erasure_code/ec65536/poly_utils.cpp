@@ -159,10 +159,10 @@ vector<int> subroot_linear_combination(vector<int> xs, vector<int> factors) {
 }
 
 
-vector<int> derivative(vector<int> p) {
-    vector<int> o(p.size() - 1);
-    for (int i = 0; i < o.size(); i+= 2) {
-        o[i] = p[i + 1];
+vector<int> derivative_and_square_base(vector<int> p) {
+    vector<int> o((p.size() - 1) / 2);
+    for (int i = 0; i < o.size(); i+= 1) {
+        o[i] = p[i * 2 + 1];
     }
     return o;
 }
@@ -181,10 +181,11 @@ vector<int> poly_to_logs(vector<int> p) {
 vector<int> lagrange_interp(vector<int> ys, vector<int> xs) {
     int xs_size = xs.size();
     vector<int> root = mk_root(xs);
-    vector<int> log_rootprime = poly_to_logs(derivative(root));
+    vector<int> log_rootprime = poly_to_logs(derivative_and_square_base(root));
     vector<int> factors(xs_size);
     for (int i = 0; i < xs_size; i++) {
-        int denom = eval_log_poly_at(log_rootprime, xs[i]);
+        int x_square = xs[i] ? gexptable[glogtable[xs[i]] * 2] : 0;
+        int denom = eval_log_poly_at(log_rootprime, x_square);
         if (ys[i])
             factors[i] = gexptable[glogtable[ys[i]] + 65535 - glogtable[denom]];
     }
