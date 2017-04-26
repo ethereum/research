@@ -5,19 +5,21 @@ if msg.sender == 2**160 - 2:
         ~sstore(prev_block_number % 256, ~calldataload(0))
         # Use storage fields 256..511 to store the hashes of the last 256
         # blocks with block.number % 256 == 0
-        if not prev_block_number % 256:
+        if not (prev_block_number % 256):
             ~sstore(256 + (prev_block_number / 256) % 256, ~calldataload(0))
         # Use storage fields 512..767 to store the hashes of the last 256
         # blocks with block.number % 65536 == 0
-        if not prev_block_number % 65536:
+        if not (prev_block_number % 65536):
             ~sstore(512 + (prev_block_number / 65536) % 256, ~calldataload(0))
 # Getting the block hash
 else:
-    if block.number - ~calldataload(0) <= 256:
+    if ~calldataload(0) >= block.number:
+        return(0)
+    elif block.number - ~calldataload(0) <= 256:
         return(~sload(~calldataload(0) % 256))
-    elif not block.number % 256 and block.number - ~calldataload(0) <= 65536:
+    elif (not (~calldataload(0) % 256) and block.number - ~calldataload(0) <= 65536):
         return(~sload(256 + (~calldataload(0) / 256) % 256))
-    elif not block.number % 65536 and block.number - ~calldataload(0) <= 16777216:
+    elif (not (~calldataload(0) % 65536) and block.number - ~calldataload(0) <= 16777216):
         return(~sload(512 + (~calldataload(0) / 65536) % 256))
     else:
-        ~invalid()
+        return(~calldataload(0) % 256 == 0)
