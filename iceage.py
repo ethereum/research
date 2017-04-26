@@ -1,9 +1,9 @@
 import random
 import datetime
 
-diffs = [286.86 * 10**12]
-hashpower = diffs[0] / 15.0
-times = [1492650109]
+diffs = [298.04 * 10**12]
+hashpower = diffs[0] / 14.6
+times = [1493155305]
 
 
 for i in range(3566076, 6010000):

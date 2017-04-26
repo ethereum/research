@@ -71,12 +71,13 @@ def lagrange_interp(pieces, xs):
     d = derivative(root)
     # Generate denominators by evaluating numerator polys at each x
     denoms = multi_eval_2(d, xs)
+    print(denoms)
     # denoms = [eval_poly_at(d, xs[i]) for i in range(len(xs))]
     # Generate output polynomial, which is the sum of the per-value numerator
     # polynomials rescaled to have the right y values
     factors = [galois_div(p, d) for p, d in zip(pieces, denoms)]
     o = multi_root_derive(xs, factors)
-    print(o)
+    # print(o)
     return o
 
 def multi_root_derive(xs, muls):
@@ -171,6 +172,7 @@ def xn_mod_poly(p):
     med_plus_high = [x ^ y for x, y in zip(med, submod_high)]
     highinv = karatsuba_mul(med_plus_high, lowinv)
     o = (lowinv + highinv)[:len(p)]
+    print(halflen, lowinv, submod_high, med, highinv)
     # assert karatsuba_mul(o, p)[:len(p)] == [1] + [0] * (len(p) - 1)
     return o
 

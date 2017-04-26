@@ -181,18 +181,108 @@ vector<int> poly_to_logs(vector<int> p) {
     return o;
 }
 
+vector<int> xn_mod_poly(vector<int> inp) {
+    if (inp.size() == 1) {
+        vector<int> o(1);
+        o[0] = gexptable[65535 - glogtable[inp[0]]];
+        return o;
+    }
+    int halflen = inp.size() / 2;
+    int highlen = inp.size() - (inp.size() / 2);
+    vector<int> low(inp.begin(), inp.begin() + halflen);
+    vector<int> high(inp.begin() + halflen, inp.end());
+    vector<int> lowinv = xn_mod_poly(low);
+    vector<int> submod = karatsuba_mul(lowinv, low);
+    vector<int> submod_high(submod.begin() + halflen, submod.end());
+    lowinv.resize(highlen);
+    vector<int> med = karatsuba_mul(high, lowinv);
+    vector<int> med_plus_high(halflen);
+    for (int i = 0; i < halflen; i++) {
+        med_plus_high[i] = med[i] ^ submod_high[i];
+    }
+    vector<int> highinv = karatsuba_mul(med_plus_high, lowinv);
+    vector<int> o(inp.size());
+    for (int i = 0; i < halflen; i++) {
+        o[i] = lowinv[i];
+        o[i + halflen] = highinv[i];
+    }
+    return o;
+}
+
+vector<int> reverse(vector<int> inp) {
+    vector<int> o(inp.size());
+    for (int i = 0; i < inp.size(); i++) {
+        o[inp.size() - 1 - i] = inp[i];
+    }
+    return o;
+}
+
+vector<int> mod(vector<int> a, vector<int> b) {
+    int L = b.size();
+    vector<int> rev_b = reverse(b);
+    rev_b.resize((L - 1) * 2);
+    vector<int> inv_rev_b = xn_mod_poly(reverse(b));
+    inv_rev_b.resize(L);
+    vector<int> rev_a = reverse(a);
+    rev_a.resize(L);
+    vector<int> rev_quotient = karatsuba_mul(inv_rev_b, rev_a);
+    rev_quotient.resize(L - 1);
+    vector<int> quotient = reverse(rev_quotient);
+    quotient.resize(L);
+    vector<int> diff = karatsuba_mul(b, quotient);
+    vector<int> o(L-1);
+    for (int i = 0; i < L-1; i++) {
+        o[i] = a[i] ^ diff[i];
+    }
+    return o;
+}
+
+vector<int> multi_eval(vector<int> poly, vector<int> xs) {
+    int L = xs.size();
+    if (L <= 1024) {
+        vector<int> o(L);
+        vector<int> logz = poly_to_logs(poly);
+        for (int i = 0; i < L; i++) {
+            o[i] = eval_log_poly_at(logz, xs[i]);
+        }
+        return o;
+    }
+    int halflen = L / 2;
+    vector<int> left(xs.begin(), xs.begin() + halflen);
+    vector<int> right(xs.begin() + halflen, xs.end());
+    vector<int> o1;
+    vector<int> o2;
+    if (poly.size() < xs.size()) {
+        o1 = multi_eval(poly, left);
+        o2 = multi_eval(poly, right);
+    }
+    else {
+        o1 = multi_eval(mod(poly, mk_root(left)), left);
+        o2 = multi_eval(mod(poly, mk_root(right)), right);
+    }
+    o1.resize(L);
+    for (int i = 0; i < halflen; i++) {
+        o1[halflen + i] = o2[i];
+    }
+    return o1;
+}
+
 vector<int> lagrange_interp(vector<int> ys, vector<int> xs) {
     int xs_size = xs.size();
     vector<int> root = mk_root(xs);
-    vector<int> log_rootprime = poly_to_logs(derivative_and_square_base(root));
+    vector<int> rootprime = derivative_and_square_base(root);
+    vector<int> xsquares(xs_size);
+    for (int i = 0; i < xs_size; i++)
+        xsquares[i] = xs[i] ? gexptable[glogtable[xs[i]] * 2] : 0;
+    vector<int> denoms = multi_eval(rootprime, xsquares);
     vector<int> factors(xs_size);
     for (int i = 0; i < xs_size; i++) {
-        int x_square = xs[i] ? gexptable[glogtable[xs[i]] * 2] : 0;
-        int denom = eval_log_poly_at(log_rootprime, x_square);
         if (ys[i])
-            factors[i] = gexptable[glogtable[ys[i]] + 65535 - glogtable[denom]];
+            factors[i] = gexptable[glogtable[ys[i]] + 65535 - glogtable[denoms[i]]];
     }
-    return subroot_linear_combination(xs, factors);
+    vector<int> o = subroot_linear_combination(xs, factors);
+    o.resize(xs_size);
+    return o;
 }
 
 const int SIZE = 4096;
@@ -200,8 +290,18 @@ const int SIZE = 4096;
 
 int main() {
     initialize_tables();
-    //int myxs[] = {1, 2, 3, 4};
-    //std::vector<int> xs (myxs, myxs + sizeof(myxs) / sizeof(int) );
+    /*int myxs[] = {1, 2, 3, 4, 5};
+    std::vector<int> test (myxs, myxs + sizeof(myxs) / sizeof(int) );
+    int myxs2[] = {6, 7, 8, 9, 10, 11, 12, 13};
+    std::vector<int> test2 (myxs2, myxs2 + sizeof(myxs2) / sizeof(int) );*/
+    /*std::vector<int> test(257);
+    for (int i = 0; i < 257; i++) test[i] = i;
+    std::vector<int> test2(512);
+    for (int i = 0; i < 512; i++) test2[i] = 1000 + i;
+    vector<int> moose = mod(test2, test);
+    for (int i = 0; i < 256; i++) cout << moose[i] << " ";
+    cout << "\n";*/
+
     vector<int> xs(SIZE);
     vector<int> ys(SIZE);
     for (int v = 0; v < SIZE; v++) {
@@ -220,11 +320,13 @@ int main() {
     for (int a = 0; a < 10; a++) {
         ys[0] = a;
         vector<int> poly = lagrange_interp(ys, xs);
-        vector<int> logpoly = poly_to_logs(poly);
+        vector<int> new_xs(SIZE);
+        for (int i = 0; i < SIZE; i++) new_xs[i] = SIZE + i;
+        vector<int> results = multi_eval(poly, new_xs);
         cout << eval_poly_at(poly, 1700) << "\n";
         unsigned int o = 0;
-        for (int i = SIZE; i < SIZE * 2; i++) {
-            o += eval_log_poly_at(logpoly, i);
+        for (int i = 0; i < SIZE; i++) {
+            o += results[i];
         }
         cout << o << "\n";
     }
