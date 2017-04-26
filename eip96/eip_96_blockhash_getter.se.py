@@ -22,4 +22,4 @@ else:
     elif (not (~calldataload(0) % 65536) and block.number - ~calldataload(0) <= 16777216):
         return(~sload(512 + (~calldataload(0) / 65536) % 256))
     else:
-        return(~calldataload(0) % 256 == 0)
+        return(0)
