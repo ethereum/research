@@ -1,6 +1,6 @@
-from optimized_curve import double, add, multiply, is_on_curve, neg, twist, b, b2, b12, curve_order, G1, G2, G12, normalize
-from bn128_field_elements import field_modulus, FQ
-from optimized_field_elements import FQ2, FQ12
+from .optimized_curve import double, add, multiply, is_on_curve, neg, twist, b, b2, b12, curve_order, G1, G2, G12, normalize
+from .bn128_field_elements import field_modulus, FQ
+from .optimized_field_elements import FQ2, FQ12
 
 ate_loop_count = 29793968203157093288
 log_ate_loop_count = 63
