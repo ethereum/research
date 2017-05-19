@@ -2,10 +2,10 @@ from ethereum import utils
 
 def mk_forwarder(address):
     code = b'\x36\x60\x00\x60\x00\x37' # CALLDATACOPY 0 0 (CALLDATASIZE)
-    code += b'\x61\x20\x00\x60\x00\x36\x60\x00' # 8192 0 CALLDATASIZE 0
+    code += b'\x61\x10\x00\x60\x00\x36\x60\x00' # 4096 0 CALLDATASIZE 0
     code += b'\x73' + utils.normalize_address(address) + b'\x5a' # address gas
     code += b'\xf4' # delegatecall
-    code += b'\x61\x20\x00\x60\x00\xf3' # 8192 0 RETURN
+    code += b'\x61\x10\x00\x60\x00\xf3' # 4096 0 RETURN
     return code
 
 def mk_wrapper(code):
