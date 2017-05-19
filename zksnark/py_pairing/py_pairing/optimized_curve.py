@@ -24,7 +24,7 @@ G2 = (FQ2([108570469990230571359445707622328294813707563595785180869905199932856
 
 # Check that a point is on the curve defined by y**2 == x**3 + b
 def is_on_curve(pt, b):
-    if pt is None:
+    if pt[-1] == pt[-1].__class__.zero():
         return True
     x, y, z = pt
     return y**2 * z - x**3 == b * z**3
@@ -49,7 +49,7 @@ def double(pt):
 def add(p1, p2):
     one, zero = p1[0].__class__.one(), p1[0].__class__.zero()
     if p1[2] == zero or p2[2] == zero:
-        return p1 if zero else p2
+        return p1 if p2[2] == zero else p2
     x1, y1, z1 = p1
     x2, y2, z2 = p2
     U1 = y2 * z1
@@ -75,7 +75,7 @@ def add(p1, p2):
 # Elliptic curve point multiplication
 def multiply(pt, n):
     if n == 0:
-        return None
+        return (pt[0].__class__.one(), pt[0].__class__.one(), pt[0].__class__.zero())
     elif n == 1:
         return pt
     elif not n % 2:

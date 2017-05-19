@@ -64,7 +64,7 @@ assert linefunc(one, one, two)[0] != FQ(0)
 assert linefunc(one, one, negtwo)[0] == FQ(0)
 
 # Main miller loop
-def miller_loop(Q, P):
+def miller_loop(Q, P, final_exponentiate=True):
     if Q is None or P is None:
         return FQ12.one()
     R = Q
@@ -97,10 +97,18 @@ def miller_loop(Q, P):
     _n2, _d2 = linefunc(R, nQ2, P)
     f = f_num * _n1 * _n2 / (f_den * _d1 * _d2)
     # R = add(R, nQ2) This line is in many specifications but it technically does nothing
-    return f ** ((field_modulus ** 12 - 1) // curve_order)
+    if final_exponentiate:
+        return f ** ((field_modulus ** 12 - 1) // curve_order)
+    else:
+        return f
 
 # Pairing computation
-def pairing(Q, P):
+def pairing(Q, P, final_exponentiate=True):
     assert is_on_curve(Q, b2)
     assert is_on_curve(P, b)
-    return miller_loop(twist(Q), cast_point_to_fq12(P))
+    if P[-1] == P[-1].__class__.zero() or Q[-1] == Q[-1].__class__.zero():
+        return FQ12.one()
+    return miller_loop(twist(Q), cast_point_to_fq12(P), final_exponentiate=final_exponentiate)
+
+def final_exponentiate(p):
+    return p ** ((field_modulus ** 12 - 1) // curve_order)
