@@ -41,9 +41,11 @@ def test_strat(strat, hashpower, gamma, reward, fees, uncle_rewards=1, uncle_coe
         if me_blocks >= len(strat) or them_blocks >= len(strat[me_blocks]) or strat[me_blocks][them_blocks] == 1:
             # Override
             if me_blocks > them_blocks or (me_blocks == them_blocks and random.random() < gamma):
-                me_reward += me_blocks * reward - (reward if me_blocks and them_blocks else 0)
+                # me_reward += me_blocks * reward - (reward if me_blocks and them_blocks else 0)
+                me_reward += me_blocks * reward
                 me_fees += time_elapsed * fees
-                divisor += me_blocks - (1 if me_blocks and them_blocks else 0)
+                # divisor += me_blocks - (1 if me_blocks and them_blocks else 0)
+                divisor += me_blocks
                 me_totblocks += me_blocks
                 # Add uncles
                 while me_blocks < 7 and them_blocks > 0:
@@ -55,9 +57,11 @@ def test_strat(strat, hashpower, gamma, reward, fees, uncle_rewards=1, uncle_coe
                     me_blocks += 1
             # Adopt
             else:
-                them_reward += them_blocks * reward - (reward if me_blocks and them_blocks else 0)
+                # them_reward += them_blocks * reward - (reward if me_blocks and them_blocks else 0)
+                them_reward += them_blocks * reward
                 them_fees += time_elapsed * fees
-                divisor += them_blocks - (1 if me_blocks and them_blocks else 0)
+                # divisor += them_blocks - (1 if me_blocks and them_blocks else 0)
+                divisor += them_blocks
                 them_totblocks += them_blocks
                 # Add uncles
                 while them_blocks < 7 and me_blocks > 0:
@@ -73,9 +77,11 @@ def test_strat(strat, hashpower, gamma, reward, fees, uncle_rewards=1, uncle_coe
         # Match
         elif strat[me_blocks][them_blocks] == 2 and not last_is_me:
             if random.random() < gamma:
-                me_reward += me_blocks * reward + time_elapsed * fees - (reward if me_blocks and them_blocks else 0)
+                # me_reward += me_blocks * reward + time_elapsed * fees - (reward if me_blocks and them_blocks else 0)
+                me_reward += me_blocks * reward
                 me_totblocks += me_blocks
-                divisor += me_blocks - (1 if me_blocks and them_blocks else 0)
+                # divisor += me_blocks - (1 if me_blocks and them_blocks else 0)
+                divisor += me_blocks
                 time_elapsed = 0
                 # Add uncles
                 while me_blocks < 7 and them_blocks > 0:
