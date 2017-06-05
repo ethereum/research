@@ -1,7 +1,7 @@
 data = [[float(y) for y in x.strip().split(', ')] for x in open('block_datadump.csv').readlines()]
 
 for i in range(0, 2283416, 200000):
-    print 'Checking 200k blocks from %d' % i
+    print('Checking 200k blocks from %d' % i)
     dataset = []
     for j in range(i, min(i + 200000, 2283400), 100):
         gas = 0
@@ -35,8 +35,8 @@ for i in range(0, 2283416, 200000):
     var2 = sum([(x[2] - mean_x2) ** 2 for x in dataset])
     covar3 = sum([(x[3] - mean_x2) * (x[-1] - mean_y2) for x in dataset])
     var3 = sum([(x[3] - mean_x2) ** 2 for x in dataset])
-    print 'Base m =', covar / var
-    print 'Base b =', mean_y - mean_x * (covar / var)
-    print 'Excess m for txs=', covar1 / var1
-    print 'Excess m for nonzero bytes=', covar2 / var2
-    print 'Excess m for zero bytes=', covar3 / var3
+    print('Base m =', covar / var)
+    print('Base b =', mean_y - mean_x * (covar / var))
+    print('Excess m for txs=', covar1 / var1)
+    print('Excess m for nonzero bytes=', covar2 / var2)
+    print('Excess m for zero bytes=', covar3 / var3)

@@ -106,7 +106,11 @@ The commit-following part of this rule can be viewed in some ways as mirroring t
 
 ### Adding Dynamic Validator Sets
 
-The above assumes that there is a single set of validators that never changes. In reality, however, we want validators to be able to join and leave.
+The above assumes that there is a single set of validators that never changes. In reality, however, we want validators to be able to join and leave. This introduces two classes of considerations. First, all of the above math assumes that the validator set that prepares and commits any two given checkpoints is identical. If this is not the case, then there may be situations where two conflicting checkpoints get finalized, but no one can be slashed because they were finalized by two completely different validator sets. Hence, we need to think carefully about how validator set transitions happen and how one validator set "passes the baton" to the next.
+
+<copy text here>
+
+Second, we need to establish what is the specific mechanism by which validators can join and leave. We start off with a simple one: validators apply to join the validator set by sending a transaction containing (i) the ETH they want to deposit, (ii) the "validation code" (a kind of generalized public key), and (iii) the return address that their deposit will be sent to when they withdraw. If this transaction gets included during dynasty N, then they become part of dynasty N + 2, as well as all future dynasties until they decide to log off. The two-dynasty delay ensures that the joining transaction will be confirmed by the time dynasty N + 1 begins, and so any candidate blocks that initiates dynasty N + 2 is guaranteed to have the same validator set for dynasty N + 2. Leaving the validator set is symmetrical: validators can send a transcation to log off in dynasty N, which takes effect in dynasty N + 2.
 
 ### Economic Fundamentals
 
