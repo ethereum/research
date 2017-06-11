@@ -332,7 +332,7 @@ This can be resolved by strengthening the synchrony assumption. If the node is c
 Here are the results for the formulas above; note that the delay until finality can easily be scaled proportionately by any value.
 
 ![](http://vitalik.ca/files/diag1.png)
-![](http://vitalik.ca/files/diag2.png)
+![](http://vitalik.ca/files/diag2.png?1)
 
 Now, let us consider the attacks where the censoring coalition is >= 1/2. Then, minority validators will refuse to build on chains that are censoring them, and so they will coordinate on their own chain. The result will be exactly the same as the result above: a majority chain and a minority chain, where under the rules of the protocol the majority chain will be able to finalize first, and where on the majority chain the victims will lose money faster than the attackers and so the attackers will be even stronger.
 
