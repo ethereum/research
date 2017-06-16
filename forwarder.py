@@ -26,7 +26,7 @@ def increment_moose(i: num) -> num:
 def test():
     from ethereum.tools import tester2
     c = tester2.Chain()
-    x = c.contract(kode, language='viper')
+    x = c.contract(kode, language='viper', sender=tester2.k3)
     fwdcode = mk_forwarder(x.address)
     initcode = mk_wrapper(fwdcode)
     y = c.contract(initcode, language='evm')
