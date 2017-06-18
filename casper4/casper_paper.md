@@ -145,24 +145,22 @@ The fault-tolerance-theoretic assumptions made so far simply assume that more th
 
 ### Protocol utility function
  
-We will start off by specifying a "protocol utility function", a function which can be computed on any chain and which outputs a value that represents the "quality" of the chain. A unit decrease in protocol utility should be understood to represent a unit decrease in user satisfaction; our main objective is to maximize expected protocol utility.
+We will start off by specifying a "protocol utility function", a function which can be computed on any chain and which outputs a value that represents the "quality" of the chain. A unit decrease in protocol utility should be understood to represent a unit decrease in user satisfaction; our main objective when designing the incentive mechanism is to align incentives to maximize expected protocol utility. The utility function has no role in the actual protocol; it is simply a philosophical tool that we can use to evaluate how "good" a particular protocol execution is.
 
 We define protocol utility as follows:
 
-    sum_{block i = 1 ... n} -ln(i - LFE(i)) + c - M * SF_
+    sum_{epoch i = 1 ... n} -ln(i - LFE(i)) + c[i] - M * SF[i]
 
 Where:
 
 * LFE(i) refers to the last epoch in the chain before block i that was finalized (in an optimally running chain, this is always i-1)
-* SF = 1 if a safety failure was detected in the most recent epoch, as defined by 1/3 of validators getting slashed, otherwise 0
-* c is the portion of commits in the current epoch
+* SF[i] = 1 if a safety failure was detected in epoch i, as defined by 1/3 of validators getting slashed, otherwise 0
+* c[i] is the portion of commits in epoch i
 * M is a (very large) constant
 
 Note that there is no single principled way to say what the protocol utility is; this is a question that ultimately rests on the values of the users of the system. However, we can defend the reasoning behind each component in the above formula.
 
 The -M * SF term is self-explanatory; safety failures are very bad, as it means that events that appear to have been finalized, and that users may be relying on being finalized, suddenly become unfinalized. The -ln(i - LFE(i)) term is more complicated. What is it saying is that the amount of pain that users feel from having to wait `k` epochs for their transaction to be finalized is logarithmic in `k`. This can be justified inuitively: the difference between finality in 1 minute and 2 minutes feels similar in size to the difference between 1 hour and 2 hours. The separate `c` term is there to show that even if a given epoch does not finalize, commits can still provide value, as a smaller number of commits on a given block can still make it harder to finalize competing blocks.
-
-The purpose of this function is to motivate the incentive structure, and show how large losses in protocol utility lead to proportionately large penalties for the perpetrator.
 
 ### Incentives
 
@@ -334,6 +332,8 @@ Here are the results for the formulas above; note that the delay until finality 
 ![](http://vitalik.ca/files/diag1.png)
 ![](http://vitalik.ca/files/diag2.png?1)
 
+### Recovering from Majority Censorship Attacks
+
 Now, let us consider the attacks where the censoring coalition is >= 1/2. Then, minority validators will refuse to build on chains that are censoring them, and so they will coordinate on their own chain. The result will be exactly the same as the result above: a majority chain and a minority chain, where under the rules of the protocol the majority chain will be able to finalize first, and where on the majority chain the victims will lose money faster than the attackers and so the attackers will be even stronger.
 
 The asymmetry can be broken because users can manually implement a "user activated soft fork" where they refuse to accept the majority (attacking) chain, and so they can simply wait until the minority chain sheds deposits to the point where a checkpoint can be finalized by the non-colluding nodes. This coordination can be partially automated, as online nodes will be able to detect censorship, but it's impossible to make the automation perfect (as a perfect solution would violate impossibility results in distributed consensus); hence, a preferred solution is for nodes to give an alert if they believe the majority chain is attacking, and give the user an option of whether to continue with the majority chain or fork to the minority chain.
@@ -352,7 +352,15 @@ Finality reversion is impossible outright for miners to carry out, as finality i
 
 If worse comes to worst, equivocation can be dealt with manually by having validators come together over an out-of-band communication channel to coordinate on finalizing checkpoints until a hard fork to replace the proof of work can be conducted. However, there is also another more automatable approach: validators can start ignoring checkpoints unless their proof of work meets a higher difficulty threshold. Suppose that malicious miners have an n:1 advantage against honest miners, and malicious miners need to create c competing checkpoints to reliably prevent convergence (say, c = 3, as if c = 2 then one of the two may easily get two thirds prepares by random chance). This will eventually lead to the situation where the malicious miners will attempt to create c admissible checkpoints and publish them simultaneously, and ~1 - c/n of the time they will succeed, but the other c/n of the time an honest miner will create a single checkpoint first, and the consensus will move forward. 
 
-Censorship can be dealt with by having validators refuse to prepare checkpoints that do not include values that they believe should have been prepared.
+### Selective Censorship Attacks
+
+Another kind of attack is that where either (i) >=1/3 of validators or (ii) >=1/2 of miners _selectively censor_; for example, they might fully cooperate within the consensus protocol but refuse to include transactions that match some blacklist. This can be dealt with by giving validators and users a _subjective fork choice rule_: they assign lower scores to blocks that appear to be not including transactions that should be included, and if censorship looks unambiguous they simply reject such blocks entirely.
+
+This then degrades into a few cases:
+
+1. >=1/2 of miners selectively censor; >=2/3 of validators do not participate. Then, the validators will simply coordinate on finalizing the longest non-censoring chain.
+2. >=1/3 of validators only sign chains that are selectively censoring. Then, from the point of view of non-participating validators, those validators are offline, and so this situation collapses into the liveness attack described in a previous section.
+3. Validators wrongly believe that censorship is taking place, because a network synchrony assumption is violated. In this case, some validators end up refusing to prepare or commit checkpoints that they would otherwise be preparing or committing, and so fewer or no blocks finalize until the network synchrony assumption once again takes hold.
 
 ### Discouragement Attacks
 
