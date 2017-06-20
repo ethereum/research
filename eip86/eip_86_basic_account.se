@@ -1,0 +1,28 @@
+# Expects input 224+x bytes: v, r, s, nonce, gasprice, to, value, data
+with zero = ~mload(0):
+    # Anti re-entrancy
+    ~jumpi(~pc(), msg.sender != ~sub(zero, 1))
+    # Copy calldata
+    ~calldatacopy(32, zero, ~calldatasize())
+    # Compute sighash
+    ~mstore(zero, ~sha3(32, 32 + ~calldatasize()))
+    # Do elliptic curve verification
+    ~call(3000, 1, zero, zero, 128, zero, 32)
+    # Memory: hash, v, r, s, nonce, gasprice, to, value, data
+    # Check sig is correct
+    ~jumpi(~pc(), ~mload(zero) != 0xfe2ec957647679d210034b65e9c7db2452910b0c)
+    with s = ~sload(zero):
+        # Check nonce is correct
+        ~jumpi(~pc(), s != ~mload(128))
+        # Increment nonce
+        ~sstore(zero, s + 1)
+    with gasprice = ~mload(160):
+        # Check balance
+        ~jumpi(~pc(), self.balance < gasprice * msg.gas)
+        with g1 = msg.gas:
+            # Make the main call
+            ~call(msg.gas - 25000, ~mload(192), ~mload(224), 256, ~calldatasize() - 224, zero, 10000)
+            # Pay the miner
+            ~call(zero, block.coinbase, (g1 - msg.gas + 5000) * gasprice, zero, zero, zero, zero)
+            # Log to establish that the tx passed through successfully
+            ~log0(zero, zero)
