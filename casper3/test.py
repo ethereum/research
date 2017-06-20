@@ -20,13 +20,14 @@ n = networksim.NetworkSimulator(latency=150)
 n.time = 2
 print 'Generating keys'
 keys = [sha3(str(i)) for i in range(20)]
+addrs = [privtoaddr(k) for k in keys]
 print 'Initializing randaos'
 randaos = [RandaoManager(sha3(k)) for k in keys]
 deposit_sizes = [128] * 15 + [256] * 5
 
 print 'Creating genesis state'
-s = make_casper_genesis(validators=[(generate_validation_code(privtoaddr(k)), ds * 10**18, r.get(9999))
-                                    for k, ds, r in zip(keys, deposit_sizes, randaos)],
+s = make_casper_genesis(validators=[(generate_validation_code(a), ds * 10**18, r.get(9999), a)
+                                    for a, ds, r in zip(addrs, deposit_sizes, randaos)],
                         alloc={privtoaddr(k): {'balance': 10**18} for k in keys},
                         timestamp=2,
                         epoch_length=50)
