@@ -9,6 +9,11 @@ def gf1(x1, x2, x3, x4, x5):
 def gf2(x1, x2, x3, x4, x5):
     return 1.5 * (x1 + x2 / 3) / x2
 
+# Generalized case 2
+#k = 0.25
+#def gf2(x1, x2, x3, x4, x5):
+#    return (x1 * k + x2 * k**2) / (x2 * k * (1-k))
+
 # Case 3: <1/3 non-prepare (optimal if epsilon participate)
 def gf3(x1, x2, x3, x4, x5):
     return x4 / x3
@@ -53,6 +58,8 @@ my_range = [i/12. for i in range(1, 61)]
 
 best_vals = (1, 0, 0, 0, 0)
 best_score = 999999999999999999
+
+# print([f(5, 6, 5, 6, 0) for f in gfs])
 
 for x1 in my_range:
     for x2 in my_range:
