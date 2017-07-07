@@ -62,7 +62,7 @@ In general, it is certainly feasible to design a consensus mechanism where we ca
 
 However, with the right bounds we can still prevent such an attack from being profitable. Consider the case where $p=1$, and where the attacker must maintain a $50\%$ share of active participants to exert $r > 1$ griefing (note that at the $50\%$ boundary, the \textit{proportional loss ratio} $r$ and the \textit{griefing factor} are the same value). The next question is, does the attacker remove some of their own participants to keep their share at $50\%$, or do all of the participants controlled by the attacker stay?
 
-In the first case, as long as $r \le 1$, no matter how high $r$ is, the attacker's revenue must still decrease, or in the worst case where $r = \infty$, the attacker's revenue will be unchanged. In the second case, we note that the size of the participant set will decline more slowly - specifically, $x = \frac{1}{2} + \frac{1}{2} * (1-h)^{\frac{1}{d+p}}$. Suppose $r \le 2$, and $p \le 1$. Then:
+In the first case, as long as $p \le 1$, no matter how high $r$ is, the attacker's revenue must still decrease, or in the worst case where $r = \infty$, the attacker's revenue will be unchanged. In the second case, we note that the size of the participant set will decline more slowly - specifically, $x = \frac{1}{2} + \frac{1}{2} * (1-h)^{\frac{1}{d+p}}$. Suppose $r \le 2$, and $p \le 1$. Then:
 
 $\frac{1-\frac{h}{r}}{x^p}$
 
