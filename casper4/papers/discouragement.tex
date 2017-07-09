@@ -135,6 +135,8 @@ The second case that we can analyze is the case where the attacker engages in a 
 
 Suppose that victims ($\le 50\%$ of the current validator set) are concerned that their revenue will decrease from $y_0$ to 0 as part of a discouragement attack. They can choose to bribe players who are not currently validators to enlist in order to prevent this from happening. Bribing players individually is expensive, because the bribe must overcome the player's concern that they themselves will suffer from the attack. However, with an assurance contract we can create a bribe that only works if enough players show up to properly restrain the attacker. A bribe to increase the validator set by a factor of $D_n$ would need to pay the $D_n-1$ newly joining players the difference between the natural supply at $D_n$ and the natural demand at $D_n$.
 
+\includegraphics[width=300px]{disc_chart4.png}
+
 Note that existing validators do not need to receive the subsidy, as we can design the protocol so that it is easy to become a validator but takes a long time to leave, so they will remain validators long enough to prevent the discouragement attack (in fact, we are assuming that the current validator set are the ones \textit{paying the bribe}).
 
 The cost of the bribe is $(D_n - 1) * y_0 * (D_n^d - \frac{1}{D_n^p})$. If $p = d = 1$, this equals $(D_n - 1) * y_0 * (D_n - \frac{1}{D_n}) = y_0 * \frac{(D_n-1)^2 * (D_n+1)}{D_n}$. If the attacker is threatening to take away the victims rewards and additionally take away portion $q$ of their deposits, then the cost of \textit{not bribing} is $y_0 + q$. A bribe is worth it if:
