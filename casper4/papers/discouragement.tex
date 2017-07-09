@@ -15,7 +15,7 @@ We explore ``discouragement attacks" on economic consensus mechanisms. A discour
 \end{abstract}
 
 \section{Introduction}
-We model an economic consensus mechanism as being a game where there is an infinite set of validators each with an infinitesimally small deposit, with the total deposit size $D$, of which some portion is controlled by the attacker. The payout function takes as input $TD$, the total deposit size, and $h$, the extent to which the attacker deviates from an ``honest" strategy. The payout to each honest validator is $\frac{1-h}{D^p}$, where $p$ is a protocol parameter that determines how the protocol reward changes with the number of validators. For example:
+We model an economic consensus mechanism as being a game where there is an infinite set of validators each with an infinitesimally small deposit, with the total deposit size $D$, of which some portion is controlled by the attacker. The payout function takes as input $D$, the total deposit size, and $h$, the extent to which the attacker deviates from an ``honest" strategy. The payout to each honest validator is $\frac{1-h}{D^p}$, where $p$ is a protocol parameter that determines how the protocol reward changes with the number of validators. For example:
 
 \begin{itemize}
 \item $p=0$: constant ``interest rate", eg. under optimal conditions each validator earns a return of $8\%$ per year.
