@@ -39,9 +39,9 @@ We define the following constants and functions:
 \item $p$: determines how the rewards and penalties paid or deducted from each validator decrease as the total deposit size increases
 \item $k$: a constant determining the base reward and penalty size
 \item $NCP$ (``non-commit penalty''): the penalty for not committing, if there was a justified hash which the validator \textit{could} have committed
-\item $NCCP(\alpha)$ (``non-commit collective penalty''): if $\alpha$ of validators are not seen to have committed during an epoch, and that epoch had a justified hash so any validator \textit{could} have committed, then all validators are charged a penalty proportional to $NCCP(\alpha)$
+\item $NCCP(\alpha)$ (``non-commit collective penalty''): if $\alpha$ of validators are not seen to have committed during an epoch, and that epoch had a justified hash so any validator \textit{could} have committed, then all validators are charged a penalty proportional to $NCCP(\alpha)$. Must be monotonically increasing, and satisfy $NCCP(0) = 0$.
 \item $NPP$ (``non-prepare penalty''): the penalty for not preparing
-\item $NPCP(\alpha)$ (``non-prepare collective penalty''): if $\alpha$ of validators are not seen to have prepared during an epoch, then all validators are charged a penalty proportional to $NCCP(\alpha)$
+\item $NPCP(\alpha)$ (``non-prepare collective penalty''): if $\alpha$ of validators are not seen to have prepared during an epoch, then all validators are charged a penalty proportional to $NCCP(\alpha)$. Must be monotonically increasing, and satisfy $NPCP(0) = 0$.
 \item $f(e, LFE)$: a factor applied to all rewards and penalties that depends on the current epoch $e$ and the last finalized epoch $LFE$. Note that in a ``perfect'' protocol execution, $e - LFE$ always equals $1$.
 \end{itemize}
 
@@ -67,14 +67,16 @@ This is the entirety of the incentivization structure.
 We seek to prove the following:
 
 \begin{itemize}
-\item Following the protocol is a Nash equilibrium; that is, if each validator has less than $\frac{1}{3}$ of total deposits, their economic welfare is maximized by preparing and committing the same value as everyone else.
+\item If each validator has less than $\frac{1}{3}$ of total deposits, then preparing and committing the value suggested by the proposal mechanism is a Nash equilibrium.
 \item Even if all validators collude, the ratio between the harm incurred by the protocol and the penalties paid by validators is bounded above by some constant. Note that this requires a measure of ``harm incurred by the protocol"; we will discuss this in more detail later.
-\item The \textit{griefing factor}, the ratio between penalties incurred by non-attacking validators and penalties incurred by attacking validators, in any attack, is bounded above by some global constant, even in the case where the attacker has a majority of all validators.
+\item The \textit{griefing factor}, the ratio between penalties incurred by validators who are victims of an attack and penalties incurred by the validators that carried out the attack, is bounded above by some global constant, even in the case where the attacker holds a majority of the total deposits.
 \end{itemize}
 
-\section{Individual choice model}
+\section{Individual choice analysis}
 
-The individual choice analysis is simple. Suppose that some chain $C$ is the chain that you expect to be accepted as the main chain in the future (if all other validators are preparing and committing on $C$, then this will be the main chain because the fork choice rule takes commits into account). Suppose $H$ is the most recent block hash on $C$, and $(epoch_{source}, hash_{source})$ is the source data that $C$ expects validators to prepare with. A validator can avoid penalties by sending a prepare with $H, epoch_{source}, hash_{source}$ and sending a commit with $H$. Sending a commit does restrain the validator's future behavior because of the PREPARE\_COMMIT\_CONSISTENCY slashing condition, but if more than $\frac{2}{3}$ of validators are preparing and committing then this is not an issue because the epoch will itself receive $\frac{2}{3}$ prepares and so the validator will be able to use the current epoch as their source in the next epoch. Hence, it is in a validator's interest to be preparing and comitting on the same chain as everyone else.
+The individual choice analysis is simple. Suppose that the proposal mechanism selects a hash $H$ to prepare for epoch $e$, and the Casper incentivization mechanism specifies some $epoch_{source}$ and $hash_{source}$. Because we are assuming that the equilibrium is being followed, everyone prepared in the last epoch and so $epoch_{source} = e - 1$, and $hash_{source}$ is the direct parent of $H$. Hence, the PREPARE\_COMMIT\_CONSISTENCY slashing condition poses no barrier to preparing $(e, H, epoch_{source}, hash_{source})$. Assuming that, in this epoch, everyone else \textit{will} prepare these values and then commit $H$, we know $H$ will be the hash in the main chain, and so a validator will pay a penalty proportional to $NPP$ (plus a further penalty from their marginal contribution to the $NPCP$ penalty) if they do not prepare $(e, H, epoch_{source}, hash_{source})$, and avoid this penalty if they do prepare these values.
+
+We are assuming that there are $\frac{2}{3}$ prepares for $(e, H, epoch_{source}, hash_{source})$, and so PREPARE\_REQ poses no barrier to committing $H$. Committing $H$ allows a validator to avoid $NCP$ (as well as their marginal contribution to $NCCP$). Hence, there is an economic incentive to commit $H$. This proves that preparing and committing the value selected by the proposal mechanism is a Nash equilibrium.
 
 \section{Collective choice model}
 
