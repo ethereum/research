@@ -84,26 +84,28 @@ To model the protocol in a collective-choice context, we will first define a \te
 
 Our protocol utility function is:
 
-$U = \sum_{e = 0}^{e_c} -log_2(e - max[e\prime < e, e\prime finalized]) - M * F$
+$$U = \sum_{e = 0}^{e_c} -log_2(e - max[e' < e, e' finalized]) - M * F$$
 
 Where:
 
 \begin{itemize}
 \item $e$ is the current epoch, going from epoch $0$ to $e_c$, the current epoch
-\item $e\prime$ is the last finalized epoch before $e$
+\item $e'$ is the last finalized epoch before $e$
 \item $M$ is a very large constant
 \item $F$ is 1 if a safety failure has taken place, otherwise 0
 \end{itemize}
 
-The second term in the function is easy to justify: safety failures are very bad. The first term is trickier. To see how the first term works, consider the case where every epoch where $e mod N = 0$ is finalized and other epochs are not. The average total over each $N$-epoch slice will be roughly $\sum_{i=1}^N -log_2(i) \approx N * (log_2(N) - \frac{1}{ln(2)})$. Hence, the utility per block will be roughly $-log_2(N)$. This basically states that a blockchain with some finality time $N$ has utility roughly $-log(N)$, or in other words \textit{increasing the finality time of a blockchain by a constant factor causes a constant loss of utility}. The utility difference between 1 minute finality and 2 minute finality is the same as the utility difference between 1 hour finality and 2 hour finality.
+The second term in the function is easy to justify: safety failures are very bad. The first term is trickier. To see how the first term works, consider the case where every epoch such that $e mod N$, for some $N$, is zero is finalized and other epochs are not. The average total over each $N$-epoch slice will be roughly $\sum_{i=1}^N -log_2(i) \approx N * (log_2(N) - \frac{1}{ln(2)})$. Hence, the utility per block will be roughly $-log_2(N)$. This basically states that a blockchain with some finality time $N$ has utility roughly $-log(N)$, or in other words \textit{increasing the finality time of a blockchain by a constant factor causes a constant loss of utility}. The utility difference between 1 minute finality and 2 minute finality is the same as the utility difference between 1 hour finality and 2 hour finality.
 
-This can be justified in two ways. First, one can intuitively argue that a user's psychological estimation of the discomfort of waiting for finality roughly matches this kind of logarithmic utility schedule. Second, one can look at various blockchain use cases, and see that they are roughly logarithmically uniformly distributed along the range of finality times between around 200 miliseconds (``Starcraft on the blockchain") and one week (land registries and the like).
+This can be justified in two ways. First, one can intuitively argue that a user's psychological estimation of the discomfort of waiting for finality roughly matches this kind of logarithmic utility schedule. At the very least, it should be clear that the difference between 3600 second finality and 3610 second finality feels much more negligible than the difference between 1 second finality and 11 second finality. Second, one can look at various blockchain use cases, and see that they are roughly logarithmically uniformly distributed along the range of finality times between around 200 miliseconds (``Starcraft on the blockchain") and one week (land registries and the like).
 
-Now, we need to show that, for any given total deposit size, $\frac{loss\_to\_protocol\_utility}{validator\_penalties}$ is bounded. There are two ways to reduce protocol utility: cause a safety failure, and do not finalize epochs. In the first case, validators lose a large amount of deposits for violating the slashing conditions. In the second case, in a chain that has not been finalized for $k$ epochs, the penalty to attackers is $min(\frac{1}{3} * (NPP + NPCP), \frac{1}{3} * (NCP + NCCP)) * BIR * floor(log_2(k))$, which is equal to the loss of protocol utility multiplied by $BIR * min(\frac{1}{3} * (NPP + NPCP), \frac{1}{3} * (NCP + NCCP))$, which for any given total deposit size is a constant.
+Now, we need to show that, for any given total deposit size, $\frac{loss\_to\_protocol\_utility}{validator\_penalties}$ is bounded. There are two ways to reduce protocol utility: (i) cause a safety failure, and (ii) have $\ge \frac{1}{3}$ of validators not prepare or not commit to prevent finality. In the first case, validators lose a large amount of deposits for violating the slashing conditions. In the second case, in a chain that has not been finalized for $k$ epochs, the penalty to attackers is $$min(NPP * \frac{1}{3} + NPCP(\frac{1}{3}), NCP * \frac{1}{3} + NCCP(\frac{1}{3})) * BIR * f(e, e-k)$$
+
+To enforce a ratio between validator losses and loss to protocol utility, we simply set $f(e, LFE) = floor(log_2(e - LFE))$, making the validator loss equal to the protocol utility loss multiplied by $BIR$ times a constant factor.
 
 \section{Griefing factor analysis}
 
-Griefing factor analysis is important because it is one way to quanitfy the risk to honest validators. In general, if all validators are honest, and if network latency stays below the length of an epoch, then validators face zero risk beyond the usual risks of losing or accidentally divulging access to their private keys. In the case where malicious validators exist, they can interfere in the protocol in ways that cause harm to both themselves and honest validators.
+Griefing factor analysis is important because it provides one way to quanitfy the risk to honest validators. In general, if all validators are honest, and if network latency stays below the length of an epoch, then validators face zero risk beyond the usual risks of losing or accidentally divulging access to their private keys. In the case where malicious validators exist, however, they can interfere in the protocol in ways that cause harm to both themselves and honest validators.
 
 We can approximately define the "griefing factor" as follows:
 
@@ -111,9 +113,9 @@ We can approximately define the "griefing factor" as follows:
 A strategy used by a coalition in a given mechanism exhibits a \textit{griefing factor} $B$ if it can be shown that this strategy imposes a loss of $B * x$ to those outside the coalition at the cost of a loss of $x$ to those inside the coalition. If all strategies that cause deviations from some given baseline state exhibit griefing factors less than or equal to some bound B, then we call B a \textit{griefing factor bound}.
 % \end{theorem}
 
-A strategy that imposes a loss to outsiders either at no cost to a coalition, or to the benefit of a coalition, is said to have a griefing factor of infinity. Proof of work blockchains have a griefing factor bound of infinity because a 51\% coalition can double its revenue by refusing to include blocks from other participants and waiting for difficulty adjustment to reduce the difficulty and increase their rewards. With selfish mining, the griefing factor may be infinity for coalitions of size as low as 23.21\%.
+A strategy that imposes a loss to outsiders either at no cost to a coalition, or to the benefit of a coalition, is said to have a griefing factor of infinity. Proof of work blockchains have a griefing factor bound of infinity because a 51\% coalition can double its revenue by refusing to include blocks from other participants and waiting for difficulty adjustment to reduce the difficulty. With selfish mining, the griefing factor may be infinity for coalitions of size as low as 23.21\%.
 
-Let us start off our griefing analysis by not taking into account validator churn, so all dynasties are identical. Because the equations involved are fractions of linear equations, we know that small churn will only lead to small changes in the results. In Casper, we can identify the following deviating strategies:
+Let us start off our griefing analysis by not taking into account validator churn, so the validator set is always the same. Because the equations involved are fractions of linear equations, we know that small rates of validator churn will only lead to small changes in the results. In Casper, we can identify the following deviating strategies:
 
 \begin{enumerate}
 \item A minority of validators do not prepare, or prepare incorrect values.
@@ -122,19 +124,39 @@ Let us start off our griefing analysis by not taking into account validator chur
 \item (Mirror image of 3) A censorship attack where a majority of validators does not accept commits from a minority of validators
 \end{enumerate}
 
-Notice that, from the point of view of griefing factor analysis, it is immaterial whether or not a given epoch was prepared or committed. The reward and penalty schedule only pays attention to prepares and commits for the purpose of setting $f$, the value proportional to the logarithm of the time since the last finalized epoch. This value scales penalties evenly for all participants, so it does not affect griefing factors.
+Notice that, from the point of view of griefing factor analysis, it is immaterial whether or not any hash in a given epoch was justified or finalized. The Casper mechanism only pays attention to finalization in order to calculate $f(e, LFE)$, the penalty scaling factor. This value scales penalties evenly for all participants, so it does not affect griefing factors.
 
-Let us now analyze the griefing factors:
+Let us now analyze the attack types:
 
 \begin{tabular}[c]{@{}lllll@{}}
-Attack & Amount lost by attacker & Amount lost by victims & Griefing factor & Notes\tabularnewline
-Minority of size $\alpha < \frac{1}{2}$ non-prepares & $NCP * \alpha + NCCP * \alpha^2$ & $NCCP * \alpha * (1-\alpha)$ & $\frac{NCCP * (1-\alpha)}{NCP + NCCP * \alpha}$ & The griefing factor is maximized when $\alpha \approx 0$ \\
-Majority censors $\alpha < \frac{1}{2}$ minority prepares & $NCCP * \alpha * (1-\alpha)$ & $NCP * \alpha + NCCP * \alpha^2$ & $\frac{NCP + NCCP * \alpha}{NCCP * (1-\alpha)}$ & The griefing factor is maximized when $\alpha \approx \frac{1}{2}$ \\
+Attack & Amount lost by attacker & Amount lost by victims \\
+Minority of size $\alpha < \frac{1}{2}$ non-prepares & $NPP * \alpha + NPCP(\alpha) * \alpha$ & $NPCP(\alpha) * (1-\alpha)$ \\
+Majority censors $\alpha < \frac{1}{2}$ prepares & $NPCP(\alpha) * (1-\alpha)$ & $NPP * \alpha + NPCP(\alpha) * \alpha$ \\
+Minority of size $\alpha < \frac{1}{2}$ non-commits & $NCP * \alpha + NCCP(\alpha) * \alpha$ & $NCCP(\alpha) * (1-\alpha)$ \\
+Majority censors $\alpha < \frac{1}{2}$ commits & $NCCP(\alpha) * (1-\alpha)$ & $NCP * \alpha + NCCP(\alpha) * \alpha$ \\
 \end{tabular}
 
-In general, we see a perfect symmetry between the non-commit case and the non-prepare case, so we can assume $\frac{NCCP}{NCP} = \frac{NPCP}{NPP}$. Also, from a protocol utility standpoint, we can make the observation that seeing $\frac{1}{3} \le p_c < \frac{2}{3}$ commits is better than seeing fewer commits, as it gives at least some economic security against finality reversions, so we do want to reward this scenario more than the scenario where we get $\frac{1}{3} \le p_c < \frac{2}{3}$ prepares. Another way to view the situation is to observe that $\frac{1}{3}$ non-prepares causes \textit{everyone} to non-commit, so it should be treated with equal severity.
+In general, we see a perfect symmetry between the non-commit case and the non-prepare case, so we can assume $\frac{NCCP(\alpha)}{NCP} = \frac{NPCP(\alpha)}{NPP}$. Also, from a protocol utility standpoint, we can make the observation that seeing $\frac{1}{3} \le p_c < \frac{2}{3}$ commits is better than seeing fewer commits, as it gives at least some economic security against finality reversions, so we do want to reward this scenario more than the scenario where we get $\frac{1}{3} \le p_c < \frac{2}{3}$ prepares. Another way to view the situation is to observe that $\frac{1}{3}$ non-prepares causes \textit{everyone} to non-commit, so it should be treated with equal severity.
 
-In the normal case, anything less than $\frac{1}{3}$ commits provides no economic security, so we can treat $p_c < \frac{1}{3}$ commits as equivalent to no commits; this thus suggests $NPC = 2 * NCC$.
+In the normal case, anything less than $\frac{1}{3}$ commits provides no economic security, so we can treat $p_c < \frac{1}{3}$ commits as equivalent to no commits; this thus suggests $NPP = 2 * NCP$. We can also normalize $NCP = 1$.
+
+Now, let us analyze the griefing factors, to try to determine an optimal shape for $NCCP$. The griefing factor for non-committing is:
+
+$$\frac{(1-\alpha) * NCCP(\alpha)}{\alpha * (1 + NCCP(\alpha))}$$
+
+The griefing factor for censoring is the inverse of this. If we want the griefing factor for non-committing to equal one, then we could compute:
+
+$$\alpha * (1 + NCCP(\alpha)) = (1-\alpha) * NCCP(\alpha)$$
+
+$$\frac{1 + NCCP(\alpha)}{NCCP(\alpha)} = \frac{1-\alpha}{\alpha}$$
+
+$$\frac{1}{NCCP(\alpha)} = \frac{1-\alpha}{\alpha} - 1$$
+
+$$NCCP(\alpha) = \frac{\alpha}{1-2(\alpha}$$
+
+Note that for $\alpha = \frac{1}{2}$, this would set the $NCCP$ to infinity. Hence, with this design a griefing factor of $1$ is infeasible. We \textit{can} achieve that effect in a different way - by making $NCP$ itself a function of $\alpha$; in this case, $NCCP = 1$ and $NCP = max(0, 1 - 2 * \alpha)$ would achieve the desired effect. But making $NCP$ dependent on $\alpha$ is more technically complex to implement, and one can also argue that situations where many validators do not commit are exactly the worst situations to reduce the $NCP$ penalty, so we can instead do a first-order approximation: $NCCP(\alpha) = \alpha * (1 + 2*\alpha)$. At $\alpha \approx 0$ the griefing factor it still equal to 1, and if $\alpha = \frac{1}{2}$ of validators go offline the griefing factor is only $\frac{(1-\frac{1}{2}) * 1}{\frac{1}{2} * (1 + 1)} = \frac{1}{2}$, implying that for a $\alpha = \frac{1}{2}$ censorship attack the griefing factor is $2$.
+
+However, we arguably want to have lower griefing factors for smaller attackers in exchange for higher griefing factors for larger attackers. We can achieve this by dividing $NCCP(\alpha)$ by two
 
 \section{Conclusions}
 

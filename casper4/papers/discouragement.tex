@@ -32,9 +32,9 @@ The reason behind the above formulas is as follows. We assume that there is some
 
 In contracts the \textit{griefing factor}, another way of comparing attacker and victim losses, is defined in absolute terms: for example, if in such a scenario the attacker controls $\frac{1}{3}$ of the total validator set, then the set of victims is twice as large as the attacker, and so altogether the victims lose four times more than the attacker, and so the griefing factor would be 4. The relationship between the proportional loss ratio $r$ and griefing factor is simple: $$g = r * \frac{1-\alpha}{\alpha},$$ where $\alpha$ is the portion of validators controlled by the attacker. In our above example, $\alpha = \frac{1}{3}$, so $g = 2 * \frac{\frac{2}{3}}{\frac{1}{3}} = 4$.
 
-We now rephrase the problem into the language of supply and demand: there exist a set of players, each of which has some \textit{reserve interest rate} at which they are willing to become validators in the consensus mechanism. This is the demand curve, where the interest rate is the price. The protocol, which offers interest rates for participation in the consensus mechanism, sets the supply curve. If $p=0$, the supply curve is horizontal - the protocol offers that interest rate to an unlimited number of validators. If $p=\infty$, the supply curve is vertical. For any other $p$, the supply curve is declining with a constant elasticity of $\frac{1}{p}$. We model the attacker as having unilateral power to set $h$ (by attacking), and this pushes down the supply curve.
+We now rephrase the problem into the language of supply and demand: there exist a set of players, each of which has some \textit{reserve interest rate} at which they are willing to become validators in the consensus mechanism. This is the supply curve, where the interest rate is the price. The protocol, which offers interest rates for participation in the consensus mechanism, sets the demand curve. If $p=0$, the demand curve is horizontal - the protocol offers that interest rate to an unlimited number of validators. If $p=\infty$, the demand curve is vertical. For any other $p$, the demand curve is declining with a constant elasticity of $\frac{1}{p}$. We model the attacker as having unilateral power to set $h$ (by attacking), and this pushes down the demand curve.
 
-We model the demand curve as also being a simple exponential function, $x^d$. In general, we expect there to be wide disparities between the reserve interest rates of different players, as they have different levels of wealth, technical capability to operate a node in the consensus mechanism, and willingness to lock up their capital to become a validator; additionally, we expect many players will be readily willing to lock up $50\%$ of their capital, somewhat willing to lock up $80\%$, hard pressed to lock up $95\%$, and not willing at all to lock up $100\%$. Hence, $d > 1$ seems likely, though we will consider the problem abstractly and give results for various values of $d$.
+We model the supply curve as also being a simple exponential function, $x^d$. In general, we expect there to be wide disparities between the reserve interest rates of different players, as they have different levels of wealth, technical capability to operate a node in the consensus mechanism, and willingness to lock up their capital to become a validator; additionally, we expect many players will be readily willing to lock up $50\%$ of their capital, somewhat willing to lock up $80\%$, hard pressed to lock up $95\%$, and not willing at all to lock up $100\%$. Hence, $d > 1$ seems likely, though we will consider the problem abstractly and give results for various values of $d$.
 
 \section{Analysis}
 
@@ -56,7 +56,7 @@ Let us now look at the attacker's interest rate, $\frac{1-\frac{h}{r}}{D^p}$. Fi
 
 $\frac{1-\frac{h}{r}}{D^p} \le \frac{1-h}{(1-h)^{\frac{p}{d+p}}} = (1-h)^{\frac{d}{d+p}} < 1$.
 
-Hence, if $r \le 1$, the attacker will always lose money. This may seem counterintuitive; one might ask, what if the discouragement attack pushes out so many other validators that the new equilibrium is on the very high part of the the supply curve close to zero? The important thing to keep in mind, however, is that if $r = 1$ (i.e. the attacker gets the same interest rate as the victims), then the attacker's revenue will necessarily be at some point along \textit{the original, unchanged, upward sloping demand curve}. Because the demand curve is upward sloping, and the number of validators decreased, the interest rate paid to the attacker must have also decreased. If $r < 1$, then the attacker loses \textit{even more} than the victims, at least if expressed as an interest rate, and so the attacker's interest rate will end up \textit{below} the lower point along the demand curve experienced by victims. Hence, if $r \le 1$, discouragement attacks are necessarily costly.
+Hence, if $r \le 1$, the attacker will always lose money. This may seem counterintuitive; one might ask, what if the discouragement attack pushes out so many other validators that the new equilibrium is on the very high part of the the demand curve close to zero? The important thing to keep in mind, however, is that if $r = 1$ (i.e. the attacker gets the same interest rate as the victims), then the attacker's revenue will necessarily be at some point along \textit{the original, unchanged, upward sloping supply curve}. Because the supply curve is upward sloping, and the number of validators decreased, the interest rate paid to the attacker must have also decreased. If $r < 1$, then the attacker loses \textit{even more} than the victims, at least if expressed as an interest rate, and so the attacker's interest rate will end up \textit{below} the lower point along the supply curve experienced by victims. Hence, if $r \le 1$, discouragement attacks are necessarily costly.
 
 In general, it is certainly feasible to design a consensus mechanism where we can ensure $r \le 1$ as long as the attacker controls less than $50\%$ of validators, so this is already a very useful result. Now, let us examine the case where $r > 1$. For very high values of $r$, it is easy to see how the attacker can theoretically make a net gain from a discouragement attack:
 
@@ -111,7 +111,7 @@ Supply-demand equilibrium tells us that in phase 2 we have:
 
 $y_2 * (1-h) + \frac{1}{4} * P_{attack} = y_0 * D_2^d$
 
-The $\frac{1}{4}$ fraction comes from the fact that during an attack, non-attacker's deposits would increase by 25\%, and because the original intersection was $(1, y_0)$ the demand curve must also be multiplied by $y_0$. Let us assume $d = p = 1$. We can simplify:
+The $\frac{1}{4}$ fraction comes from the fact that during an attack, non-attacker's deposits would increase by 25\%, and because the original intersection was $(1, y_0)$ the supply curve must also be multiplied by $y_0$. Let us assume $d = p = 1$. We can simplify:
 
 $\frac{y_0}{D_2} * (1-h) + \frac{1}{4} * P_{attack} = y_0 * D_2$
 
@@ -123,7 +123,7 @@ This gives us $D_2$ out of $P_{attack}$ and $h$ through a quadratic equation, wh
 
 $D_2 = \frac{\frac{P_{attack}}{4 * y_0} + (\frac{P_{attack}^2}{16 * y_0^2} - 4 * (h-1))^{\frac{1}{2}}}{2}$
 
-The discriminant equals zero at when $\frac{P_{attack}^2}{16 * y_0^2} = 4 * (h-1)$, or $h = 1 + (\frac{P_{attack}}{8 * y_0})^2$; if $h$ is higher than this value then there is no intersection between the new de-facto supply curve and the demand curve, meaning that non-attacking validators will lose money regardless of what happens, and so $D_2 = 0$.
+The discriminant equals zero at when $\frac{P_{attack}^2}{16 * y_0^2} = 4 * (h-1)$, or $h = 1 + (\frac{P_{attack}}{8 * y_0})^2$; if $h$ is higher than this value then there is no intersection between the new de-facto demand curve and the supply curve, meaning that non-attacking validators will lose money regardless of what happens, and so $D_2 = 0$.
 
 Because the benefits to the attacker of removing validators from the validator set are so high, we find that the optimal $h$ for any given $P_{attack}$ is generally precisely the one which sets $D_2 = 0$, ie. $h = 1 + (\frac{P_{attack}}{8 * y_0})^2 + \epsilon$.
 
@@ -157,7 +157,7 @@ $q = 0.25, y_0 = 0.01 \rightarrow D_n < 5.7$
 
 $q = 1, y_0 = 0.01 \rightarrow D_n < 10.61$
 
-If we reduce to $p = \frac{1}{2}$, then we can increase the maximum amounts of validators we can bribe to join further, though only slightly, as for high values of $D_n$ the cost of the subsidy is dominated by the increased reserve interest rates, not the reduced in-protocol supply. For example, with $p = \frac{1}{2}$ the maximum that it makes sense for validators to bribe in the $q = 0, y_0 = 0.04$ case increases from $1.8$ to $\approx 1.87$.
+If we reduce to $p = \frac{1}{2}$, then we can increase the maximum amounts of validators we can bribe to join further, though only slightly, as for high values of $D_n$ the cost of the subsidy is dominated by the increased reserve interest rates, not the reduced in-protocol interest rates. For example, with $p = \frac{1}{2}$ the maximum that it makes sense for validators to bribe in the $q = 0, y_0 = 0.04$ case increases from $1.8$ to $\approx 1.87$.
 
 \section{Conclusion}
 
