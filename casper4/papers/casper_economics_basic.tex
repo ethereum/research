@@ -7,6 +7,8 @@
 
 \documentclass[12pt]{article}
 \usepackage{graphicx}
+\usepackage{tabularx}
+\newtheorem{definition}{Definition}
 
 \begin{document}
 \maketitle
@@ -59,7 +61,7 @@ We now define the following reward and penalty schedule, which runs every epoch.
 \item If the protocol saw commits from portion $p_c$ validators during the given epoch, and a prepare was justified so any validator \textit{could have} committed, then \textit{every} validator is penalized $BP(D, e, LFE) * NCCP(1 - p_p)$
 \end{itemize}
 
-This is the entirety of the incentivization structure, though without functions and constants defined; we will define these later, for now saying only that all constants are positive and all functions output non-negative values for any input within their range. Additionally, $NPCP(0) = NCCP(0) = 0$ and $NPCP$ and $NCCP$ must both be nondecreasing.
+This is the entirety of the incentivization structure, though without functions and constants defined; we will define these later, attempting as much as possible to derive the specific values from desired objectives and first principles. For now we will only say that all constants are positive and all functions output non-negative values for any input within their range. Additionally, $NPCP(0) = NCCP(0) = 0$ and $NPCP$ and $NCCP$ must both be nondecreasing.
 
 \section{Claims}
 
@@ -114,13 +116,13 @@ Griefing factor analysis is important because it provides one way to quanitfy th
 
 We can approximately define the "griefing factor" as follows:
 
-% \begin{theorem}
+\begin{definition}
 A strategy used by a coalition in a given mechanism exhibits a \textit{griefing factor} $B$ if it can be shown that this strategy imposes a loss of $B * x$ to those outside the coalition at the cost of a loss of $x$ to those inside the coalition. If all strategies that cause deviations from some given baseline state exhibit griefing factors less than or equal to some bound B, then we call B a \textit{griefing factor bound}.
-% \end{theorem}
+\end{definition}
 
 A strategy that imposes a loss to outsiders either at no cost to a coalition, or to the benefit of a coalition, is said to have a griefing factor of infinity. Proof of work blockchains have a griefing factor bound of infinity because a 51\% coalition can double its revenue by refusing to include blocks from other participants and waiting for difficulty adjustment to reduce the difficulty. With selfish mining, the griefing factor may be infinity for coalitions of size as low as 23.21\%.
 
-Let us start off our griefing analysis by not taking into account validator churn, so the validator set is always the same. Because the equations involved are fractions of linear equations, we know that small rates of validator churn will only lead to small changes in the results. In Casper, we can identify the following deviating strategies:
+Let us start off our griefing analysis by not taking into account validator churn, so the validator set is always the same. In Casper, we can identify the following deviating strategies:
 
 \begin{enumerate}
 \item A minority of validators do not prepare, or prepare incorrect values.
@@ -129,17 +131,20 @@ Let us start off our griefing analysis by not taking into account validator chur
 \item (Mirror image of 3) A censorship attack where a majority of validators does not accept commits from a minority of validators
 \end{enumerate}
 
-Notice that, from the point of view of griefing factor analysis, it is immaterial whether or not any hash in a given epoch was justified or finalized. The Casper mechanism only pays attention to finalization in order to calculate $f(e, LFE)$, the penalty scaling factor. This value scales penalties evenly for all participants, so it does not affect griefing factors.
+Notice that, from the point of view of griefing factor analysis, it is immaterial whether or not any hash in a given epoch was justified or finalized. The Casper mechanism only pays attention to finalization in order to calculate $DF(D, e, LFE)$, the penalty scaling factor. This value scales penalties evenly for all participants, so it does not affect griefing factors.
 
 Let us now analyze the attack types:
 
-\begin{tabular}[c]{@{}lllll@{}}
+\begin{tabularx}{\textwidth}{|X|X|X|}
+\hline
 Attack & Amount lost by attacker & Amount lost by victims \\
+\hline
 Minority of size $\alpha < \frac{1}{2}$ non-prepares & $NPP * \alpha + NPCP(\alpha) * \alpha$ & $NPCP(\alpha) * (1-\alpha)$ \\
 Majority censors $\alpha < \frac{1}{2}$ prepares & $NPCP(\alpha) * (1-\alpha)$ & $NPP * \alpha + NPCP(\alpha) * \alpha$ \\
 Minority of size $\alpha < \frac{1}{2}$ non-commits & $NCP * \alpha + NCCP(\alpha) * \alpha$ & $NCCP(\alpha) * (1-\alpha)$ \\
 Majority censors $\alpha < \frac{1}{2}$ commits & $NCCP(\alpha) * (1-\alpha)$ & $NCP * \alpha + NCCP(\alpha) * \alpha$ \\
-\end{tabular}
+\hline
+\end{tabularx}
 
 In general, we see a perfect symmetry between the non-commit case and the non-prepare case, so we can assume $\frac{NCCP(\alpha)}{NCP} = \frac{NPCP(\alpha)}{NPP}$. Also, from a protocol utility standpoint, we can make the observation that seeing $\frac{1}{3} \le p_c < \frac{2}{3}$ commits is better than seeing fewer commits, as it gives at least some economic security against finality reversions, so we do want to reward this scenario more than the scenario where we get $\frac{1}{3} \le p_c < \frac{2}{3}$ prepares. Another way to view the situation is to observe that $\frac{1}{3}$ non-prepares causes \textit{everyone} to non-commit, so it should be treated with equal severity.
 
@@ -157,11 +162,9 @@ $$\frac{1 + NCCP(\alpha)}{NCCP(\alpha)} = \frac{1-\alpha}{\alpha}$$
 
 $$\frac{1}{NCCP(\alpha)} = \frac{1-\alpha}{\alpha} - 1$$
 
-$$NCCP(\alpha) = \frac{\alpha}{1-2(\alpha}$$
+$$NCCP(\alpha) = \frac{\alpha}{1-2\alpha}$$
 
-Note that for $\alpha = \frac{1}{2}$, this would set the $NCCP$ to infinity. Hence, with this design a griefing factor of $1$ is infeasible. We \textit{can} achieve that effect in a different way - by making $NCP$ itself a function of $\alpha$; in this case, $NCCP = 1$ and $NCP = max(0, 1 - 2 * \alpha)$ would achieve the desired effect. But making $NCP$ dependent on $\alpha$ is more technically complex to implement, and one can also argue that situations where many validators do not commit are exactly the worst situations to reduce the $NCP$ penalty, so we can instead do a first-order approximation: $NCCP(\alpha) = \alpha * (1 + 2*\alpha)$. At $\alpha \approx 0$ the griefing factor it still equal to 1, and if $\alpha = \frac{1}{2}$ of validators go offline the griefing factor is only $\frac{(1-\frac{1}{2}) * 1}{\frac{1}{2} * (1 + 1)} = \frac{1}{2}$, implying that for a $\alpha = \frac{1}{2}$ censorship attack the griefing factor is $2$.
-
-However, we arguably want to have lower griefing factors for smaller attackers in exchange for higher griefing factors for larger attackers. We can achieve this by dividing $NCCP(\alpha)$ by two
+Note that for $\alpha = \frac{1}{2}$, this would set the $NCCP$ to infinity. Hence, with this design a griefing factor of $1$ is infeasible. We \textit{can} achieve that effect in a different way - by making $NCP$ itself a function of $\alpha$; in this case, $NCCP = 1$ and $NCP = max(0, 1 - 2 * \alpha)$ would achieve the desired effect. If we want to keep the formula for $NCP$ constant, and the formula for $NCCP$ reasonably simple and bounded, then one alternative is to set $NCCP(\alpha) = \frac{\alpha}{1-\alpha}$; this keeps griefing factors bounded between $\frac{1}{2}$ and $2$.
 
 \section{Pools}
 
@@ -173,7 +176,7 @@ There are several possible kinds of stake pools:
 
 \begin{itemize}
 \item \textbf{Fully centrally managed}: users $B_1 ... B_n$ send coins to pool operator $A$. $A$ makes a few deposit transactions containing their combined balances, fully controls the prepare and commit process, and occasionally withdraws one of their deposits to accommodate users wishing to withdraw their balances. Requires complete trust.
-\item \textbf{Centrally managed but trust-reduced}: users $B_1 ... B_n$ send coins to a pool contract. The contract sends a few deposit transactions containing their combined balances, assigning pool operator $A$ control over the prepare and commit process, and the task of keeping track of withdrawal requests. $A$ occasionally withdraws one of their deposits to accommodate users wishing to withdraw their balances; the withdrawals go directly into the contract, which ensures each user's right to withdraw a proportional share. Users need to trust the operator not to get their coins lose, but the operator cannot steal the coins.
+\item \textbf{Centrally managed but trust-reduced}: users $B_1 ... B_n$ send coins to a pool contract. The contract sends a few deposit transactions containing their combined balances, assigning pool operator $A$ control over the prepare and commit process, and the task of keeping track of withdrawal requests. $A$ occasionally withdraws one of their deposits to accommodate users wishing to withdraw their balances; the withdrawals go directly into the contract, which ensures each user's right to withdraw a proportional share. Users need to trust the operator not to get their coins lose, but the operator cannot steal the coins. The trust requirement can be reduced further if the pool operator themselves contributes a large portion of the coins, as this will disincentivize them from staking maliciously.
 \item \textbf{2-of-3}: a user makes a deposit transaction and specifies as validation code a 2-of-3 multisig, consisting of (i) the user's online key, (ii) the pool operator's online key, and (iii) the user's offline backup key. The need for two keys to sign off on a prepare, commit or withdraw minimizes key theft risk, and a liveness failure on the pool side can be handled by the user sending their backup key to another pool.
 \item \textbf{Multisig managed}: users $B_1 ... B_n$ send coins to a pool contract that works in the exact same way as a centrally managed pool, except that a multisig of several semi-trusted parties needs to approve each prepare and commit message.
 \item \textbf{Collective}: users $B_1 ... B_n$ send coins to a pool contract that that works in the exact same way as a centrally managed poolg
@@ -184,8 +187,9 @@ We expect pools of different types to emerge to accomodate smaller users. In the
 
 \section{Conclusions}
 
-The above analysis shows Casper's basic properties in the context of an individual-choice model, a collective-choice model where the validator set is modeled as a single player, and a model where one coalition is trying to cause other validators to lose money possibly at some cost to itself. Non-economic honest-majority models are out of scope, as is the proof that causing a safety failure requires a large number of slashed validators, as those topics are covered elsewhere. More complex economic attacks involving extortion, blackmail and validator discouragement are not covered here, although the griefing factor analysis made here does serve as a foundation for the analyses of these topics.
+The above analysis gives a parametrized scheme for incentivizing in Casper, and shows that it is a Nash equilibrium in an uncoordinated-choice model with a wide variety of settings. We then attempt to derive one possible set of specific values for the various parameters by starting from desired objectives, and choosing values that best meet the desired objectives. This analysis does not include non-economic attacks, as those are covered by other materials, and does not cover more advanced economic attacks, including extortion and discouragement attacks. We hope to see more research in these areas, as well as in the abstract theory of what considerations should be taken into account when designing reward and penalty schedules.
 
+\section{References}
 \bibliographystyle{abbrv}
 \bibliography{main}
 Optimal selfish mining strategies in Bitcoin; Ayelet Sapirshtein, Yonatan Sompolinsky, and Aviv Zohar: https://arxiv.org/pdf/1507.06183.pdf
