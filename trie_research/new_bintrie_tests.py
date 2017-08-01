@@ -21,12 +21,17 @@ for i in range(3):
         #print(t.to_dict())
         t.update(k, v)
         assert t.get(k) == v
-        #t.print_nodes()
+        if not random.randrange(100):
+            t.to_dict()
     assert r1 is None or t.root == r1
     r1 = t.root
     t.update(kvpairs[0][0], kvpairs[0][1])
     assert t.root == r1
     print(t.get_branch(kvpairs[0][0]))
     print(encode_hex(t.root))
+    for k, v in shuffle_in_place(kvpairs):
+        t.update(k, b'')
+        if not random.randrange(100):
+            t.to_dict()
+    assert t.root == b''
 
-t.to_dict()

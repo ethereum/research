@@ -56,7 +56,10 @@ def _get(db, node, keypath):
 
 def _update(db, node, keypath, val):
     if not keypath:
-        return hash_and_save(db, val)
+        if val:
+            return hash_and_save(db, val)
+        else:
+            return b''
     if not node:
         return hash_and_save(db, encode_kv_node(keypath, hash_and_save(db, val)))
     L, R, nodetype = parse_node(db.get(node))
