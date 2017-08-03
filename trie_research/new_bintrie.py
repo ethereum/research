@@ -11,6 +11,9 @@ class EphemDB():
     def put(self, k, v):
         self.kv[k] = v
 
+    def delete(self, k):
+        del self.kv[k]
+
 KV_TYPE = 0
 BRANCH_TYPE = 1
 LEAF_TYPE = 2
