@@ -8,7 +8,7 @@ def shuffle_in_place(x):
     random.shuffle(y)
     return y
 
-kvpairs = [(sha3(str(i))[12:], str(i) * 5) for i in range(2000)]
+kvpairs = [(sha3(str(i))[12:], str(i).encode('utf-8') * 5) for i in range(2000)]
 
 
 for path in ([], [1,0,1], [0,0,1,0], [1,0,0,1,0], [1,0,0,1,0,0,1,0], [1,0] * 8):
@@ -37,5 +37,6 @@ for _ in range(3):
         t.update(k, b'')
         if not random.randrange(100):
             t.to_dict()
+    #t.print_nodes()
     assert t.root == b''
 
