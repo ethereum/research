@@ -110,6 +110,8 @@ $$BP(D, e, LFE) = \frac{k}{D^p} + k_2 * floor(log_2(e - LFE))$$
 
 The first term serves to take profits for non-committers away; the second term creates a penalty which is proportional to the loss in protocol utility.
 
+This connection between validator losses and loss to protocol utility has several consequences. First, it establishes that harming the protocolexecution is costly, and harming the protocol execution more costs more. Second, it establishes that the protocol approximates the properties of a \textit{potential game} [cite]. Potential games have the property that Nash equilibria of the game correspond to local maxima of the potential function (in this case, protocol utility), and so correctly following the protocol is a Nash equilibrium even in cases where a coalition has more than $\frac{1}{3}$ of the total validators. Here, the protocol utility function is not a perfect potential function, as it does not always take into account changes in the \textit{quantity} of prepares and commits whereas validator rewards do, but it does come close.
+
 \section{Griefing factor analysis}
 
 Griefing factor analysis is important because it provides one way to quanitfy the risk to honest validators. In general, if all validators are honest, and if network latency stays below the length of an epoch, then validators face zero risk beyond the usual risks of losing or accidentally divulging access to their private keys. In the case where malicious validators exist, however, they can interfere in the protocol in ways that cause harm to both themselves and honest validators.
@@ -193,5 +195,7 @@ The above analysis gives a parametrized scheme for incentivizing in Casper, and 
 \bibliographystyle{abbrv}
 \bibliography{main}
 Optimal selfish mining strategies in Bitcoin; Ayelet Sapirshtein, Yonatan Sompolinsky, and Aviv Zohar: https://arxiv.org/pdf/1507.06183.pdf
+
+Potential games; Dov Monderer and Lloyd Shapley: http://econpapers.repec.org/article/eeegamebe/v_3a14_3ay_3a1996_3ai_3a1_3ap_3a124-143.htm
 
 \end{document}
