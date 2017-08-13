@@ -1,0 +1,361 @@
+This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.6.27)  13 AUG 2017 04:22
+entering extended mode
+ restricted \write18 enabled.
+ %&-line parsing enabled.
+**censorship_rejection.tex
+(./censorship_rejection.tex
+LaTeX2e <2016/02/01>
+Babel <3.9q> and hyphenation patterns for 3 language(s) loaded.
+(/usr/share/texlive/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2014/09/29 v1.4h Standard LaTeX document class
+(/usr/share/texlive/texmf-dist/tex/latex/base/size12.clo
+File: size12.clo 2014/09/29 v1.4h Standard LaTeX file (size option)
+)
+\c@part=\count79
+\c@section=\count80
+\c@subsection=\count81
+\c@subsubsection=\count82
+\c@paragraph=\count83
+\c@subparagraph=\count84
+\c@figure=\count85
+\c@table=\count86
+\abovecaptionskip=\skip41
+\belowcaptionskip=\skip42
+\bibindent=\dimen102
+)
+(/usr/share/texlive/texmf-dist/tex/latex/graphics/graphicx.sty
+Package: graphicx 2014/10/28 v1.0g Enhanced LaTeX Graphics (DPC,SPQR)
+
+(/usr/share/texlive/texmf-dist/tex/latex/graphics/keyval.sty
+Package: keyval 2014/10/28 v1.15 key=value parser (DPC)
+\KV@toks@=\toks14
+)
+(/usr/share/texlive/texmf-dist/tex/latex/graphics/graphics.sty
+Package: graphics 2016/01/03 v1.0q Standard LaTeX Graphics (DPC,SPQR)
+
+(/usr/share/texlive/texmf-dist/tex/latex/graphics/trig.sty
+Package: trig 2016/01/03 v1.10 sin cos tan (DPC)
+)
+(/usr/share/texlive/texmf-dist/tex/latex/latexconfig/graphics.cfg
+File: graphics.cfg 2010/04/23 v1.9 graphics configuration of TeX Live
+)
+Package graphics Info: Driver file: pdftex.def on input line 95.
+
+(/usr/share/texlive/texmf-dist/tex/latex/pdftex-def/pdftex.def
+File: pdftex.def 2011/05/27 v0.06d Graphics/color for pdfTeX
+
+(/usr/share/texlive/texmf-dist/tex/generic/oberdiek/infwarerr.sty
+Package: infwarerr 2010/04/08 v1.3 Providing info/warning/error messages (HO)
+)
+(/usr/share/texlive/texmf-dist/tex/generic/oberdiek/ltxcmds.sty
+Package: ltxcmds 2011/11/09 v1.22 LaTeX kernel commands for general use (HO)
+)
+\Gread@gobject=\count87
+))
+\Gin@req@height=\dimen103
+\Gin@req@width=\dimen104
+)
+(./censorship_rejection.aux)
+\openout1 = `censorship_rejection.aux'.
+
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 12.
+LaTeX Font Info:    ... okay on input line 12.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 12.
+LaTeX Font Info:    ... okay on input line 12.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 12.
+LaTeX Font Info:    ... okay on input line 12.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 12.
+LaTeX Font Info:    ... okay on input line 12.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 12.
+LaTeX Font Info:    ... okay on input line 12.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 12.
+LaTeX Font Info:    ... okay on input line 12.
+
+(/usr/share/texlive/texmf-dist/tex/context/base/supp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+\scratchcounter=\count88
+\scratchdimen=\dimen105
+\scratchbox=\box26
+\nofMPsegments=\count89
+\nofMParguments=\count90
+\everyMPshowfont=\toks15
+\MPscratchCnt=\count91
+\MPscratchDim=\dimen106
+\MPnumerator=\count92
+\makeMPintoPDFobject=\count93
+\everyMPtoPDFconversion=\toks16
+) (/usr/share/texlive/texmf-dist/tex/generic/oberdiek/pdftexcmds.sty
+Package: pdftexcmds 2011/11/29 v0.20 Utility functions of pdfTeX for LuaTeX (HO
+)
+
+(/usr/share/texlive/texmf-dist/tex/generic/oberdiek/ifluatex.sty
+Package: ifluatex 2010/03/01 v1.3 Provides the ifluatex switch (HO)
+Package ifluatex Info: LuaTeX not detected.
+)
+(/usr/share/texlive/texmf-dist/tex/generic/oberdiek/ifpdf.sty
+Package: ifpdf 2011/01/30 v2.3 Provides the ifpdf switch (HO)
+Package ifpdf Info: pdfTeX in PDF mode is detected.
+)
+Package pdftexcmds Info: LuaTeX not detected.
+Package pdftexcmds Info: \pdf@primitive is available.
+Package pdftexcmds Info: \pdf@ifprimitive is available.
+Package pdftexcmds Info: \pdfdraftmode found.
+)
+(/usr/share/texlive/texmf-dist/tex/latex/oberdiek/epstopdf-base.sty
+Package: epstopdf-base 2010/02/09 v2.5 Base part for package epstopdf
+
+(/usr/share/texlive/texmf-dist/tex/latex/oberdiek/grfext.sty
+Package: grfext 2010/08/19 v1.1 Manage graphics extensions (HO)
+
+(/usr/share/texlive/texmf-dist/tex/generic/oberdiek/kvdefinekeys.sty
+Package: kvdefinekeys 2011/04/07 v1.3 Define keys (HO)
+))
+(/usr/share/texlive/texmf-dist/tex/latex/oberdiek/kvoptions.sty
+Package: kvoptions 2011/06/30 v3.11 Key value format for package options (HO)
+
+(/usr/share/texlive/texmf-dist/tex/generic/oberdiek/kvsetkeys.sty
+Package: kvsetkeys 2012/04/25 v1.16 Key value parser (HO)
+
+(/usr/share/texlive/texmf-dist/tex/generic/oberdiek/etexcmds.sty
+Package: etexcmds 2011/02/16 v1.5 Avoid name clashes with e-TeX commands (HO)
+Package etexcmds Info: Could not find \expanded.
+(etexcmds)             That can mean that you are not using pdfTeX 1.50 or
+(etexcmds)             that some package has redefined \expanded.
+(etexcmds)             In the latter case, load this package earlier.
+)))
+Package grfext Info: Graphics extension search list:
+(grfext)             [.png,.pdf,.jpg,.mps,.jpeg,.jbig2,.jb2,.PNG,.PDF,.JPG,.JPE
+G,.JBIG2,.JB2,.eps]
+(grfext)             \AppendGraphicsExtensions on input line 452.
+
+(/usr/share/texlive/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
+File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
+e
+))
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <14.4> on input line 13.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <7> on input line 13.
+
+Overfull \hbox (3.05936pt too wide) in paragraph at lines 19--20
+[]\OT1/cmr/m/n/10.95 The main prior work in this di-rec-tion is Casper [cite], 
+which achieves
+ []
+
+[1
+
+{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]
+<Censorship1.png, id=11, 465.74pt x 171.64125pt>
+File: Censorship1.png Graphic file (type png)
+ <use Censorship1.png>
+Package pdftex.def Info: Censorship1.png used on input line 27.
+(pdftex.def)             Requested size: 401.50146pt x 147.97263pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 27--28
+[][] 
+ []
+
+
+Overfull \hbox (20.55408pt too wide) in paragraph at lines 33--34
+\OT1/cmr/m/n/12 For sim-plic-ity, let us as-sume that there ex-ists a sim-ple N
+akamoto-style blockchain,
+ []
+
+<Censorship2.png, id=13, 368.37625pt x 156.585pt> [2 <./Censorship1.png>]
+File: Censorship2.png Graphic file (type png)
+
+<use Censorship2.png>
+Package pdftex.def Info: Censorship2.png used on input line 35.
+(pdftex.def)             Requested size: 401.50146pt x 170.6647pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 35--36
+[][] 
+ []
+
+<Censorship3.png, id=20, 372.39125pt x 261.97874pt>
+File: Censorship3.png Graphic file (type png)
+ <use Censorship3.png>
+Package pdftex.def Info: Censorship3.png used on input line 41.
+(pdftex.def)             Requested size: 401.50146pt x 282.46912pt.
+
+<Censorship3p5.png, id=21, 457.71pt x 261.97874pt>
+File: Censorship3p5.png Graphic file (type png)
+ <use Censorship3p5.png>
+Package pdftex.def Info: Censorship3p5.png used on input line 42.
+(pdftex.def)             Requested size: 401.50146pt x 229.81447pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 41--43
+[][]
+ []
+
+
+Overfull \hbox (11.50146pt too wide) in paragraph at lines 41--43
+[] 
+ []
+
+[3 <./Censorship2.png>] [4 <./Censorship3.png> <./Censorship3p5.png>]
+<Censorship4.png, id=31, 502.87875pt x 237.88875pt>
+File: Censorship4.png Graphic file (type png)
+ <use Censorship4.png>
+Package pdftex.def Info: Censorship4.png used on input line 50.
+(pdftex.def)             Requested size: 401.50146pt x 189.9301pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 50--51
+[][] 
+ []
+
+[5 <./Censorship4.png>] [6]
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <12> on input line 66.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <8> on input line 66.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <6> on input line 66.
+
+<Censorship5.png, id=39, 565.11125pt x 346.29375pt>
+File: Censorship5.png Graphic file (type png)
+ <use Censorship5.png>
+Package pdftex.def Info: Censorship5.png used on input line 70.
+(pdftex.def)             Requested size: 401.50146pt x 246.03935pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 70--71
+[][] 
+ []
+
+[7] [8 <./Censorship5.png>]
+File: Censorship3p5.png Graphic file (type png)
+ <use Censorship3p5.png>
+Package pdftex.def Info: Censorship3p5.png used on input line 84.
+(pdftex.def)             Requested size: 401.50146pt x 229.81447pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 84--85
+[][] 
+ []
+
+[9] [10] <Censorship6b.png, id=56, 693.59125pt x 206.7725pt>
+File: Censorship6b.png Graphic file (type png)
+
+<use Censorship6b.png>
+Package pdftex.def Info: Censorship6b.png used on input line 100.
+(pdftex.def)             Requested size: 401.50146pt x 119.6978pt.
+ <Censorship6.png, id=57, 638.385pt x 211.79124pt>
+File: Censorship6.png Graphic file (type png)
+
+<use Censorship6.png>
+Package pdftex.def Info: Censorship6.png used on input line 101.
+(pdftex.def)             Requested size: 401.50146pt x 133.20297pt.
+ <Censorship6c.png, id=58, 638.385pt x 211.79124pt>
+File: Censorship6c.png Graphic file (type png)
+
+<use Censorship6c.png>
+Package pdftex.def Info: Censorship6c.png used on input line 102.
+(pdftex.def)             Requested size: 401.50146pt x 133.20297pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 100--103
+[][]
+ []
+
+
+Overfull \hbox (11.50146pt too wide) in paragraph at lines 100--103
+[]
+ []
+
+
+Overfull \hbox (11.50146pt too wide) in paragraph at lines 100--103
+[] 
+ []
+
+[11 <./Censorship6b.png> <./Censorship6.png>]
+<Censorship6d.png, id=66, 638.385pt x 206.7725pt>
+File: Censorship6d.png Graphic file (type png)
+ <use Censorship6d.png>
+Package pdftex.def Info: Censorship6d.png used on input line 108.
+(pdftex.def)             Requested size: 401.50146pt x 130.0465pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 108--109
+[][] 
+ []
+
+[12 <./Censorship6c.png> <./Censorship6d.png>] [13]
+<Censorship7.png, id=81, 402.50375pt x 228.855pt>
+File: Censorship7.png Graphic file (type png)
+ <use Censorship7.png>
+Package pdftex.def Info: Censorship7.png used on input line 137.
+(pdftex.def)             Requested size: 401.50146pt x 228.28522pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 137--138
+[][] 
+ []
+
+[14] [15 <./Censorship7.png>] [16]
+No file censorship_rejection.bbl.
+LaTeX Font Info:    Try loading font information for OMS+cmr on input line 157.
+
+(/usr/share/texlive/texmf-dist/tex/latex/base/omscmr.fd
+File: omscmr.fd 2014/09/29 v2.5h Standard LaTeX font definitions
+)
+LaTeX Font Info:    Font shape `OMS/cmr/m/n' in size <12> not available
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 157.
+
+Overfull \hbox (102.56387pt too wide) in paragraph at lines 157--158
+[]\OT1/cmr/m/n/12 Casper is cur-rently a work in progress. See https://medium.c
+om/@VitalikButerin/minimal-
+ []
+
+
+Overfull \hbox (160.74289pt too wide) in paragraph at lines 157--158
+\OT1/cmr/m/n/12 slashing-conditions-20f0b500fc6c, https://github.com/ethereum/r
+esearch/tree/master/casper4/papers
+ []
+
+
+Overfull \hbox (161.23318pt too wide) in paragraph at lines 158--159
+[]\OT1/cmr/m/n/12 Christopher Na-toli and Vin-cent Gramoli, ``The Bal-ance At-t
+ack'': https://arxiv.org/pdf/1612.09426.pdf 
+ []
+
+
+Overfull \hbox (67.64943pt too wide) in paragraph at lines 160--161
+[]\OT1/cmr/m/n/12 Jeff Cole-man, ``State Chan-nels: An Ex-pla-na-tion'': http:/
+/www.jeffcoleman.ca/state-
+ []
+
+
+Overfull \hbox (83.92566pt too wide) in paragraph at lines 161--162
+[]\OT1/cmr/m/n/12 http://www.econinfosec.org/archive/weis2013/papers/KrollDavey
+FeltenWEIS2013.pdf 
+ []
+
+[17] (./censorship_rejection.aux) ) 
+Here is how much of TeX's memory you used:
+ 1571 strings out of 494953
+ 22794 string characters out of 6180977
+ 77754 words of memory out of 5000000
+ 4848 multiletter control sequences out of 15000+600000
+ 9664 words of font info for 34 fonts, out of 8000000 for 9000
+ 14 hyphenation exceptions out of 8191
+ 37i,6n,23p,1266b,227s stack positions out of 5000i,500n,10000p,200000b,80000s
+</usr/share/texlive/texmf-dist/fonts/type1/p
+ublic/amsfonts/cm/cmbx10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/
+amsfonts/cm/cmbx12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfon
+ts/cm/cmex10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/
+cmmi12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi6.
+pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb></u
+sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/shar
+e/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/share/texli
+ve/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></usr/share/texlive/texm
+f-dist/fonts/type1/public/amsfonts/cm/cmr6.pfb></usr/share/texlive/texmf-dist/f
+onts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texlive/texmf-dist/fonts/typ
+e1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/pub
+lic/amsfonts/cm/cmsy6.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/ams
+fonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/c
+m/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti
+12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb
+>
+Output written on censorship_rejection.pdf (17 pages, 316546 bytes).
+PDF statistics:
+ 150 PDF objects out of 1000 (max. 8388607)
+ 91 compressed objects within 1 object stream
+ 0 named destinations out of 1000 (max. 500000)
+ 56 words of extra memory for PDF output out of 10000 (max. 10000000)
+
