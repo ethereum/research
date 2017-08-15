@@ -28,13 +28,15 @@ Unlike invalid block attacks or finality reversion attacks, which can both be de
 
 Most blockchain projects make no effort to even try to deal with the problem of majority coalition attacks such as censorship; an honest majority is usually one of the assumptions in any formal security proofs and models. Our goal is to see if we can go further.
 
+One way to view what the strategies that we will explore is to see them as introducing non-censorship itself as a first-class consensus rule - that is to say, a block that does not include transactions that should have been included is invalid in the same way that a block that includes transactions that should not have been included (ie. invalid transactions) is invalid. As we will later see, this kind of consensus rule is fundamentally different from the other kinds of consensus rules that blockchain protocols tend to currently use, and we will look at the consequences that this introduces.
+
 \section{Forgiving Rejection}
 
 For simplicity, let us assume that there exists a simple Nakamoto-style blockchain, where consensus is determined by the longest chain rule.
 
 \includegraphics[width=400px]{Censorship2.png}
 
-Suppose further that there is only one type of transaction. This type of transaction requires a very large amount of proof of work to create, for anti-denial-of-service reasons, and we make the computational assumption that there does not exist enough computing power in the world to create more valid transactions than a single node can verify as part of the process of verifying a block (we are deliberately very generous with assumptions at first to illustrate the basic principle).
+Suppose further that there is only one type of transaction. This type of transaction requires a very large amount of proof of work to create, for anti-denial-of-service reasons, and we make the computational assumption that there does not exist enough computing power in the world to create more valid transactions than a single node can verify as part of the process of verifying a single block (we are deliberately very generous with assumptions at first to illustrate the basic principle).
 
 Now, let us modify the Nakamoto fork choice rule with an additional rule: if a node sees a transaction X for the first time at time T, then starting from time T + 168 hours, it will reject all chains that do not include X. We assume that transactions are always re-broadcasted, so that all honest clients and miners see all transactions (this is a reasonable assumption because it is already the case with blocks).
 
@@ -43,7 +45,7 @@ Now, let us modify the Nakamoto fork choice rule with an additional rule: if a n
 
 Notice that the primary guarantee of non-censorship is now met trivially. If a node sees a transaction X, then the blockchain that it accepts must, by definition, be a blockchain that includes X, at least after 168 hours. The harder claim to evaluate has to do with \textit{agreement}: that is to say, can we guarantee that a blockchain with miners running these rules will not permanently split?
 
-Let us first suppose a synchrony assumption of one minute. Proof of work assumes a synchrony assumption implicitly, as if excessive network latency is permitted then it is quite easily possible for two chains to grow in parallel forever [cite 1], so this introduces no new assumptions. If this synchrony assumption applies both between miner and miner and between miner and client, then in the normal case no new risks are introduced: all miners will hear about all broadcasted transactions within one minute, miners include transactions immediately, and so analysis is identical to the standard Nakamoto case.
+Let us first suppose a synchrony assumption of one minute. Proof of work assumes a synchrony assumption implicitly, as if excessive network latency is permitted then it is quite easily possible for two chains to grow in parallel forever [cite 1]; the main new assumption that we are introducing for the moment is that it's not just \textit{miners} that need to have low latency but also \textit{clients}. If this synchrony assumption applies both between miner and miner and between miner and client, then in the normal case no new risks are introduced: all miners will hear about all broadcasted transactions within one minute, miners include transactions immediately, and so analysis is identical to the standard Nakamoto case.
 
 Now let us consider the possibility of \textit{temporary} 51\% attacks. Suppose that an extremely powerful miner broadcasts a block tree (that is, a chain or a diverging set of chains), and after this the miner's hashpower drops back to well below 51\%. For any given (block, transaction) pair, there is a maximum difference of two minutes in each client's perceived delay between the transaction and the block, and so it is very possible that some transaction was published (and seen by all clients) at time T, a chain not including that transaction published at time T + 168 hours - 30 seconds, with some clients perceiving the chain as having arrived before the 168 hour window and some clients perceiving the chain as having arrived after this window.
 
@@ -71,9 +73,7 @@ But what happens if there \textit{is} a 51\% attack? By adding this unforgiving 
 
 This is a genuine disadvantage for the security of proof of work chains that adopt this feature, albeit a surmountable one. Without unforgiving rejection, a 51\% attack on a proof of work chain would need to be permanent in order to cause a permanent chain split. With unforgiving rejection, the a 51\% attack that lasts one week is enough. However, the difference between the economic capacity needed to maintain a 51\% attack for two weeks and the capacity needed to maintain one forever is not that large.
 
-In proof of stake, the disadvantage is even smaller, as a 51\% attack triggered even once may by itself be enough to create a permanent chain split, so by adopting unforgiving rejection we appear to lose nothing.
-
-Even though off-chain governance - that is, clients manually selecting the chain that they perceive as being the honest chain and rejecting the attacking chain, is thus required to resolve 51\% attacks in both proof of work and proof of stake, by introducing unforgiving rejection we gain a major advantage. Because the censorship rejection mechanism forces a chain split, a censoring 51\% attacker no longer wins ``cleanly'' by default. Without automated censorship rejection rejection, the community must actively coordinate to reject a censoring 51\% attack chain. With rejection, at least some clients reject the censoring chain, and so there is no longer the pressure of a default in the attacker's favor - instead, the community must choose between two options of equal status, except that one is an attacking chain and the other is not, and so it seems much more plausible that the losing chain will win.
+In proof of stake, the disadvantage is even smaller, as a 51\% attack triggered even once may by itself be enough to create a permanent chain split, so by adopting unforgiving rejection we appear to lose nothing, and we gain the very substantial benefit that even a 51\% attack cannot cause clients to accept chains that are censoring.
 
 \section{Incentives in the Uncoordinated Majority Model}
 

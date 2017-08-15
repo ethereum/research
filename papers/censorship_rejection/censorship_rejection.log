@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.6.27)  13 AUG 2017 04:22
+This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.6.27)  15 AUG 2017 00:27
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -155,41 +155,40 @@ Overfull \hbox (29.12628pt too wide) in paragraph at lines 27--28
 [][] 
  []
 
-
-Overfull \hbox (20.55408pt too wide) in paragraph at lines 33--34
+[2 <./Censorship1.png>]
+Overfull \hbox (20.55408pt too wide) in paragraph at lines 35--36
 \OT1/cmr/m/n/12 For sim-plic-ity, let us as-sume that there ex-ists a sim-ple N
 akamoto-style blockchain,
  []
 
-<Censorship2.png, id=13, 368.37625pt x 156.585pt> [2 <./Censorship1.png>]
+<Censorship2.png, id=19, 368.37625pt x 156.585pt>
 File: Censorship2.png Graphic file (type png)
-
-<use Censorship2.png>
-Package pdftex.def Info: Censorship2.png used on input line 35.
+ <use Censorship2.png>
+Package pdftex.def Info: Censorship2.png used on input line 37.
 (pdftex.def)             Requested size: 401.50146pt x 170.6647pt.
 
-Overfull \hbox (29.12628pt too wide) in paragraph at lines 35--36
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 37--38
 [][] 
  []
 
 <Censorship3.png, id=20, 372.39125pt x 261.97874pt>
 File: Censorship3.png Graphic file (type png)
  <use Censorship3.png>
-Package pdftex.def Info: Censorship3.png used on input line 41.
+Package pdftex.def Info: Censorship3.png used on input line 43.
 (pdftex.def)             Requested size: 401.50146pt x 282.46912pt.
 
 <Censorship3p5.png, id=21, 457.71pt x 261.97874pt>
 File: Censorship3p5.png Graphic file (type png)
  <use Censorship3p5.png>
-Package pdftex.def Info: Censorship3p5.png used on input line 42.
+Package pdftex.def Info: Censorship3p5.png used on input line 44.
 (pdftex.def)             Requested size: 401.50146pt x 229.81447pt.
 
-Overfull \hbox (29.12628pt too wide) in paragraph at lines 41--43
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 43--45
 [][]
  []
 
 
-Overfull \hbox (11.50146pt too wide) in paragraph at lines 41--43
+Overfull \hbox (11.50146pt too wide) in paragraph at lines 43--45
 [] 
  []
 
@@ -197,28 +196,28 @@ Overfull \hbox (11.50146pt too wide) in paragraph at lines 41--43
 <Censorship4.png, id=31, 502.87875pt x 237.88875pt>
 File: Censorship4.png Graphic file (type png)
  <use Censorship4.png>
-Package pdftex.def Info: Censorship4.png used on input line 50.
+Package pdftex.def Info: Censorship4.png used on input line 52.
 (pdftex.def)             Requested size: 401.50146pt x 189.9301pt.
 
-Overfull \hbox (29.12628pt too wide) in paragraph at lines 50--51
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 52--53
 [][] 
  []
 
 [5 <./Censorship4.png>] [6]
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <12> on input line 66.
+(Font)              <12> on input line 68.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <8> on input line 66.
+(Font)              <8> on input line 68.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <6> on input line 66.
+(Font)              <6> on input line 68.
 
 <Censorship5.png, id=39, 565.11125pt x 346.29375pt>
 File: Censorship5.png Graphic file (type png)
  <use Censorship5.png>
-Package pdftex.def Info: Censorship5.png used on input line 70.
+Package pdftex.def Info: Censorship5.png used on input line 72.
 (pdftex.def)             Requested size: 401.50146pt x 246.03935pt.
 
-Overfull \hbox (29.12628pt too wide) in paragraph at lines 70--71
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 72--73
 [][] 
  []
 
@@ -232,19 +231,19 @@ Overfull \hbox (29.12628pt too wide) in paragraph at lines 84--85
 [][] 
  []
 
-[9] [10] <Censorship6b.png, id=56, 693.59125pt x 206.7725pt>
+[9] [10] <Censorship6b.png, id=58, 693.59125pt x 206.7725pt>
 File: Censorship6b.png Graphic file (type png)
 
 <use Censorship6b.png>
 Package pdftex.def Info: Censorship6b.png used on input line 100.
 (pdftex.def)             Requested size: 401.50146pt x 119.6978pt.
- <Censorship6.png, id=57, 638.385pt x 211.79124pt>
+ <Censorship6.png, id=59, 638.385pt x 211.79124pt>
 File: Censorship6.png Graphic file (type png)
 
 <use Censorship6.png>
 Package pdftex.def Info: Censorship6.png used on input line 101.
 (pdftex.def)             Requested size: 401.50146pt x 133.20297pt.
- <Censorship6c.png, id=58, 638.385pt x 211.79124pt>
+ <Censorship6c.png, id=60, 638.385pt x 211.79124pt>
 File: Censorship6c.png Graphic file (type png)
 
 <use Censorship6c.png>
@@ -265,8 +264,8 @@ Overfull \hbox (11.50146pt too wide) in paragraph at lines 100--103
 [] 
  []
 
-[11 <./Censorship6b.png> <./Censorship6.png>]
-<Censorship6d.png, id=66, 638.385pt x 206.7725pt>
+[11 <./Censorship6b.png> <./Censorship6.png> <./Censorship6c.png>]
+<Censorship6d.png, id=67, 638.385pt x 206.7725pt>
 File: Censorship6d.png Graphic file (type png)
  <use Censorship6d.png>
 Package pdftex.def Info: Censorship6d.png used on input line 108.
@@ -276,8 +275,8 @@ Overfull \hbox (29.12628pt too wide) in paragraph at lines 108--109
 [][] 
  []
 
-[12 <./Censorship6c.png> <./Censorship6d.png>] [13]
-<Censorship7.png, id=81, 402.50375pt x 228.855pt>
+[12 <./Censorship6d.png>] [13]
+<Censorship7.png, id=82, 402.50375pt x 228.855pt>
 File: Censorship7.png Graphic file (type png)
  <use Censorship7.png>
 Package pdftex.def Info: Censorship7.png used on input line 137.
@@ -287,7 +286,7 @@ Overfull \hbox (29.12628pt too wide) in paragraph at lines 137--138
 [][] 
  []
 
-[14] [15 <./Censorship7.png>] [16]
+[14 <./Censorship7.png>] [15]
 No file censorship_rejection.bbl.
 LaTeX Font Info:    Try loading font information for OMS+cmr on input line 157.
 
@@ -326,7 +325,7 @@ Overfull \hbox (83.92566pt too wide) in paragraph at lines 161--162
 FeltenWEIS2013.pdf 
  []
 
-[17] (./censorship_rejection.aux) ) 
+[16] (./censorship_rejection.aux) ) 
 Here is how much of TeX's memory you used:
  1571 strings out of 494953
  22794 string characters out of 6180977
@@ -352,10 +351,10 @@ fonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/c
 m/cmti10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmti
 12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmtt12.pfb
 >
-Output written on censorship_rejection.pdf (17 pages, 316546 bytes).
+Output written on censorship_rejection.pdf (16 pages, 318848 bytes).
 PDF statistics:
- 150 PDF objects out of 1000 (max. 8388607)
- 91 compressed objects within 1 object stream
+ 147 PDF objects out of 1000 (max. 8388607)
+ 89 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
  56 words of extra memory for PDF output out of 10000 (max. 10000000)
 
