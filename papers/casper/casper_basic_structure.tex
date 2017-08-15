@@ -16,24 +16,56 @@
 We give an introduction to the non-economic details of Casper: the Friendly Finality Gadget, Phase 1.
 \end{abstract}
 
-\section{Introduction}
+\section{Introduction, Protocol I}
 In the Casper protocol, there is a set of validators, and in each epoch validators have the ability to send two kinds of messages: $$[PREPARE, epoch, hash, epoch_{source}, hash_{source}]$$ and $$[COMMIT, epoch, hash]$$
+
+An \textit{epoch} is a period of 100 epochs; epoch $n$ begins at block $n * 100$ and ends at block $n * 100 + 99$. A \textit{checkpoint for epoch $n$} is a block with number $n * 100 - 1$; in a smoothly running blockchain there will usually be one checkpoint per epoch, but due to network latency or deliberate attacks there may be multiple competing checkpoints. The \textit{parent checkpoint} of a checkpoint is the 100th ancestor of the checkpoint block, and an \textit{ancestor checkpoint} of a checkpoint is either the parent checkpoint, or an ancestor checkpoint of the parent checkpoint. We define the \textit{ancestry hash} of a checkpoint as follows:
+
+\begin{itemize}
+\item The ancestry hash of the implied ``genesis checkpoint'' before epoch 0 is zero.
+\item The ancestry hash of any other checkpoint is the keccsk256 hash of the ancestry hash of its parent concatenated with the hash of the checkpoint.
+\end{itemize}
+
+Ancestry hashes thus form a direct hash chain, and otherwise have a one-to-one correspondence with checkpoint hashes.
+
+During epoch $n$, validators are expected to send prepare and commit messages specifying epoch $n$, and the ancestry hash of a checkpoint for epoch $n$ (i.e. with block number $n * 100 - 1$). Prepare messages are expected to specify as $hash_{source}$ a checkpoint for any previous epoch which is \textit{justified} (see below), and the $epoch_{source}$ is expected to be the epoch of that checkpoint.
 
 Each validator has a \textit{deposit size}; when a validator joins their deposit size is equal to the number of coins that they deposited, and from there on each validator's deposit size rises and falls as the validator receives rewards and penalties. For the rest of this paper, when we say ``$\frac{2}{3}$ of validators", we are referring to a \textit{deposit-weighted} fraction; that is, a set of validators whose combined deposit size equals to at least $\frac{2}{3}$ of the total deposit size of the entire set of validators. We also use ``$\frac{2}{3}$ commits" as shorthand for ``commits from $\frac{2}{3}$ of validators".
 
-If, during an epoch $e$, for some specific checkpoint hash $h$, $\frac{2}{3}$ prepares are sent of the form $$[PREPARE, e, h, epoch_{source}, hash_{source}]$$ with some specific $epoch_{source}$ and some specific $hash_{source}$, then $h$ is considered \textit{justified}. If $\frac{2}{3}$ commits are sent of the form $$[COMMIT, e, h]$$ then $h$ is considered \textit{finalized}. The $hash$ is the block hash of the block at the start of the epoch, so a $hash$ being finalized means that that block, and all of its ancestors, are also finalized. An ``ideal execution'' of the protocol is one where, during every epoch, every validator prepares and commits some block hash at the start of that epoch, specifying the same $epoch_{source}$ and $hash_{source}$. We want to try to create incentives to encourage this ideal execution.
+If, during an epoch $e$, for some specific ancestry hash $h$, for any specific ($epoch_{source}, hash_{source}$ pair), there exist $\frac{2}{3}$ prepares of the form $$[PREPARE, e, h, epoch_{source}, hash_{source}]$$, then $h$ is considered \textit{justified}. If $\frac{2}{3}$ commits are sent of the form $$[COMMIT, e, h]$$ then $h$ is considered \textit{finalized}.
 
-Possible deviations from this ideal execution that we want to minimize or avoid include:
+We add the following modifications:
 
 \begin{itemize}
-\item Any of the four slashing conditions get violated.
-\item During some epoch, we do not get $\frac{2}{3}$ commits for the $hash$ that received $\frac{2}{3}$ prepares.
-\item During some epoch, we do not get $\frac{2}{3}$ prepares for the same \\ $(h, hash_{source}, epoch_{source})$ combination.
+\item For a checkpoint to be finalized, it must be justified.
+\item For a checkpoint to be justified, the $hash_{source}$ used to justify it must itself be justified.
+\item Prepare and commit messages are only accepted as part of blocks; that is, for a client to see $\frac{2}{3}$ commits of some hash, they must receive a block such that in the chain terminating at that block $\frac{2}{3}$ commits for that hash have been processed.
 \end{itemize}
 
-From within the view of the blockchain, we only see the blockchain's own history, including messages that were passed in. In a history that contains some blockhash $H$, our strategy will be to reward validators who prepared and committed $H$, and not reward prepares or commits for any hash $H\prime \ne H$. The blockchain state will also keep track of the most recent hash in its own history that received $\frac{2}{3}$ prepares, and only reward prepares whose $epoch_{source}$ and $hash_{source}$ point to this hash. These two techniques will help to ``coordinate'' validators toward preparing and committing a single hash with a single source, as required by the protocol.
+This gives substantial gains in implementation simplicity, because this means that we can now have a fork choice rule where the ``score'' of a block only depends on the block and its children, putting it into a similar category as more traditional PoW-based fork choice rules such as the longest chain rule and GHOST. However, this fork choice rule is also \textit{finality-bearing}: it is impossible for two incompatible checkpoints to be finalized unless at least $\frac{1}{3}$ of the validators violated a \textit{slashing condition} (see below).
 
-\section{Rewards and Penalties}
+There are two slashing conditions:
+
+\begin{enumerate}
+\item \textbf{NO\_DBL\_PREPARE}: a validator cannot prepare two different checkpoints for the same epoch.
+\item \textbf{PREPARE\_COMMIT\_CONSISTENCY}: if a validator has made a commit with epoch $n$, they cannot make a prepare with $epoch > n$ and $epoch_{source} < n$.
+\end{enumerate}
+
+Earlier versions of Casper had four slashing conditions, but we can reduce to two because of the three modifications above; they ensure that blocks will not register commits or prepares that violate the other two conditions.
+
+\section{Proof Sketch of Safety and Plausible Liveness}
+
+We give a proof sketch of two properties of this scheme: \textit{safety} and \textit{plausible liveness}. Safety means that two incompatible checkpoints cannot be finalized unless at least $\frac{1}{3}$ of validators violate a slashing condition. Plausible liveness means that it is always possible for $\frac{2}{3}$ of honest validators to finalize a new checkpoint, regardless of what previous events took place.
+
+Suppose that two incompatible checkpoints $A$ (epoch $e_A$) and $B$ (epoch $e_B$) are finalized:
+
+[diagram]
+
+This implies $\frac{2}{3}$ commits and $\frac{2}{3}$ prepares in epochs $e_A$ and $e_B$. In the trivial case where $e_A = e_B$, this implies that some intersection of $\frac{1}{3}$ of validators must have violated \textbf{NO\_DBL\_PREPARE}. In other cases, there must exist two chains $e_A > e_A^1 > e_A^2 > ... > G$ and $e_B > e_B^1 > e_B^2 > ... > G$ of justified checkpoints, both terminating at the genesis. Suppose without loss of generality that $e_A > e_B$. Then, there must be some $e_A^i$ that either $e_A^i = e_B$ or $e_A^i > e_B > e_A^{i+1}$. In the first case, since $A^i$ and $B$ both have $\frac{2}{3}$ prepares, at least $\frac{1}{3}$ of validators violated \textbf{NO\_DBL\_PREPARE}. Otherwise, $B$ has $\frac{2}{3}$ commits and there exist $\frac{2}{3}$ prepares with $epoch > B$ and $epoch_{source} < B$, so at least $\frac{1}{3}$ of validators violated \textbf{PREPARE\_COMMIT\_CONSISTENCY}. This proves safety.
+
+Now, we prove liveness. Suppose that all existing validators have sent some sequence of prepare and commit messages. Let $M$ with epoch $e_M$ be the highest-epoch checkpoint that was justified. Honest validators have not committed on any block which is not justified. Hence, neither slashing condition stops them from making prepares on a child of $M$, using $e_M$ as $epoch_{source}$, and then committing this child.
+
+\section{Dynamic Validator Sets}
 
 We define the following constants and functions:
 
