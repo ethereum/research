@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.6.27)  15 AUG 2017 04:11
+This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.6.27)  15 AUG 2017 23:33
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -158,82 +158,59 @@ LaTeX Font Info:    External font `cmex10' loaded for size
 LaTeX Font Info:    External font `cmex10' loaded for size
 (Font)              <7> on input line 14.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <12> on input line 20.
+(Font)              <12> on input line 22.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <8> on input line 20.
+(Font)              <8> on input line 22.
 LaTeX Font Info:    External font `cmex10' loaded for size
-(Font)              <6> on input line 20.
-LaTeX Font Info:    Try loading font information for OMS+cmr on input line 25.
+(Font)              <6> on input line 22.
+
+[1
+
+{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]
+LaTeX Font Info:    Try loading font information for OMS+cmr on input line 35.
 
 (/usr/share/texlive/texmf-dist/tex/latex/base/omscmr.fd
 File: omscmr.fd 2014/09/29 v2.5h Standard LaTeX font definitions
 )
 LaTeX Font Info:    Font shape `OMS/cmr/m/n' in size <12> not available
-(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 25.
- [1
-
-{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2]
-Overfull \hbox (1.48117pt too wide) in paragraph at lines 50--51
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 35.
+ [2]
+Overfull \hbox (1.48117pt too wide) in paragraph at lines 60--61
 []\OT1/cmr/bx/n/12 NO[]DBL[]PREPARE\OT1/cmr/m/n/12 : a val-ida-tor can-not pre-
 pare two dif-fer-ent check-
  []
 
-[3] [4] [5]
-Overfull \hbox (10.7546pt too wide) in paragraph at lines 112--113
-[]\OT1/cmr/m/n/12 Hence, the PRE-PARE[]COMMIT[]CONSISTENCY slash-ing con-di-tio
-n poses
+[3] [4]
+Overfull \hbox (48.00797pt too wide) in paragraph at lines 84--85
+[]\OT1/cmr/m/n/12 [https://cdn-images-1.medium.com/max/800/1*IhXmzZG9toAs3oedZX
+0spg.jpeg] 
  []
 
-[6]
-Overfull \hbox (5.39354pt too wide) in paragraph at lines 114--115
-[]\OT1/cmr/m/n/12 We are as-sum-ing that there are $[]$ pre-pares for $(\OML/cm
-m/m/it/12 e; H; epoch[]; hash[]\OT1/cmr/m/n/12 )$,
- []
-
-[7]
-Overfull \hbox (15.85455pt too wide) in paragraph at lines 137--137
-[]\OT1/cmr/m/n/12 Now, we need to show that, for any given to-tal de-posit size
-, $[]$
- []
-
-[8] [9]
-Underfull \hbox (badness 3291) in paragraph at lines 179--179
-[]|\OT1/cmr/m/n/12 Amount lost by at-
- []
-
-
-Overfull \hbox (17.62482pt too wide) in paragraph at lines 179--180
-[][] 
- []
-
-[10] [11] [12]
+[5] [6] [7]
 No file casper_basic_structure.bbl.
-[13] (./casper_basic_structure.aux) ) 
+[8] (./casper_basic_structure.aux) ) 
 Here is how much of TeX's memory you used:
  1610 strings out of 494953
  22932 string characters out of 6180977
- 81571 words of memory out of 5000000
+ 80571 words of memory out of 5000000
  4895 multiletter control sequences out of 15000+600000
  9456 words of font info for 33 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
- 37i,10n,23p,978b,181s stack positions out of 5000i,500n,10000p,200000b,80000s
-</usr/share/texlive/texmf-dist/fonts/type1
-/public/amsfonts/cm/cmbx10.pfb></usr/share/texlive/texmf-dist/fonts/type1/publi
-c/amsfonts/cm/cmbx12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
-onts/cm/cmex10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/c
-m/cmmi12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi
-6.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmmi8.pfb><
-/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.pfb></usr/sh
-are/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></usr/share/tex
-live/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></usr/share/texlive/te
-xmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texlive/texmf-dist
-/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts
-/type1/public/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist/fonts/type1/
-public/amsfonts/cm/cmti12.pfb>
-Output written on casper_basic_structure.pdf (13 pages, 185707 bytes).
+ 37i,6n,23p,1062b,181s stack positions out of 5000i,500n,10000p,200000b,80000s
+</usr/share/texlive/texmf-dist/fonts/type1/
+public/amsfonts/cm/cmbx10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public
+/amsfonts/cm/cmbx12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
+nts/cm/cmmi12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
+/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.
+pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></u
+sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></usr/shar
+e/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texliv
+e/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texm
+f-dist/fonts/type1/public/amsfonts/cm/cmti12.pfb>
+Output written on casper_basic_structure.pdf (8 pages, 144071 bytes).
 PDF statistics:
- 99 PDF objects out of 1000 (max. 8388607)
- 70 compressed objects within 1 object stream
+ 71 PDF objects out of 1000 (max. 8388607)
+ 50 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
  1 words of extra memory for PDF output out of 10000 (max. 10000000)
 
