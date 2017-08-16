@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.6.27)  15 AUG 2017 23:33
+This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.6.27)  16 AUG 2017 03:55
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -167,50 +167,87 @@ LaTeX Font Info:    External font `cmex10' loaded for size
 [1
 
 {/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}]
-LaTeX Font Info:    Try loading font information for OMS+cmr on input line 35.
+<prepares_commits.png, id=14, 1201.288pt x 346.896pt>
+File: prepares_commits.png Graphic file (type png)
 
+<use prepares_commits.png>
+Package pdftex.def Info: prepares_commits.png used on input line 30.
+(pdftex.def)             Requested size: 401.50146pt x 115.93695pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 30--31
+[][] 
+ []
+
+LaTeX Font Info:    Try loading font information for OMS+cmr on input line 35.
 (/usr/share/texlive/texmf-dist/tex/latex/base/omscmr.fd
 File: omscmr.fd 2014/09/29 v2.5h Standard LaTeX font definitions
 )
 LaTeX Font Info:    Font shape `OMS/cmr/m/n' in size <12> not available
 (Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 35.
- [2]
+ [2 <./prepares_commits.png>] [3]
 Overfull \hbox (1.48117pt too wide) in paragraph at lines 60--61
 []\OT1/cmr/bx/n/12 NO[]DBL[]PREPARE\OT1/cmr/m/n/12 : a val-ida-tor can-not pre-
 pare two dif-fer-ent check-
  []
 
-[3] [4]
-Overfull \hbox (48.00797pt too wide) in paragraph at lines 84--85
-[]\OT1/cmr/m/n/12 [https://cdn-images-1.medium.com/max/800/1*IhXmzZG9toAs3oedZX
-0spg.jpeg] 
+<conflicting_checkpoints.png, id=25, 634.37pt x 403.5075pt>
+File: conflicting_checkpoints.png Graphic file (type png)
+
+<use conflicting_checkpoints.png>
+Package pdftex.def Info: conflicting_checkpoints.png used on input line 72.
+(pdftex.def)             Requested size: 301.1261pt x 191.5449pt.
+ [4] [5 <./conflicting_checkpoints.png>]
+<fork_choice_rule.jpeg, id=33, 707.64375pt x 442.65375pt>
+File: fork_choice_rule.jpeg Graphic file (type jpg)
+
+<use fork_choice_rule.jpeg>
+Package pdftex.def Info: fork_choice_rule.jpeg used on input line 84.
+(pdftex.def)             Requested size: 401.50146pt x 251.1535pt.
+
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 84--85
+[][] 
  []
 
-[5] [6] [7]
+[6 <./fork_choice_rule.jpeg>] [7]
+<validator_set_misalignment.png, id=41, 422.57875pt x 283.0575pt>
+File: validator_set_misalignment.png Graphic file (type png)
+
+<use validator_set_misalignment.png>
+Package pdftex.def Info: validator_set_misalignment.png used on input line 113.
+
+(pdftex.def)             Requested size: 250.93842pt x 168.09088pt.
+ [8 <./validator_set_misalignment.png (PNG copy)>] <CommitsSync.png, id=45, 422
+.57875pt x 373.395pt>
+File: CommitsSync.png Graphic file (type png)
+
+<use CommitsSync.png>
+Package pdftex.def Info: CommitsSync.png used on input line 123.
+(pdftex.def)             Requested size: 301.1261pt x 266.08658pt.
+ [9 <./CommitsSync.png>]
 No file casper_basic_structure.bbl.
-[8] (./casper_basic_structure.aux) ) 
+[10] (./casper_basic_structure.aux) ) 
 Here is how much of TeX's memory you used:
- 1610 strings out of 494953
- 22932 string characters out of 6180977
- 80571 words of memory out of 5000000
- 4895 multiletter control sequences out of 15000+600000
+ 1637 strings out of 494953
+ 23600 string characters out of 6180977
+ 79571 words of memory out of 5000000
+ 4915 multiletter control sequences out of 15000+600000
  9456 words of font info for 33 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
  37i,6n,23p,1062b,181s stack positions out of 5000i,500n,10000p,200000b,80000s
-</usr/share/texlive/texmf-dist/fonts/type1/
-public/amsfonts/cm/cmbx10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public
-/amsfonts/cm/cmbx12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfo
-nts/cm/cmmi12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm
-/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10.
-pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></u
-sr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></usr/shar
-e/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texliv
-e/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/texm
-f-dist/fonts/type1/public/amsfonts/cm/cmti12.pfb>
-Output written on casper_basic_structure.pdf (8 pages, 144071 bytes).
+</usr/share/texlive/texmf-dist/fonts/type1
+/public/amsfonts/cm/cmbx10.pfb></usr/share/texlive/texmf-dist/fonts/type1/publi
+c/amsfonts/cm/cmbx12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsf
+onts/cm/cmmi12.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/c
+m/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10
+.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr12.pfb></
+usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></usr/sha
+re/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texli
+ve/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/tex
+mf-dist/fonts/type1/public/amsfonts/cm/cmti12.pfb>
+Output written on casper_basic_structure.pdf (10 pages, 350226 bytes).
 PDF statistics:
- 71 PDF objects out of 1000 (max. 8388607)
- 50 compressed objects within 1 object stream
+ 86 PDF objects out of 1000 (max. 8388607)
+ 55 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
- 1 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 26 words of extra memory for PDF output out of 10000 (max. 10000000)
 

@@ -27,7 +27,7 @@ In the Casper Phase 1 implementation for Ethereum, the ``proposal mechanism'' is
 
 In the Casper protocol, there exists a set of validators, and in each \textit{epoch} (see below) validators have the ability to send two kinds of messages: $$[PREPARE, epoch, hash, epoch_{source}, hash_{source}]$$ and $$[COMMIT, epoch, hash]$$
 
-[diagram]
+\includegraphics[width=400px]{prepares_commits.png}
 
 An \textit{epoch} is a period of 100 epochs; epoch $n$ begins at block $n * 100$ and ends at block $n * 100 + 99$. A \textit{checkpoint for epoch $n$} is a block with number $n * 100 - 1$; in a smoothly running blockchain there will usually be one checkpoint per epoch, but due to network latency or deliberate attacks there may be multiple competing checkpoints. The \textit{parent checkpoint} of a checkpoint is the 100th ancestor of the checkpoint block, and an \textit{ancestor checkpoint} of a checkpoint is either the parent checkpoint, or an ancestor checkpoint of the parent checkpoint. We define the \textit{ancestry hash} of a checkpoint as follows:
 
@@ -67,9 +67,9 @@ Earlier versions of Casper had four slashing conditions, but we can reduce to tw
 
 We give a proof sketch of two properties of this scheme: \textit{safety} and \textit{plausible liveness}. Safety means that two incompatible checkpoints cannot be finalized unless at least $\frac{1}{3}$ of validators violate a slashing condition. Plausible liveness means that it is always possible for $\frac{2}{3}$ of honest validators to finalize a new checkpoint, regardless of what previous events took place.
 
-Suppose that two incompatible checkpoints $A$ (epoch $e_A$) and $B$ (epoch $e_B$) are finalized:
+Suppose that two conflicting checkpoints $A$ (epoch $e_A$) and $B$ (epoch $e_B$) are finalized.
 
-[diagram]
+\includegraphics[width=300px]{conflicting_checkpoints.png}
 
 This implies $\frac{2}{3}$ commits and $\frac{2}{3}$ prepares in epochs $e_A$ and $e_B$. In the trivial case where $e_A = e_B$, this implies that some intersection of $\frac{1}{3}$ of validators must have violated \textbf{NO\_DBL\_PREPARE}. In other cases, there must exist two chains $e_A > e_A^1 > e_A^2 > ... > G$ and $e_B > e_B^1 > e_B^2 > ... > G$ of justified checkpoints, both terminating at the genesis. Suppose without loss of generality that $e_A > e_B$. Then, there must be some $e_A^i$ that either $e_A^i = e_B$ or $e_A^i > e_B > e_A^{i+1}$. In the first case, since $A^i$ and $B$ both have $\frac{2}{3}$ prepares, at least $\frac{1}{3}$ of validators violated \textbf{NO\_DBL\_PREPARE}. Otherwise, $B$ has $\frac{2}{3}$ commits and there exist $\frac{2}{3}$ prepares with $epoch > B$ and $epoch_{source} < B$, so at least $\frac{1}{3}$ of validators violated \textbf{PREPARE\_COMMIT\_CONSISTENCY}. This proves safety.
 
@@ -81,7 +81,7 @@ The mechanism described above ensures \textit{plausible liveness}; however, it b
 
 Here is one possible example:
 
-[https://cdn-images-1.medium.com/max/800/1*IhXmzZG9toAs3oedZX0spg.jpeg]
+\includegraphics[width=400px]{fork_choice_rule.jpeg}
 
 In this case, $HASH1$ or any descendant thereof cannot be finalized without slashing $\frac{1}{6}$ of validators. However, miners on a proof of work chain would interpret $HASH1$ as the head and start mining descendants of it.
 
@@ -110,7 +110,7 @@ For a validator to leave, they must send a ``withdraw'' message. If their withdr
 
 For a checkpoint to be justified, it must be prepared by a set of validators which contains (i) at least $\frac{2}{3}$ of the current dynasty (that is, validators with $startDynasty \le curDynasty < endDynasty$), and (ii) at least $\frac{2}{3}$ of the previous dyansty (that is, validators with $startDynasty \le curDynasty - 1 < endDynasty$. Finalization with commits works similarly. The current and previous dynasties will usually mostly overlap; but in cases where they substantially diverge this ``stitching'' mechanism ensures that dynasty divergences do not lead to situations where a finality reversion or other failure can happen because different messages are signed by different validator sets and so equivocation is avoided.
 
-[diagram]
+\includegraphics[width=250px]{validator_set_misalignment.png}
 
 \section{Mass Crash Failure Recovery}
 
@@ -120,7 +120,7 @@ We can recover from this by instituting a rule that validators who do not prepar
 
 Note that this does introduce the possibility of two conflicting checkpoints being finalized, with validators only losing money on one of the two checkpoints:
 
-[diagram http://vitalik.ca/files/CommitsSync.png]
+\includegraphics[width=300px]{CommitsSync.png}
 
 If the goal is simply to achieve maximally close to 50\% fault tolerance, then clients should simply favor the finalized checkpoint that they received earlier. However, if clients are also interested in defeating 51\% censorship attacks, then they may want to at least sometimes choose the minority chain. All forms of ``51\% attacks'' can thus be resolved fairly cleanly via ``user-activated soft forks'' that reject what would normally be the dominant chain. Particularly, note that finalizing even one block on the dominant chain precludes the attacking validators from preparing on the minority chain because of \textbf{PREPARE\_COMMIT\_CONSISTENCY}, at least until their balances decrease to the point where the minority can commit, so such a fork would also serve the function of costing the majority attacker a very large portion of their deposits.
 
@@ -134,7 +134,7 @@ This introduces the basic workings of Casper the Friendly Finality Gadget's prep
 \begin{itemize}
 \item Aviv Zohar and Yonatan Sompolinsky, ``Fast Money Grows on Trees, not Chains'': https://eprint.iacr.org/2013/881.pdf
 \item Jae Kwon, ``Tendermint'': http://tendermint.org/tendermint.pdf
-\item ...., ``Practical Byzantine Fault Tolerance'': ...
+\item Miguel Castro and Barbara Liskov, ``Practical Byzantine Fault Tolerance'': http://pmg.csail.mit.edu/papers/osdi99.pdf 
 \end{itemize}
 
 \end{document}
