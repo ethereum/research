@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.6.27)  17 AUG 2017 16:44
+This is pdfTeX, Version 3.14159265-2.6-1.40.16 (TeX Live 2015/Debian) (preloaded format=pdflatex 2017.6.27)  20 AUG 2017 04:48
 entering extended mode
  restricted \write18 enabled.
  %&-line parsing enabled.
@@ -178,58 +178,64 @@ Overfull \hbox (29.12628pt too wide) in paragraph at lines 30--31
 [][] 
  []
 
-LaTeX Font Info:    Try loading font information for OMS+cmr on input line 35.
+LaTeX Font Info:    Try loading font information for OMS+cmr on input line 37.
 (/usr/share/texlive/texmf-dist/tex/latex/base/omscmr.fd
 File: omscmr.fd 2014/09/29 v2.5h Standard LaTeX font definitions
 )
 LaTeX Font Info:    Font shape `OMS/cmr/m/n' in size <12> not available
-(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 35.
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 37.
  [2 <./prepares_commits.png>] [3]
-Overfull \hbox (1.48117pt too wide) in paragraph at lines 60--61
+Overfull \hbox (2.44592pt too wide) in paragraph at lines 57--58
+[]\OT1/cmr/m/n/12 This gives sub-stan-tial gains in im-ple-men-ta-tion sim-plic
+-ity, be-cause it means
+ []
+
+
+Overfull \hbox (1.48117pt too wide) in paragraph at lines 62--63
 []\OT1/cmr/bx/n/12 NO[]DBL[]PREPARE\OT1/cmr/m/n/12 : a val-ida-tor can-not pre-
 pare two dif-fer-ent check-
  []
 
-<conflicting_checkpoints.png, id=25, 634.37pt x 403.5075pt>
+[4] <conflicting_checkpoints.png, id=28, 634.37pt x 403.5075pt>
 File: conflicting_checkpoints.png Graphic file (type png)
 
 <use conflicting_checkpoints.png>
-Package pdftex.def Info: conflicting_checkpoints.png used on input line 72.
+Package pdftex.def Info: conflicting_checkpoints.png used on input line 76.
 (pdftex.def)             Requested size: 301.1261pt x 191.5449pt.
- [4] [5 <./conflicting_checkpoints.png>]
+ [5 <./conflicting_checkpoints.png>]
 <fork_choice_rule.jpeg, id=33, 707.64375pt x 442.65375pt>
 File: fork_choice_rule.jpeg Graphic file (type jpg)
 
 <use fork_choice_rule.jpeg>
-Package pdftex.def Info: fork_choice_rule.jpeg used on input line 84.
+Package pdftex.def Info: fork_choice_rule.jpeg used on input line 88.
 (pdftex.def)             Requested size: 401.50146pt x 251.1535pt.
 
-Overfull \hbox (29.12628pt too wide) in paragraph at lines 84--85
+Overfull \hbox (29.12628pt too wide) in paragraph at lines 88--89
 [][] 
  []
 
 [6 <./fork_choice_rule.jpeg>] [7]
-<validator_set_misalignment.png, id=41, 422.57875pt x 283.0575pt>
+<validator_set_misalignment.png, id=42, 422.57875pt x 283.0575pt>
 File: validator_set_misalignment.png Graphic file (type png)
 
 <use validator_set_misalignment.png>
-Package pdftex.def Info: validator_set_misalignment.png used on input line 113.
+Package pdftex.def Info: validator_set_misalignment.png used on input line 117.
 
 (pdftex.def)             Requested size: 250.93842pt x 168.09088pt.
- [8 <./validator_set_misalignment.png (PNG copy)>] <CommitsSync.png, id=45, 422
-.57875pt x 373.395pt>
+ [8]
+<CommitsSync.png, id=46, 422.57875pt x 373.395pt>
 File: CommitsSync.png Graphic file (type png)
-
-<use CommitsSync.png>
-Package pdftex.def Info: CommitsSync.png used on input line 123.
+ <use CommitsSync.png>
+Package pdftex.def Info: CommitsSync.png used on input line 127.
 (pdftex.def)             Requested size: 301.1261pt x 266.08658pt.
- [9 <./CommitsSync.png>]
+
+[9 <./validator_set_misalignment.png (PNG copy)>] [10 <./CommitsSync.png>]
 No file casper_basic_structure.bbl.
-[10] (./casper_basic_structure.aux) ) 
+[11] (./casper_basic_structure.aux) ) 
 Here is how much of TeX's memory you used:
  1637 strings out of 494953
  23600 string characters out of 6180977
- 79571 words of memory out of 5000000
+ 80571 words of memory out of 5000000
  4915 multiletter control sequences out of 15000+600000
  9456 words of font info for 33 fonts, out of 8000000 for 9000
  14 hyphenation exceptions out of 8191
@@ -243,11 +249,12 @@ m/cmmi8.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr10
 usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr17.pfb></usr/sha
 re/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmr8.pfb></usr/share/texli
 ve/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb></usr/share/texlive/tex
-mf-dist/fonts/type1/public/amsfonts/cm/cmti12.pfb>
-Output written on casper_basic_structure.pdf (10 pages, 351625 bytes).
+mf-dist/fonts/type1/public/amsfonts/cm/cmsy8.pfb></usr/share/texlive/texmf-dist
+/fonts/type1/public/amsfonts/cm/cmti12.pfb>
+Output written on casper_basic_structure.pdf (11 pages, 360532 bytes).
 PDF statistics:
- 86 PDF objects out of 1000 (max. 8388607)
- 55 compressed objects within 1 object stream
+ 93 PDF objects out of 1000 (max. 8388607)
+ 60 compressed objects within 1 object stream
  0 named destinations out of 1000 (max. 500000)
  26 words of extra memory for PDF output out of 10000 (max. 10000000)
 

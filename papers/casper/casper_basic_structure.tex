@@ -29,7 +29,7 @@ In the Casper protocol, there exists a set of validators, and in each \textit{ep
 
 \includegraphics[width=400px]{prepares_commits.png}
 
-An \textit{epoch} is a period of 100 epochs; epoch $n$ begins at block $n * 100$ and ends at block $n * 100 + 99$. A \textit{checkpoint for epoch $n$} is a block with number $n * 100 - 1$; in a smoothly running blockchain there will usually be only one checkpoint per epoch, but due to natural network latency or deliberate attacks there may be multiple competing checkpoints during some epochs. The \textit{parent checkpoint} of a checkpoint is the 100th ancestor of the checkpoint block, and an \textit{ancestor checkpoint} of a checkpoint is either the parent checkpoint, or an ancestor checkpoint of the parent checkpoint.
+An \textit{epoch} is a period of 100 blocks; epoch $n$ begins at block $n * 100$ and ends at block $n * 100 + 99$. A \textit{checkpoint for epoch $n$} is a block with number $n * 100 - 1$; in a smoothly running blockchain there will usually be only one checkpoint per epoch, but due to natural network latency or deliberate attacks there may be multiple competing checkpoints during some epochs. The \textit{parent checkpoint} of a checkpoint is the 100th ancestor of the checkpoint block, and an \textit{ancestor checkpoint} of a checkpoint is either the parent checkpoint, or an ancestor checkpoint of the parent checkpoint.
 
 We define the \textit{ancestry hash} of a checkpoint as follows:
 
