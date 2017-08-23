@@ -37,6 +37,21 @@
 % for indicator functions
 \usepackage{dsfont}
 
+% For automatic capitalizaton of section names, etc.
+\usepackage{titlesec,titlecaps}
+
+
+\Addlcwords{is with of the and in}
+%\Addlcwords{of the}
+%\Addlcwords{and}
+\titleformat{\section}[block]{}{\normalfont\Large\bfseries\thesection.\;}{0pt}{\formatsectiontitle}
+\newcommand{\formatsectiontitle}[1]{\normalfont\Large\bfseries\titlecap{#1}}
+
+\titleformat{\subsection}[block]{}{\normalfont\large\bfseries\thesubsection.\;}{0pt}{\formatsubsectiontitle}
+\newcommand{\formatsubsectiontitle}[1]{\normalfont\large\bfseries\titlecap{#1}}
+
+
+
 
 
 % for pretty Euler script
@@ -86,13 +101,19 @@
 % will do the rest.
 \newcommand{\tblref}[1]{Table~\ref{#1}}
 %\renewcommand*{\figref}[1]{Fig.~\ref{#1}}
-\newcommand{\equref}[1]{(\ref{#1})}
+\renewcommand{\eqref}[1]{eq.~\ref{#1}}
 
-\newcommand{\Tblref}[1]{Table~\ref{#1}}
+
+\newcommand{\figref}[1]{Figure~\ref{#1}}
 \newcommand{\Figref}[1]{Figure~\ref{#1}}
 \newtheorem{theorem}{Theorem}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+% for better manipulation of tables
+\usepackage{makecell}
+\renewcommand\theadfont{\bfseries}
 
 
 %-----------------------------------------------------------------------------

@@ -1,6 +1,13 @@
-
+\appendix
 \clearpage
 \part*{Appendix}
+
+\section{Safety Failure}
+\label{app:safetyfailure}
+\TODO{Put the full description/definition of conflicting blocks here.}
+
+
+
 
 \section{Unused text}
 
@@ -8,3 +15,16 @@
 
 Two other reasons to participate in stake pools are (i) to mitigate \emph{key theft risk} (i.e. an attacker hacking into their online machine and stealing the key), and (ii) to mitigate \emph{liveness risk}, the possibility that the validator node will go offline, perhaps because the operator does not have the time to manage a high-uptime setup.
 
+
+\todo{Do we want to require that the Prepare be done in the first 1/2 of the epoch?  I'm mildly concerned there may not always be enough time to Commit.}
+
+\todo{Remember: The only block you're allowed to Prepare is the last block of each epoch.}
+
+\todo{Remember: Even if the Finalization goes through, the collective penalties are still applied.}
+
+
+\textbf{Questions}
+\begin{itemize}
+\item It's unclear to me why we need $\epochsource$ in the Prepare.
+
+\end{itemize}
