@@ -137,19 +137,33 @@ The final in each epoch in a \emph{checkpoint block}.  Checkpoint blocks are spe
 
  A \textit{checkpoint for epoch $n$} is a block with number $n * 100 - 1$; in a smoothly running blockchain there will usually be only one checkpoint per epoch, but due to natural network latency or deliberate attacks there may be multiple competing checkpoints during some epochs. The \textit{predecessor} of a checkpoint is the checkpoint in the prior epoch, and an \textit{lineage} of a checkpoint is the set of all preceding checkpoints, recursively, to the Genesis block \Genesisblock.
  
-\TODO{Probably define some mathematical notation here for Block $B$, Checkpoint $C$, Predecessor, Successor, Lineage, etc.}
 
-We define the \textit{lineage hash} of a checkpoint as follows:
+Our atomic element of construction is $B$, a \emph{blockhash}. We order a sequence of blockhashes into a list called a \emph{blockchain} $\mathbf{B}$.  Within blockchain $\mathbf{B}$ there is a subset called \emph{checkpoints},
+\begin{eqnarray}
+    \mathbf{B} &\equiv& \left( B_0, B_1, B_2, \ldots \right) \\
+    \mathbf{C} &\equiv& \left( B_{99}, B_{199}, B_{299}, \ldots \right) \; .
+\end{eqnarray}
 
-\begin{itemize}
-\item The lineage hash of the implied ``genesis checkpoint'' of epoch 0 is thirty two zero bytes.
-\item The lineage hash of any other checkpoint is the keccak256 hash \todo{cite} of the lineage hash of its predecessor checkpoint concatenated with the hash of the checkpoint.
+Some easy things to notice is: $\mathbf{C} \subset \mathbf{B}$, the aforementioned genesis block $\Genesisblock \equiv B_0$, and $C_i = B_{100i + 99}$.  
 
+Every checkpoint $C_n \in \mathbf{C}$ has a \emph{checkpoint lineage}, defined as,
 \begin{equation}
-AH(n) \equiv \texttt{keccak256}\left[ \texttt{CONCAT}\left( AH(n-1), \texttt{keccak256}[C_n] \right)\right]
+    \mathcal{L}(n) \equiv ( \Genesisblock, C_1, C_2, \ldots, C_{n-1} ) \; .
 \end{equation}
 
-\end{itemize}
+%which likewise, $\forall n$, $\mathcal{L}(n) \subset \mathbf{C} \subset \mathbf{B}$.
+
+Every checkpoint $C_n$ also has a predecessor and successor defined as,
+\begin{equation}
+    \mathcal{P}(n) \equiv C_{n-1} \hspace{0.3in}\textnormal{and}\hspace{0.3in} \mathcal{S}(n) \equiv C_{n+1} \; .
+\end{equation}
+
+This lets us define some other objects, such as the ancestor hash $\mathcal{A}[\centerdot]$ of checkpoint $n$, which is defined as:
+\begin{equation}
+    \mathcal{A}( n ) \equiv h\left[ \; \mathcal{A}(n-1) \; \oplus \; h[C_n] \; \right] \; ,
+\end{equation}
+where $h[\centerdot]$ is the \texttt{keccak256} hash function, $\oplus$ is the concatentation operator, and $\mathcal{A}(0) \equiv 32$ zero bytes.
+
 
 Lineage hashes thus form a direct hash chain, and otherwise have a one-to-one correspondence with checkpoint hashes.
 
