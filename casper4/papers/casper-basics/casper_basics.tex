@@ -131,7 +131,6 @@ An \emph{epoch} is defined as the contiguous sequence of blocks between two chec
 \TODO{still deciding this mathematical notation.  But it should be mathematical instead of in words.}
 
 
-%Which leads to, $\mathbf{C} = \mathbf{N} \cup \mathbf{J} \cup \mathbf{F}$.
 
 Which leads to unsurprisingly, $\mathbf{F} \subseteq \mathbf{J} \subseteq \mathbf{C} \subset \mathbf{B}$.
 
@@ -152,9 +151,9 @@ Validators can broadcast two types of messages: $\langle \msgPREPARE, \hash, \ep
 	\textbf{Notation} & \textbf{Description} \\
 	\midrule
 	\hash & any checkpoint \\
-	$\epoch$ & the epoch of the checkpoint \\
+	$\epoch$ & the epoch of checkpoint \hash \\
 	$\hashsource$ & any Justified checkpoint before \hash \\
-	$\epochsource$ & the epoch of $\hashsource$  \\
+	$\epochsource$ & the epoch of checkpoint $\hashsource$  \\
 	\signature & signature of $\langle \msgPREPARE, \hash,\epoch,\hashsource,\epochsource \rangle$ from the validator's private key \\
 	\bottomrule
 	\end{tabular}
@@ -170,8 +169,8 @@ Validators can broadcast two types of messages: $\langle \msgPREPARE, \hash, \ep
 	\toprule
 	\textbf{Notation} & \textbf{Description} \\
 	\midrule
-	\hash & a checkpoint hash \\
-	\epoch & the epoch of the checkpoint \\
+	\hash & a Justified checkpoint hash \\
+	\epoch & the epoch of the checkpoint \hash \\
 	\signature & signature of $\langle \msgCOMMIT, \epoch, \hash \rangle$ from the validator's private key \\
 	\bottomrule	
 	\end{tabular}
@@ -306,7 +305,9 @@ One complete description of such a rule is in Listing \ref{alg:forkchoice}.
 
 \begin{lstlisting}[language=Python, caption={Algorithm for determining the head}, captionpos=b, label={alg:forkchoice}]
 
-def get_child(Genesisblock):
+import random
+
+def get_head(Genesisblock):
     
     head = Genesisblock
     
@@ -341,8 +342,10 @@ def get_child(Genesisblock):
             head = S[0]
             continue
 
-        # just choose the succesor with the lowest hash value
-        head = min(S)    
+        # just choose a random successor
+        S = random.shuffle(S)
+        head = S.pop()
+
 \end{lstlisting}
 
 The commit-following part of this rule can be viewed as mirroring the ``greedy heaviest observed subtree'' (GHOST) rule that has been proposed for proof of work chains\cite{sompolinsky2013accelerating}. The symmetry is as follows. In GHOST, a node starts with the head at the genesis, then begins to move forward down the chain, and if it encounters a block with multiple children then it chooses the child that has the larger quantity of work built on top of it (including the child block itself and its descendants).
