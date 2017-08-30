@@ -1,9 +1,9 @@
-% make in NIPS format
-\usepackage{nips10submit_e}
-\nipsfinalcopy
+% make in the latest NIPS format (as of this writing, 2017)
 
+\usepackage[nonatbib,final]{nips_2017}
+%\usepackage[nonatbib,final]{nips_2017}
 
-
+\usepackage{color}
 \usepackage{graphicx}
 \DeclareGraphicsExtensions{.pdf,.eps,.png,.jpg}		% search for .pdf, then .eps, then .pngs, then .jpg
 
@@ -13,12 +13,20 @@
 
 \newcommand*{\red}[1]{ \color{red} #1}
 
-\usepackage{tabularx}
+%\usepackage{tabularx}
 \usepackage{url}
-\usepackage{cite}
 \usepackage{amsmath}
 
-%\usepackage{ lmodern }			% I prefer this over times
+% this is for environments \subfigure and \subtable
+\usepackage{subcaption}
+
+% These packages are FORBIDDEN
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\usepackage{lmodern} % messes up \textsc
+%\usepackage{cite} % messes up NIPS
+%\usepackage{fullpage} % messes up NIPS
+%\usepackage{natbib} % messes up NIPS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \usepackage{array}			% replacement for eqnarray.  Must be BEFORE \usepackage{arydshln}
 \usepackage{units}			% for \nicefrac{\alpha}{\beta}
@@ -27,9 +35,10 @@
 \usepackage{amsthm}		% for theorems
 \newtheorem{definition}{Definition}
 
-%\usepackage{microtype}
+% text looks a little better
+\usepackage{microtype}
 
-%\usepackage{wasysym}
+\usepackage{wasysym}
 
 \usepackage{textcomp, marvosym} % pretty symbols
 \usepackage{booktabs} 	% for much better looking tables
@@ -42,8 +51,8 @@
 
 
 \Addlcwords{is with of the and in}
-%\Addlcwords{of the}
-%\Addlcwords{and}
+\Addlcwords{of the}
+\Addlcwords{and}
 \titleformat{\section}[block]{}{\normalfont\Large\bfseries\thesection.\;}{0pt}{\formatsectiontitle}
 \newcommand{\formatsectiontitle}[1]{\normalfont\Large\bfseries\titlecap{#1}}
 
@@ -55,28 +64,27 @@
 
 
 % for pretty Euler script
-\usepackage[mathscr]{euscript}
-\usepackage{bold-extra}
+% \usepackage[mathscr]{euscript}
+% \usepackage{bold-extra}
 
 
 
-\usepackage{fullpage} % save trees
 
-\usepackage{subfig}
-%\usepackage{float} % for \subfloat
+
+%\usepackage{subfig}
+\usepackage{float} % for \subfloat
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% More customizable Lists
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Better symbols custom enumerative lists, define any symbol you'd like
-\usepackage{enumitem}
+% \usepackage{enumitem}
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Custom Symbols 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% \xspace at the end of custom macros never fucks up spacing.
-% example of best practice: \newcommand{\apples}{\textsf{AppLeS}\xspace} 
+% \xspace at the end of custom macros never screws up spacing.
 \usepackage{xspace}
 
 
@@ -84,8 +92,9 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Abbreviations you'll always want
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\newcommand*{\TODO}[1]{{\centering {\sffamily \color{red} #1} \vskip10pt }}
-\newcommand*{\todo}[1]{{\sffamily [{\color{red} #1}]}}
+\newcommand*{\TODO}[1]{{\centering {\small \sffamily \color{red} #1} \vskip10pt }}
+\newcommand*{\todo}[1]{{\small \sffamily [{\color{red} #1}]}}
+\newcommand*{\q}[1]{{\small \sffamily [{\color{blue} #1}]}}
 \newcommand*{\fix}[1]{{\sffamily [{\textnormal{\color{red} #1}}]}}
 
 
@@ -112,7 +121,7 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % for \sout{} for strikeout
-\usepackage[normalem]{ulem}
+% \usepackage[normalem]{ulem}
 
 
 % for better manipulation of tables
@@ -130,6 +139,5 @@
 
 
 %%%%
-
 
 
