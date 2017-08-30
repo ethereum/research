@@ -1,0 +1,19 @@
+This is pdfTeX, Version 3.14159265-2.6-1.40.17 (MiKTeX 2.9.6100 64-bit) (preloaded format=pdflatex 2016.11.30)  31 JAN 2017 09:31
+entering extended mode
+**virgil_env.tex
+
+! Emergency stop.
+<*> virgil_env.tex
+                  
+*** (job aborted, file error in nonstop mode)
+
+ 
+Here is how much of TeX's memory you used:
+ 2 strings out of 493333
+ 20 string characters out of 3139196
+ 53242 words of memory out of 3000000
+ 3636 multiletter control sequences out of 15000+200000
+ 3640 words of font info for 14 fonts, out of 3000000 for 9000
+ 1141 hyphenation exceptions out of 8191
+ 0i,0n,0p,1b,6s stack positions out of 5000i,500n,10000p,200000b,50000s
+!  ==> Fatal error occurred, no output PDF file produced!
