@@ -1,14 +1,14 @@
 \appendix
 \clearpage
-\part*{Appendix}
-
-\section{Leak formula derivation}
-\label{app:leak}
-\todo{Put details of the derivation of the leak formula here.}
-
 \section{Unused text}
 
 \todo{This is where text goes that for which a home hasn't been found yet.  If no home is found, it will be deleted.}
+
+
+
+We define an \textit{epoch} as a range of 100 blocks (e.g., blocks 600...699 are epoch 6), and a \textit{checkpoint} of an epoch is the final block in that epoch. 
+
+The proposal mechanism will initially be the existing Ethereum proof of work chain, making the first version of Casper a \textit{hybrid PoW/PoS algorithm} that relies on proof of work for liveness but not safety, but in future versions the proposal mechanism can be substituted with something else.
 
 
 
@@ -19,6 +19,40 @@ In the Casper protocol, there exists a set of validators, and in each \textit{ep
 
 If, during an epoch $e$, for some specific ancestry hash $h$, for any specific ($epoch_{source}, hash_{source}$ pair), there exist $\frac{2}{3}$ prepares of the form $$[PREPARE, e, h, epoch_{source}, hash_{source}]$$, then $h$ is considered \textit{justified}. If $\frac{2}{3}$ commits are sent of the form $$[COMMIT, e, h]$$ then $h$ is considered \textit{finalized}.
 
+
+During epoch $n$, validators are expected to send prepare and commit messages with $\epoch = n$ and $h$ equal to a checkpoint of epoch $n$. Prepare messages may specify as \hashsource a checkpoint for any previous epoch (preferably the preceding checkpoint) of \hash, and which is \textit{justified} (see below), and the \epochsource is expected to be the epoch of that checkpoint.
+
+
+Honest validators will never violate slashing conditions, so this implies the usual Byzantine fault tolerance safety property, but expressing this in terms of slashing conditions means that we are actually proving a stronger claim: if two conflicting checkpoints get finalized, then at least $\frac{1}{3}$ of validators were malicious, \textit{and we know whom to blame, and so we can maximally penalize them in order to make such faults expensive}.
+
+
+This simplifies our finalty mechanism because it allows it to be expressed as a fork choice rule where the ``score'' of a block only depends on the block and its children, putting it into a similar category as more traditional PoW-based fork choice rules such as the longest chain rule and GHOST\cite{sompolinsky2013accelerating}.
+
+Unlike GHOST, however, this fork choice rule is also \textit{finality-bearing}: there exists a ``finality'' mechanism that has the property that (i) the fork choice rule always prefers Finalized blocks over non-Finalized blocks, and
+
+\begin{figure}[h!tb]
+\centering
+    \includegraphics[width=3in]{prepares_commits.png}
+%    \includegraphics[width=5.5in]{cs.pdf}
+    \caption{Illustrating prepares, commits and checkpoints. Arrows represent \textit{dependency} (e.g., a commit depends on there being $\frac{2}{3}$ existing prepares).}
+    \label{fig:prepares_and_commits}
+\end{figure}
+
+
+\begin{enumerate}
+\item Start with HEAD equal to the genesis of the chain.
+\item Select the descendant checkpoint of HEAD with the most commits (only Justified checkpoints are admissible)
+\item Repeat (2) until no descendant with commits exists.
+\item Choose the longest proof of work chain from there.
+\end{enumerate}
+
+
+The mechanism described above ensures \textit{plausible liveness}; however, it by itself does not ensure \textit{actual liveness}---that is, while the mechanism cannot get stuck in the strict sense, it could still enter a scenario where the proposal mechanism (e.g., the proof of work chain) gets into a state where it never ends up creating a checkpoint that could get Finalized.
+
+
+The symmetry is as follows. In GHOST, a node starts with the head at the genesis, then begins to move forward down the chain, and if it encounters a block with multiple children then it chooses the child that has the larger quantity of work built on top of it (including the child block itself and its descendants).
+
+In this algorithm, we follow a similar approach, except we repeatedly seek the child that comes the closest to achieving finality. Commits on a descendant are implicitly commits on all of its lineage, and so if a given descendant of a given block has more commits than any other descendant, then we know that all children along the chain from the head to this descendant are closer to finality than any of their siblings; hence, looking for the \textit{descendant} with the most commits and not just the \textit{child} replicates the GHOST principle most faithfully. 
 
 \section{Notes to Authors}
 \subsection{Questions}
@@ -41,3 +75,7 @@ If, during an epoch $e$, for some specific ancestry hash $h$, for any specific (
 \item \todo{Reference the various Figures within the text so we more easily know what goes with what.}
 \item \todo{fill me in}
 \end{itemize}
+
+
+In the other way...
+
