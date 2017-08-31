@@ -1,0 +1,17 @@
+[0] Config.pm:343> INFO - This is Biber 2.5 running in TOOL mode
+[0] Config.pm:346> INFO - Logfile is 'ethereum.bib.blg'
+[41] biber-darwin:290> INFO - === Tue Aug 29, 2017, 15:39:45
+[67] Biber.pm:3653> INFO - Looking for bibtex format file 'ethereum.bib'
+[76] bibtex.pm:1187> INFO - Decoding LaTeX character macros into UTF-8
+[78] bibtex.pm:1048> INFO - Found BibTeX data source 'ethereum.bib'
+[133] Utils.pm:149> WARN - BibTeX subsystem: warning: comma(s) at end of name (removing)
+[133] Utils.pm:149> WARN - BibTeX subsystem: author, warning: comma(s) at end of name (removing)
+[133] Utils.pm:149> WARN - BibTeX subsystem: warning: comma(s) at end of name (removing)
+[133] Utils.pm:149> WARN - BibTeX subsystem: author, warning: comma(s) at end of name (removing)
+[148] UCollate.pm:66> INFO - Overriding locale 'en_US' defaults 'variable = shifted' with 'variable = non-ignorable'
+[148] UCollate.pm:66> INFO - Overriding locale 'en_US' defaults 'normalization = NFD' with 'normalization = prenormalized'
+[149] Biber.pm:3306> INFO - Sorting list 'none/global/' of type 'entry' with scheme 'none' and locale 'en_US'
+[149] Biber.pm:3310> INFO - No sort tailoring available for locale 'en_US'
+[162] bibtex.pm:196> INFO - Writing 'ethereum_bibertool.bib' with encoding 'UTF-8'
+[163] bibtex.pm:217> INFO - Output to ethereum_bibertool.bib
+[164] Biber.pm:108> INFO - WARNINGS: 4
