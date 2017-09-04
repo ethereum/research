@@ -164,9 +164,42 @@ A third ``way out'' is punting to off-chain governance. If a fault could have be
 
 However, there must be some cost to triggering a ``governance event''; otherwise, attackers could trigger these events as a deliberate strategy in order to breed continual chaos among the users of a blockchain. The social value of blockchains largely comes from the fact that their progression is mostly automated, and so the more we can reduce the need for users to appeal to the social layer the better.
 
+\section{Rewards and Penalties, Not Penalizing Majority Censorship}
+
+Suppose that we temporarily rule out cases (5), (6) and (7) above, so the only possible explanations for a lack of prepares and commits are either validators being offline or network latency that is not of their own fault. Maximizing fairness clearly entails minimizing penalties, ideally to zero, as any failed prepare or commit could possibly have been not of the validator's own fault; however, this runs counter to the goal of disincentivizing harm. If we want to create a parametrized incentive scheme that can trade off between these two goals, a simple way to do so is to maximize fairness \textit{subject to} some minimum level of harm disincentivization.
+
+We can formalize this further by introducing the notion of a \textit{protocol utility function}. A protocol utility function estimate how much harm the users of a protocol have received from a given protocol execution. We will define the utility as $0$ in a perfect execution, and negative in an execution that has any imperfections. One simple protocol utility function is the simple sum-of-indicator function:
+
+$$U = \sum_{\epoch} (F(\epoch) - 1)$$
+
+Where $F(\epoch)$ is 1 if that epoch was finalized, and otherwise 0. This utility function subtracts 1 point for any epoch that was not finalized.
+
+However, this utility function does not seem to do that good a job of capturing how users actually feel. Particularly, according to this utility function, a protocol execution that finalizes every second epoch is half as bad as a protocol execution that never finalizes anything. To deal with this problem, let us try a more complicated alternative. First, define the ``last finalized epoch'' function:
+
+$$LFE(\epoch) = max(\epoch': \epoch' < \epoch, F(\epoch'))$$
+
+Now, the utility function:
+
+$$U = -\sum_{\epoch} log(\epoch - LFE(\epoch))$$
+
+In a ``perfect execution'', every epoch is finalized, and so $\epoch - LFE(\epoch) = 1$, so $log(\epoch - LFE(\epoch)) = 0$. But if epochs are skipped, then there is a penalty, and if a protocol execution skips many epochs in a row then the penalty ramps up logarithmically. This is designed to fit a simple intuition: \textit{the increment in pain from increasing the time between finalized epochs by some factor is roughly the same, regardless of the specific time in question}. Going from 1 minute finality to 2 minute finality is as annoying as going from 1 hour finality to 2 hour finality.
+
+We now define the ``level of harm disincentivization'' simply: the level of harm disincentivization is the smallest ratio that an attacker could achieve between the amount of money that they lose and the loss to protocol utility. And from here, the optimal tradeoff between fairness and harm disincentivization is simple: \textit{we set the penalties for not preparing and not committing to equal the current impact of another unfinalized epoch to protocol utility}.
+
+The next question is, how do we set rewards? There are a few considerations:
+
+\begin{enumerate}
+\item Setting rewards too high makes the protocol expensive to operate.
+\item Users are looking for not just low issuance and high security, but also \textit{stability} of the level of issuance and security. Having rewards decrease as the total deposit size increases accomplishes the former goal trivially, and the latter goal by ``trying harder'' to attract validators when the total deposit size is small.
+\item If, in the normal case, the net reward for preparing and committing is more than half the penalty for doing neither of the two, then it will be profitable to join the validator set and prepare or commit less than $\frac{2}{3}$ of the time, which prevents finality.
+\item Setting rewards too low increases the possibility of \textit{discouragement attacks}, where an attacker either performs a censorship attacks or finds a way to cause high latency (e.g. by splitting the network), causing validators to lose money; the threat of this may encourage validators to leave or discourage them from joining.
+\end{enumerate}
+
+We can define the \textbf{base penalty factor} as $BP = k * log(\epoch - LFE(\epoch))$ (with the caveat that here $LFE$ refers to the last epoch \textit{that has been observed as finalized by that particular chain}; this is an imperfection in measurement that is unavoidable), and we make two constants $NPP$ (``non-prepare penalty'') and $NCP$ (``non-commit penalty''). If the blockchain does not see a prepare from a validator for epoch \epoch during epoch \epoch, and the validator's deposit is $ then the validator is penalized $
+
 \section{Rewards and Penalties}
 
-We define the following nonnegative functions, all of which return a nonnegative scalar with no units.  Technically these values can exceed 1.0; in any situation which appears to call for reducing some validator's deposit size to a negative value, the deposit size should instead simply be reduced to zero.
+We define the following nonnegative functions, all of which return a nonnegative scalar with no units. Technically these values can exceed 1.0; in any situation which appears to call for reducing some validator's deposit size to a negative value, the deposit size should instead simply be reduced to zero.
 
 \begin{itemize}
 \item $\BIR(\totaldeposit)$: returns the base interest rate paid to a validator, taking as an input the current total quantity of deposited coins.
