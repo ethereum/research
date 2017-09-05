@@ -206,7 +206,7 @@ We define the following nonnegative functions, all of which return a nonnegative
 
 \item $\BP(\totaldeposit, \epoch - \epochLF )$: returns the ``base penalty constant''---a value expressed as a percentage rate that is used as the scaling factor for all penalties; for example, if at the current time $\BP(\cdot, \cdot, \cdot) = 0.001$, then a penalty of $1.5$ means a validator loses $0.15\%$ of their deposit. Takes as inputs the current total quantity of deposited coins $\totaldeposit$, the current epoch $e$ and the last finalized epoch \epochLF. Note that in a perfect protocol execution, $\epoch - \epochLF = 1$.
 
-\item $\NPCP(\alpha)$ (``non-prepare collective penalty''): if $\alpha$ of validators ($0 \leq \alpha \leq 1$) are not seen to have Prepared during an epoch, then \emph{all} validators are charged a penalty of $\NCCP(\alpha)$. $\NPCP$ must be monotonically increasing, and satisfy $\NPCP(0) = 0$.
+\item $\NPCP(\alpha)$ (``non-prepare collective penalty''): if $\alpha$ of validators ($0 \leq \alpha \leq 1$) are not seen to have Prepared during an epoch, then \emph{all} validators are charged a penalty of $\NPCP(\alpha)$. $\NPCP$ must be monotonically increasing, and satisfy $\NPCP(0) = 0$.
 
 \item $\NCCP(\alpha)$ (``non-commit collective penalty''): if $\alpha$ of validators ($0 \leq \alpha \leq 1$) are not seen to have Committed during an epoch, and that epoch had a justified hash so any validator \emph{could} have Committed, then all validators are charged a penalty proportional to $\NCCP(\alpha)$. $\NCCP$ must be monotonically increasing, and satisfy $\NCCP(0) = 0$.
 \end{itemize}
