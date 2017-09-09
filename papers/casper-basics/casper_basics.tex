@@ -95,7 +95,7 @@ We will describe the protocol in stages, starting with a simple version (Section
 In the simple version, we assume there is a set of validators and a \textit{proposal mechanism} which is any system that proposes blocks (such as a proof of work chain). Under normal operation, almost all of the blocks proposed by the proposal mechanism would form a chain, but if the proposal mechanism operation is faulty (in proof of work, this may arise due to high latency or 51\% attacks) there may be multiple divergent chains being extended at the same time.
 
 
-We order a chain of blockhashes into a sequence called a \emph{blockchain} $\mathbf{B}$.  Within blockchain $\mathbf{B}$ is there is a subset called \emph{checkpoints},
+We order a chain of blockhashes into a sequence called a \emph{blockchain} $\mathbf{B}$.  Within blockchain $\mathbf{B}$ there is a subset called \emph{checkpoints},
 
 \begin{equation}
 \begin{split}
