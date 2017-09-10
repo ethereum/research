@@ -1,5 +1,31 @@
 \appendix
 \clearpage
+
+
+\section{Code for valid\_prepares and valid\_commits}
+
+\begin{lstlisting}[language=Python, caption={Algorithm for counting up the prepare portion behind a checkpoint. \todo{fill this in}}, captionpos=b, label={alg:validprepare}]
+
+def valid_prepares(checkpoint_source, epoch_source, checkpoint, epoch, d):
+    
+    # code goes here
+    
+    return z
+
+\end{lstlisting}
+
+
+
+\begin{lstlisting}[language=Python, caption={Algorithm for counting up the commit portion behind a checkpoint. \todo{fill this in} }, captionpos=b, label={alg:validprepare}]
+
+def valid_commits(checkpoint, epoch, d):
+    
+    # code goes here
+    
+    return z
+
+\end{lstlisting}
+
 \section{Unused text}
 
 \todo{This is where text goes that for which a home hasn't been found yet.  If no home is found, it will be deleted.}
@@ -38,6 +64,8 @@ Unlike GHOST, however, this fork choice rule is also \textit{finality-bearing}: 
     \label{fig:prepares_and_commits}
 \end{figure}
 
+\includegraphics[width=3in]{fork4.png}
+
 
 \begin{enumerate}
 \item Start with HEAD equal to the genesis of the chain.
@@ -54,10 +82,64 @@ The symmetry is as follows. In GHOST, a node starts with the head at the genesis
 
 In this algorithm, we follow a similar approach, except we repeatedly seek the child that comes the closest to achieving finality. Commits on a descendant are implicitly commits on all of its lineage, and so if a given descendant of a given block has more commits than any other descendant, then we know that all children along the chain from the head to this descendant are closer to finality than any of their siblings; hence, looking for the \textit{descendant} with the most commits and not just the \textit{child} replicates the GHOST principle most faithfully. 
 
+(that is, the checkpoint of epoch \epoch must be Finalized during epoch \epoch, and the chain must learn about this before epoch \epoch ends). In simpler terms, when a user sends a ``deposit'' transaction, they need to wait for the transaction to be perfectly Finalized, and then they need to wait again for the next epoch to be Finalized; after this, they become part of the validator set.
+
+In fact, when \textit{any} checkpoint gets $k > \frac{1}{3}$ commits, no conflicting checkpoint can get Finalized without $k - \frac{1}{3}$ of validators getting slashed. 
+
+
+\section{Full fork choice rule}
+
+\begin{lstlisting}[language=Python, caption={Algorithm for determining the head}, captionpos=b, label={alg:forkchoice}]
+from random import shuffle
+
+def get_head(genesisblock):
+    
+    head = genesisblock
+    
+    while True:
+        S = successors( head )
+        
+        if not S:
+            return head
+
+        # choose the successor with the greatest commits
+        max_commit = max( map(valid_commits, S) )        
+        S = [ s for s in S if valid_commits(S) == max_commit ]
+        
+        if len(S) == 1:
+            head = S[0]
+            continue
+
+        # choose the succesor with the greatest prepares
+        max_prepare = max( map(valid_prepares, S) )
+        S = [ s for s in S if valid_prepares(S) == max_prepare ]
+        
+        if len(S) == 1:
+            head = S[0]
+            continue
+        
+        # choose the succesor with the greatest depth (longest chain)
+        max_depth = max( map(depth, S) )
+        S = [ s for s in S if depth(S) == max_depth ]
+        
+        if len(S) == 1:
+            head = S[0]
+            continue
+
+        # choose a random successor
+        shuffle(S)
+        head = S.pop()
+
+\end{lstlisting}
+
+
+
 \section{Notes to Authors}
 \subsection{Questions}
 \begin{itemize}
-\item True/False: The Dynasty counter increments iff there's been a finalization?
+\item If there are Prepares for the same hash+epoch pair from multiple sources, do they add?  Or do we simply take the max?
+\item If checkpoint X is Justified, can it be Finalized without violating any Commandment?
+\item \todo{fill me in!}
 \end{itemize}
 
 
@@ -74,6 +156,7 @@ In this algorithm, we follow a similar approach, except we repeatedly seek the c
 \begin{itemize}
 \item \todo{Reference the various Figures within the text so we more easily know what goes with what.}
 \item \todo{fill me in}
+\item Try checkpoint figures without arrows.
 \end{itemize}
 
 

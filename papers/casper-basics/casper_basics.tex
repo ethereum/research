@@ -1,6 +1,7 @@
 \title{Casper the Friendly Finality Gadget}
 \author{
-        Vitalik Buterin \\
+%        Vitalik Buterin \\
+        Vitalik Buterin \textnormal{ and } Virgil Griffith \\        
         Ethereum Foundation}
 
 \documentclass[12pt]{article}
@@ -17,11 +18,11 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % we will probably iterate on these symbols until we have a notation we like
 \newcommand{\epoch}{\ensuremath{e}\xspace}
-\newcommand{\hash}{\textnormal{c}\xspace}
+\newcommand{\hash}{\ensuremath{c}\xspace}
 
 % symbols for the epoch and hash source
-\newcommand{\epochsource}{\ensuremath{\epoch_{\star}}\space}
-\newcommand{\hashsource}{\ensuremath{\hash_{\star}}\xspace}
+\newcommand{\epochsource}{\ensuremath{\overset{\to}{\epoch}}\space}
+\newcommand{\hashsource}{\ensuremath{\overset{\to}{\hash}}\xspace}
 
 \newcommand{\signature}{\ensuremath{\mathcal{S}}\xspace}
 
@@ -77,10 +78,10 @@ Our algorithm introduces several new properties that BFT algorithms do not neces
 \begin{itemize}
 \item We flip the emphasis of the proof statement from the traditional ``as long as $>\frac{2}{3}$ of validators are honest, there will be no safety failures'' to the contrapositive ``if there is a safety failure, then $\ge \frac{1}{3}$ of validators violated some protocol rule.''
 
-\item We add \textit{accountability}.  If a validator violates the rules, we can detect the violation, and know who violated the rule.  ``$\ge \frac{1}{3}$ violated the rules, \textit{and we know who they are}''.  Accountability allows us to penalize malfeasant validators, solving the \textit{nothing at stake} problem\cite{} that plagues chain-based PoS. The penalty is the validators' entire deposits.  This maximum penalty is provides a bulwark against violating the protocol by making violations immensely expensive.  Protocol guarantees is much higher than the size of the rewards that the system pays out during normal operation.  This provides \textit{much stronger} security guarantee than possible with proof of work.
+\item We add \textit{accountability}.  If a validator violates the rules, we can detect the violation, and know who violated the rule.  ``$\ge \frac{1}{3}$ violated the rules, \textit{and we know who they are}''.  Accountability allows us to penalize malfeasant validators, solving the \textit{nothing at stake} problem \todo{cite} that plagues chain-based PoS. The penalty is the validators' entire deposits.  This maximum penalty is provides a bulwark against violating the protocol by making violations immensely expensive.  Protocol guarantees is much higher than the size of the rewards that the system pays out during normal operation.  This provides \textit{stronger} security guarantees than with proof of work.
 
-\item We introduce a provably safe way for the validator set to change over time.
-\item We introduce a way to recover from attacks where more than $\frac{1}{3}$ of validators drop offline, at the cost of a very weak \textit{tradeoff synchronicity assumption}.
+\item We introduce a provably safe way for the validator set to change over time (Section \ref{sect:join_and_leave}).
+\item We introduce a way to recover from attacks where more than $\frac{1}{3}$ of validators drop offline, at the cost of a very weak \textit{tradeoff synchronicity assumption} (Section \ref{sect:leak}).
 \item The design of the algorithm as an overlay makes it easier to implement as an upgrade to an existing proof of work chain.
 \end{itemize}
 
@@ -89,12 +90,12 @@ We will describe the protocol in stages, starting with a simple version (Section
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\section{The Protocol}
+\section{The Casper Protocol}
 \label{sect:protocol}
 In the simple version, we assume there is a set of validators and a \textit{proposal mechanism} which is any system that proposes a sequence of blocks (such as a proof of work chain)
 
 
-We order the sequence of blockhashes into a sequence called a \emph{blockchain} $\mathbf{B}$.  Within blockchain $\mathbf{B}$ is there is a subset called \emph{checkpoints},
+We order the sequence of blockhashes into a sequence called a \emph{blockchain} $\mathbf{B}$.  We assume all blocks $b \in \mathbf{B}$ are unique.  The elements of sequence $\mathbf{B}$ obey a total ordering where $b < b^\prime$ if and only if block $b$ precedes block $b^\prime$ in within sequence $\mathbf{B}$. Within blockchain $\mathbf{B}$ is there is a subset called \emph{checkpoints},
 
 \begin{equation}
 \begin{split}
@@ -125,7 +126,7 @@ An \emph{epoch} is defined as the contiguous sequence of blocks between two chec
 
 Each validator has a \emph{deposit}; when a validator joins their deposit is the number of coins that they deposited, and from there on each validator's deposit rises and falls with rewards and penalties. For the rest of this paper, when we say ``$\frac{2}{3}$ of validators'', we are referring to a \emph{deposit-weighted} fraction; that is, a set of validators whose sum deposit size equals to at least $\frac{2}{3}$ of the total deposit size of the entire set of validators. ``$\frac{2}{3}$ prepares'' will be used as shorthand for ``prepares from $\frac{2}{3}$ of validators''.
 
-Validators can broadcast two types of messages: $\langle \msgPREPARE, \hash, \epoch, \hashsource, \epochsource \rangle$ and $\langle \msgCOMMIT, \hash, \epoch \rangle$, as detailed in \figref{fig:messages}.
+Validators can broadcast two types of messages: $\left\langle \msgPREPARE, \hashsource, \epochsource, \hash, \epoch \right\rangle$ and $\left\langle \msgCOMMIT, \hash, \epoch \right\rangle$, as detailed in \figref{fig:messages}.
 
 Every checkpoint $\hash$ can be \emph{Justified}.  Justified checkpoints can then also be \emph{Finalized}.  Every checkpoint starts as neither Justified or Finalized.
 
@@ -154,11 +155,11 @@ Which leads to the pleasing relation, $\mathbf{F} \subseteq \mathbf{J} \subseteq
 	\toprule
 	\textbf{Notation} & \textbf{Description} \\
 	\midrule
-	\hash & any checkpoint hash \\
-	$\epoch$ & the epoch of checkpoint \hash \\
-	$\hashsource$ & the hash of any Justified checkpoint before epoch \epoch \\
+	$\hashsource$ & the hash of any Justified checkpoint \\
 	$\epochsource$ & the epoch of checkpoint $\hashsource$  \\
-	\signature & signature of $\langle \msgPREPARE, \hash,\epoch,\hashsource,\epochsource \rangle$ from the validator's private key \\
+	\hash & any checkpoint hash after $\hashsource$ \\
+	$\epoch$ & the epoch of checkpoint \hash \\
+	\signature & signature of $\left\langle \msgPREPARE, \hashsource,\epochsource, \hash, \epoch \right\rangle$ from the validator's private key \\
 	\bottomrule
 	\end{tabular}
 	\caption{\msgPREPARE message}
@@ -200,13 +201,13 @@ Which leads to the pleasing relation, $\mathbf{F} \subseteq \mathbf{J} \subseteq
 
 \textbf{Requirements for accepting a prepare message (\figref{fig:msgPREPARE})}:
 \begin{enumerate}
-\item Hash \hash must be the checkpoint for epoch \epoch.  Equivalently, $\hash = b_{100\epoch + 99}$.
 \item Hash \hashsource must be the checkpoint for epoch \epochsource.  $c = b_{100\epochsource + 99}$
-\item Epoch $\epochsource < \epoch$.
 \item Hash \hashsource must be Justified.  Equivalently, $\textnormal{valid\_prepares}(c) \geq \nicefrac{2}{3}$.
+\item Hash \hash must be the checkpoint for epoch \epoch.  Equivalently, $\hash = b_{100\epoch + 99}$.
+\item Epoch $\epochsource < \epoch$.
 \item[5a.] The signing validator must be a member of the validator set.
 \end{enumerate}
-If all requirements are satisfied, then the sending validator's deposit counts as behind preparing checkpoint \hash.
+If all requirements are satisfied, then the sending validator's deposit counts as preparing $\hashsource \to \hash$.
 
 %Additionally, a hash $\hash$ converts from Justified to \emph{Finalized}, if $\frac{2}{3}$ of validators commit
 
@@ -219,25 +220,26 @@ If all requirements are satisfied, then the sending validator's deposit counts a
 \textbf{Requirements for accepting a commit message (\figref{fig:msgCOMMIT})}:
 \begin{enumerate}
 \item Hash \hash must be the checkpoint of epoch \epoch.  Equivalently, $\hash = b_{100\epoch + 99}$.
-\item Hash \hash must be Justified.  Equivalently, $c \in \mathbf{J}$.
+\item Hash \hash must be \emph{already} Justified.  Meaning checkpoint \hash must have been Justified before the commit message.  Equivalently, $c \in \mathbf{J}$.
+\item Hash \hash must have been Justified within the past 100 blocks.  Equivalently, if checkpoint \hash became Justified at block $b_i$, then the commits will only be accepted between blocks $[ b_{i+1}, b_{i+101} ]$.
 \item[3a.] The signing validator must be a member of the validator set.
 \end{enumerate}
 If all requirements are satisfied, then the sending validator's deposit counts as behind commiting checkpoint \hash.
 
 Validators only recognize prepares and commits that have been included in blocks (even if those blocks are not part of the main chain). 
 
-The most notable property of Casper is that it is impossible for two conflicting checkpoints to be Finalized unless $\geq \frac{1}{3}$ of the validators violated one of the two\footnote{Earlier versions of Casper had four slashing conditions,\cite{minslashing} but we can reduce to two because of the requirements that (i) Finalized hashes must be Justified, and (ii) prepare messages must point to an already Justified ancestor.  These requirements ensure that blocks will not register commits or prepares that violate the other two slashing conditions, making them superfluous.} Casper Commandments (a.k.a. slashing conditions).  These are:
+The most notable property of Casper is that it is impossible for two conflicting checkpoints to be Finalized unless $\geq \frac{1}{3}$ of the validators violated one of the two\footnote{Earlier versions of Casper had four slashing conditions \cite{minslashing}, but we can reduce to two because of the requirements that (i) Committed hashes must already be Justified, and (ii) prepare messages must point to an already Justified ancestor.  These requirements ensure that blocks will not register commits or prepares that violate the other two slashing conditions, making them superfluous.} Casper Commandments (a.k.a. slashing conditions).  These are:
 
 \begin{enumerate}
-   \item[\textbf{I.}] \textsc{A validator shalt not, for a given target epoch, publish two or more nonidentical prepares.}
+   \item[\textbf{I.}] \textsc{A validator shalt not publish nonidentical prepares specifying the same target epoch.}
 
-   In other words, for each epoch \epoch, a validator may prepare at most exactly one $(\hash, \epochsource, \hashsource)$ triplet.
+   In other words, for each epoch \epoch, a validator may prepare at most exactly one $\left(\hashsource, \epochsource, \hash\right)$ triplet.
 
-   \item[\textbf{II.}] \textsc{A validator shalt not commit to any hash between the epochs of its own prepare statements.}
+   \item[\textbf{II.}] \textsc{A validator shalt not commit to any epoch between the epochs of its own prepare statements.}
     
-   Equivalently, a validator may not publish,
+   Equivalently, a validator may never publish,
 \begin{equation}
-\langle \msgPREPARE, \epoch_p, \hash_p, \epochsource, \hashsource \rangle \hspace{0.5in} \textnormal{and} \hspace{0.5in} \langle \msgCOMMIT, \epoch_c, \hash_c \rangle \;, 
+\left\langle \msgPREPARE, \hashsource, \epochsource, \hash_p, \epoch_p \right\rangle \hspace{0.5in} \textnormal{and} \hspace{0.5in} \left\langle \msgCOMMIT, \epoch_c, \hash_c \right\rangle \;, 
 \label{eq:msgPREPARE}
 \end{equation}
 
@@ -246,6 +248,48 @@ where the epochs satisfy $\epochsource < \epoch_c < \epoch_p$.
 \end{enumerate}
 
 If a validator violates any commandment, the evidence that the validator did this can be included into the blockchain as a transaction, at which point the validator's entire deposit will be taken away, with a 4\% ``finder's fee'' given to the submitter of the evidence transaction.
+
+\subsection{Casper's Fork Choice Rule}
+\label{sect:forkchoice}
+Casper is more complicated than standard PoW designs.  As such, the fork-choice must be adjusted.  This fork-choice rule should be followed by all users, validators, and even the underlying block proposal mechanism.  If the users, validators, or block-proposers instead follow the typical fork-choice rule of ``always build atop the longest chain'', there are pathological scenarios where Casper gets ``stuck'' and any blocks built atop the longest chain cannot be Finalized (or even Justified) without violating a Commandment---one such pathological scenario is the fork in \figref{fig:forkchoice}.
+
+In \figref{fig:forkchoice_a}, proposers follow the ``build atop the longest chain'' rule and proposers build atop $A_2$.  But this runs into problems.  $A_2$ cannot be Justified by Preparing $A_1 \to A_2$ because that requires first Justifying $A_1$.  Unfortunately, because another block with the same epoch ($B_1$) is already Justified (has $\frac{2}{3}$ prepares), $A_1$ cannot be Justified without at least $\frac{1}{3}$ of validators violating Commandment \textbf{I} by preparing both $A_1$ and $B_1$.
+
+Since we can't justify $A_1$, could we instead Justify $A_2$ by preparing $S \to A_2$?  Unfortunately, preparing $S \to A_2$ to Justification requires some validators to violate Commandment \textbf{II} as $\frac{1}{2}$ have already commited to $B_1$.  This same argument applies to any ancestor of $S$.  Therefore $A_2$ cannot be Justified by any means without violating a Commandment.  Then because $A_2$ cannot be Justified, it cannot be Finalized.  Even more unfortunate, this same argument also applies to all successors of $A_2$.  Ergo, if validators are Rational and follow the longest-chain fork-choice rule, \emph{no checkpoints would be justified or finalized ever again}.
+
+Fortunately, there's another way; in \figref{fig:forkchoice_b} we see the way out.  Say we instead built atop $B_1$ to create $B_2$.  Unfortunately $B_2$ cannot be Justified because preparing $B_1 \to B_2$ to justification requires some validators to violate Commandment \textbf{I} as $\frac{1}{2}$ have already prepared to $A_2$ (and likewise cannot prepare $S \to B_2$ because $\frac{1}{2}$ have already committed to $B_1$).  So there's no way to Justify $B_2$.  Then because $B_2$ cannot be Justified, it cannot be Finalized.  But say we keep building and create $B_3$.  Validators \emph{can} prepare $B_1 \to B_3$ without violating Commandment \textbf{I}.  And secondly, because $A_2$ has no commits, all validators can prepare $B_1 \to B_3$ without violating Commandment \textbf{II}.  Once $B_3$ is Justified, it can be Finalized without obstacles.
+
+
+
+\begin{figure}[h!tb]
+\centering
+   \begin{subfigure}[b]{0.42\textwidth}
+   \centering
+\includegraphics[width=2.5in]{forkchoiceruleA.pdf}
+	\caption{Longest-chain forkchoice rule.}
+	\label{fig:forkchoice_a}	
+	\end{subfigure} \hspace{0.3in} \begin{subfigure}[b]{0.42\textwidth}
+   \centering
+\includegraphics[width=2.5in]{forkchoiceruleB.pdf}
+	\caption{Casper-aware forkchoice rule.}
+	\label{fig:forkchoice_b}	
+	\end{subfigure}
+
+\caption{A pathological scenario demonstrating the outcome of two fork-choice rules.   In \Subref{fig:forkchoice_a} we see the result of the typical ``build atop the longest chain'' fork choice rule.  In \Subref{fig:forkchoice_b} we see the result of our Casper-aware fork choice rule (Listing \ref{alg:forkchoice}).  Each pill represents a checkpoint.  In each pill, the left number is the proportion of validators who prepared that checkpoint, and the right number is the proportion of validators who committed that checkpoint.  Red pills are conflicting checkpoints.}
+\label{fig:forkchoice}
+\end{figure}
+
+Inspired by the successful escape in \figref{fig:forkchoice_b}, we define a novel fork choice rule.\footnote{Casper's commit-following fork choice rule is analogous to the ``greedy heaviest observed subtree'' (GHOST) rule for proof of work chains\cite{sompolinsky2013accelerating}.} Instead of blindly following the longest-chain, we:
+
+\begin{enumerate}
+\item Favor checkpoints by the proportion of commits.
+\item When multiple checkpoints have the same proportion of commits, favor checkpoints by the proportion of prepares.
+\item When multiple checkpoints have the same proportion of prepares, favor checkpoints by depth (longest chain).
+\item When multiple checkpoints have the same depth, choose randomly.
+\end{enumerate}
+
+A complete specification for our forkchoice rule is in Listing \ref{alg:forkchoice}.  The Casper fork-choice rule ensures that the selected head will always be one that minimizes validator penalties.  In fact, as long as $> \frac{2}{3}$ of validators only commit to Justified checkpoints, there \emph{never} needs to be a violation of either Commandment (see Theorem \ref{theorem:liveness}).
+
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -260,7 +304,7 @@ We prove Casper's two fundamental properties: \textit{accountable safety} and \t
 Two conflicting checkpoints cannot be Finalized unless $\geq \frac{1}{3}$ of validators violate a slashing condition.
 
 \begin{proof}
-Suppose the two conflicting checkpoints are $A$ in epoch $\epoch_A$ and $B$ in epoch $\epoch_B$ (see \figref{fig:conflicting_checkpoints}). If both are Finalized, this implies $\frac{2}{3}$ commits and $\frac{2}{3}$ prepares in epochs $\epoch_A$ and $e_B$. In the trivial case where $\epoch_A = \epoch_B$ (\figref{fig:2a}), this implies that some intersection of $\frac{1}{3}$ of validators must have violated slashing Commandment \textbf{I}. In the other case, there must exist two chains $\Genesisblock < \cdots < \epoch_A^2 < \epoch_A^1 < \epoch_A$ and $\Genesisblock < \cdots < \epoch_B^2 < \epoch_B^1 < \epoch_B$ of Justified checkpoints, both starting at the genesis block $\Genesisblock$. Suppose without loss of generality that $\epoch_A < \epoch_B$. Then, there must be some $\epoch_B^i$ such that either $\epoch_B^i \leq \epoch_A < \epoch B$.  If $\epoch_A = \epoch_B^i$ (\figref{fig:2b}), then checkpoints $A$ and $B^i$ both have $\frac{2}{3}$ prepares, thus at least $\frac{1}{3}$ of validators violated Commandment \textbf{I}.  If instead $\epoch_A < \epoch_B^i$ (\figref{fig:2c}), $A$ has $\frac{2}{3}$ commits and there exist $\frac{2}{3}$ prepares with $\epoch_B^i < \epoch_A < \epoch_B$, at least $\frac{1}{3}$ of validators violated Commandment \textbf{II}. 
+Suppose the two conflicting checkpoints are $A$ in epoch $\epoch_A$ and $B$ in epoch $\epoch_B$ (see \figref{fig:conflicting_checkpoints}). If both are Finalized, this entails $\frac{2}{3}$ commits and $\frac{2}{3}$ prepares in epochs $\epoch_A$ and $e_B$. In the trivial case where $\epoch_A = \epoch_B$ (\figref{fig:2a}), this implies that some intersection of $\geq \frac{1}{3}$ of validators must have violated Commandment \textbf{I}. If instead $\epoch_A \not= \epoch_B$, there exist two chains $\Genesisblock < \cdots < \epoch_A^2 < \epoch_A^1 < \epoch_A$ and $\Genesisblock < \cdots < \epoch_B^2 < \epoch_B^1 < \epoch_B$ of Justified checkpoints, both terminating at the genesis block $\Genesisblock$. Without loss of generality, suppose $\epoch_A < \epoch_B$. Then, there must be some $\epoch_B^i$ such that $\epoch_B^i \leq \epoch_A < \epoch_B$.  If $\epoch_B^i = \epoch_A$ (\figref{fig:2b}), then checkpoints $A$ and $B^i$ both have $\frac{2}{3}$ prepares, thus $\geq \frac{1}{3}$ of validators violated Commandment \textbf{I}.  If instead $\epoch_B^i < \epoch_A$ (\figref{fig:2c}), checkpoint $A$ has at least $\frac{2}{3}$ commits and checkpoint $\epoch_B^i$ has at least $\frac{2}{3}$ prepares with $\epoch_B^i < \epoch_A < \epoch_B$.  Therefore $\geq \frac{1}{3}$ of validators violated Commandment \textbf{II}. 
 \end{proof}
 \end{theorem}
 
@@ -286,96 +330,56 @@ Suppose the two conflicting checkpoints are $A$ in epoch $\epoch_A$ and $B$ in e
 	\label{fig:2c}	
 	\end{subfigure}
 
-\caption{Illustrating the three scenarios in Theorem \ref{theorem:safety}.  Each pill represents a checkpoint.  In each pill, the left number is the proportion of validators who prepared that checkpoint, and the right number is the proportion of validators who committed that checkpoint.}
+\caption{Illustrating the three scenarios in Theorem \ref{theorem:safety}.  Each pill represents a checkpoint.  In each pill, the left number is the proportion of validators who prepared that checkpoint, and the right number is the proportion of validators who committed that checkpoint.  Red pills are conflicting checkpoints.}
 \label{fig:conflicting_checkpoints}
 \end{figure}
 
 
 \begin{theorem}[Plausible Liveness]
 \label{theorem:liveness}
-It is always possible for $\frac{2}{3}$ of honest validators to finalize a new checkpoint, regardless of what previous events took place.
+Regardless of what previous events took place, if $\geq \frac{2}{3}$ of validators never commit to an Unjustified block, a new checkpoint can be finalized without violating any Commandment.
+%It is always possible for $\frac{2}{3}$ of honest validators to finalize a new checkpoint, .
 
 \begin{proof}
-Suppose that all existing validators have sent some sequence of prepare and commit messages. Let $\hash_j$ with epoch $\epoch_j$ be the highest-epoch Justified checkpoint, and let $n \ge \epoch_j$ be the highest epoch prepared by any honest validator. Honest validators have not committed on any block which is not Justified. Hence, neither slashing condition stops honest validators from preparing the next checkpoint $\hash$ in epoch $n+1$ using $\epoch_j$ as $\epochsource$, and then committing $\hash$.  More concretely, they will always be able to publish $\langle \msgPREPARE, n+1, \hash, \epoch_j, \hash_j \rangle$ and then publish $\langle \msgCOMMIT, n+1, \hash \rangle$ without violating any slashing condition.
+Suppose all validators have sent some sequence of prepare and commit messages. Let $\hash_j$ at epoch $\epoch_j$ be the highest-epoch Justified checkpoint.  From the premise, $\geq \frac{2}{3}$ of validators have not committed to any epoch after $\epoch_j$.  Hence, Commandment \textbf{II} doesn't stop these validators from preparing any checkpoint $\hash$ at epoch $\epoch$ where $\epoch > \epoch_j$ and then committing $\hash$.  More concretely, these validators will always be able to publish $\langle \msgPREPARE, \hash_j, \epoch_j, \hash, \epoch \rangle$ and then publish $\langle \msgCOMMIT, \hash, \epoch \rangle$ without violating any Commandment.
+
+% and let $n \ge \epoch_j$ be the highest epoch prepared by any honest validator. Honest validators have not committed on any block which is not Justified. 
 \end{proof}
 
 \end{theorem}
 
-\section{Tweaking the Proposal Mechanism}
-\label{sect:forkchoice}
-Although Casper is chiefly an overlay on top of a proposal mechanism, the proposal mechanism's fork-choice rule does need to be Casper-aware.  If the proposal mechanism isn't Casper-aware and instead follows the typical fork-choice rule of ``always build atop the longest chain'', Casper can get stuck where no further checkpoints are Finalized.  We see one such example in \figref{fig:forkchoice}.
-
-In this case, $HASH1$ or any descendant thereof cannot be Finalized without slashing $\frac{1}{6}$ of validators. However, miners on a proof of work chain would interpret $HASH1$ as the head and forever keep mining descendants of it, ignoring the chain based on $HASH0^\prime$ which actually could get Finalized.
-
-\begin{figure}[h!tb]
-\centering
-\includegraphics[width=5.5in]{fork4.png}
-%\includegraphics[width=5.5in]{cs.pdf}
-\caption{Miners following the traditional proof of work fork choice rule would create blocks on HASH1, but because of the slashing conditions validators would only Finalize blocks on top of $HASH1^\prime$.}
-\label{fig:forkchoice}
-\end{figure}
-
-In fact, when \textit{any} checkpoint gets $k > \frac{1}{3}$ commits, no conflicting checkpoint can get Finalized without $k - \frac{1}{3}$ of validators getting slashed. This necessitates modifying the fork choice rule used by participants in the underlying proposal mechanism (as well as users and validators): instead of blindly following a longest-chain rule, there needs to be an overriding rule that (i) Finalized checkpoints are favored, and (ii) when there are no further Finalized checkpoints, checkpoints with more (Justified) commits are favored.  One complete description of such a rule is in Listing \ref{alg:forkchoice}.
-
-\begin{lstlisting}[language=Python, caption={Algorithm for determining the head}, captionpos=b, label={alg:forkchoice}]
-from random import shuffle
-
-def get_head(genesisblock):
-    
-    head = genesisblock
-    
-    while True:
-        S = successors( head )
-        
-        if not S:
-            return head
-
-        # choose the successor with the greatest commits
-        max_commit = max( map(valid_commits, S) )        
-        S = [ s for s in S if valid_commits(S) == max_commit ]
-        
-        if len(S) == 1:
-            head = S[0]
-            continue
-
-        # choose the succesor with the greatest prepares
-        max_prepare = max( map(valid_prepares, S) )
-        S = [ s for s in S if valid_prepares(S) == max_prepare ]
-        
-        if len(S) == 1:
-            head = S[0]
-            continue
-        
-        # choose the succesor with the greatest depth (longest chain)
-        max_depth = max( map(depth, S) )
-        S = [ s for s in S if depth(S) == max_depth ]
-        
-        if len(S) == 1:
-            head = S[0]
-            continue
-
-        # choose a random successor
-        shuffle(S)
-        head = S.pop()
-
-\end{lstlisting}
-
-The commit-following part of this rule can be viewed as mirroring the ``greedy heaviest observed subtree'' (GHOST) rule that has been proposed for proof of work chains\cite{sompolinsky2013accelerating}. Finalizing a checkpoint requires $\frac{2}{3}$ commits within a \textit{single} epoch, \q{How do we enforce this?} and so we do not try to sum up commits across epochs and instead simply take the maximum. \q{I want to be very clear on the desired behavior here.  I'll write it out mathematically for you to check.}
-
-This fork-choice rule ensures that if there is a checkpoint such that no conflicting checkpoint can be Finalized without at least some validators violating slashing conditions, then this is the checkpoint that will be viewed as the ``head'' that proposers will build upon and Casper validators prepare/commit on.
 
 \section{Enabling Dynamic Validator Sets}
 \label{sect:join_and_leave}
 
-The set of validators needs to be able to change.  New validators need to be able to join, and existing validators need to be able to leave.  To accomplish this, we define a variable in the state called the \textit{dynasty} counter. When a would-be valdiator sends zer deposit message, if this transaction is included in dynasty $n$, then the validator will be \textit{inducted} in dynasty $n+2$. The dynasty counter increments if and only if there's been an epoch of \emph{perfect execution}.  We define the ``perfect execution'' of the Casper protocol during an epoch $n$, as every validator preparing $C_{n-1} \to C_{n}$ and commiting $C_{n}$.  For example, during epoch $2$ (blocks $200 \ldots 299$), all validators prepare $b_{99} \to b_{199}$ and commit $b_{199}$.  We call this validator's \textit{start dynasty} $d+2$.
+The set of validators needs to be able to change.  New validators must be able to join, and existing validators must be able to leave.  To accomplish this, we define a variable in the state called the \textit{dynasty counter}. \todo{We don't actually need this in the state.  It can be computed by each validator.} When a would-be valdiator's deposit message is included in dynasty $d$, then the validator will be \textit{inducted} at the start of dynasty $d+2$.  We call $d+2$ this validator's \textit{start dynasty}.
 
-To leave the validator set, the validator must send a ``withdraw'' message. If their withdraw message gets included during dynasty $m$, the validator similarly leaves the validator set at the start of dynasty $m+2$; we call $m+2$ their \textit{end dynasty}. When a validator withdraws, their deposit is locked for a long period of time (the \textit{withdrawal delay}, for now think ``four months'') before they can take their money out; if they violate a slashing condition within that time then their deposit is forfeited. \q{When does the withdrawal delay start? At the withdraw message?}
 
+The dynasty counter increments if and only if there's been a \emph{perfectly finalized checkpoint}.  We define checkpoint $C_n$ as ``perfectly finalized'' if and only if during epoch $n-1$ every validator prepares $C_{n-1} \to C_{n}$ and commits $C_{n}$.  For example, checkpoint $C_3$ (a.k.a., $b_{199}$) is perfectly finalized if during epoch $2$, blocks $200 \ldots 299$ (before block $300$), \emph{all} validators prepare $b_{99} \to b_{199}$ \emph{and} commit $b_{199}$.
+
+We define a growing sequence of the perfectly finalized checkpoints $\mathbf{P}$ starting simply as, $\mathbf{P} = \left( \Genesisblock \right)$.  Then, anytime a checkpoint is perfectly finalized, we append that checkpoint to sequence $\mathbf{P}$.  So if checkpoints $C_2, C_5, C_6, C_9$ are perfectly finalized, $\mathbf{P}$ becomes, $\mathbf{P} = \left( \Genesisblock, C_2, C_5, C_6, C_9 \right)$, and so on for future perfectly finalized checkpoints.  From the list of perfectly finalized checkpoints, we can compute the dynasty counter, $d \equiv | \mathbf{P} |$, and $\mathcal{D}(k)$ (where $k \in \left[1, |\mathbf{P}| - 1\right]$) as the set of checkpoints within dynasty $k$,
+     
 \begin{equation}
-\mathbf{D} = \left( \begin{split} (C_1, \ldots, C_a), \\ (C_{a+1}, \ldots, C_b), \\ (C_{b+1}, \ldots, C_c), \\ \vdots \hspace{0.4in} \end{split}  \right) \; .
+    \mathcal{D}(k) \equiv \begin{cases}
+     \left\{ c \in \mathbf{C} : \mathbf{P}_k < c \right\} \qquad \qquad \qquad \!\! \textnormal{if $k = |\mathbf{P}| - 1$,} \\
+         \left\{ c \in \mathbf{C} : \mathbf{P}_k < c \leq \mathbf{P}_{k+1} \right\} \qquad \textnormal{otherwise.} \\
+     \end{cases}
 \end{equation}
 
-\TODO{not happy with this notation yet.}
+So using the example above, $\mathcal{D}(1) = \{ C_1, C_2 \}$,  $\mathcal{D}(2) = \{C_3, C_4, C_5\}$ and $\mathcal{D}(2) = \left\{ C_6 \right\}$, $\mathcal{D}(3) = \{ C_7, C_8, C_9\}$, etc.
+
+
+
+
+To leave the validator set, the validator must send a ``withdraw'' message. If their withdraw message gets included during dynasty $d$, the validator similarly leaves the validator set at the start of dynasty $d+2$; we call $d+2$ the validator's \textit{end dynasty}.  At the start of the end dynasty, the validator's deposit is locked for a long period of time, the \textit{withdrawal delay}, (think ``four months'') before the deposit can be withdrawn.  If, during the withdrawal delay, the validator violates any Commandment, the deposit is forfeited.
+
+
+\begin{equation}
+    \mathcal{V}(k) = \left\{ \textnormal{validator set for dynasty $k$.  The accepted validators for checkpoints $\mathcal{D}(k)$.}\right\} \; .
+\end{equation}
+
+
+Which leads to the pleasing relations, $\mathbf{P} \subseteq \mathbf{F} \subseteq \mathbf{J} \subseteq \mathbf{C} \subset \mathbf{B}$ and $\mathcal{D}(k) \subseteq \mathbf{C} \ \ \forall k$.
 
 \textbf{Revised requirement for accepting a prepare message (\figref{fig:msgPREPARE})}:
 \begin{enumerate}
@@ -389,9 +393,9 @@ To leave the validator set, the validator must send a ``withdraw'' message. If t
 \end{enumerate}
 
 
-For a checkpoint to be Justified, it must be prepared by a set of validators which contains (i) at least $\frac{2}{3}$ of the current dynasty (that is, validators with $startDynasty \leq curDynasty < endDynasty$), and (ii) at least $\frac{2}{3}$ of the previous dyansty (that is, validators with $startDynasty \leq curDynasty - 1 < endDynasty$. Finalization with commits works similarly. The current and previous dynasties will usually greatly overlap; but in cases where they substantially diverge this ``stitching'' mechanism ensures that dynasty divergences do not lead to situations where a finality reversion or other failure can happen because different messages are signed by different validator sets and so equivocation is avoided.
+For a checkpoint to be Justified, it must be prepared by a set of validators which contains (i) at least $\frac{2}{3}$ of the current dynasty and (ii) at least $\frac{2}{3}$ of validators comprising the previous dynasty. Finalization works the same. The current and previous dynasties will usually greatly overlap; but if the two validator sets substantially differ, this ``stitching'' mechanism mitigates the risk of a finality reversion or other failure can happen because different messages are signed by different validator sets and so equivocation is avoided.
 
-We can write this mathematically by extending \eqref{eq:firstJandF} to,
+We can write this mathematically by rewriting \eqref{eq:firstJandF} to become,
 \begin{equation}
 \begin{split}
     \mathbf{J} &= \left( c \in \mathbf{C} : \min\left[ \textnormal{valid\_prepares}(c,d-1), \textnormal{valid\_prepares}(c,d) \right] \geq \nicefrac{2}{3} \right) \\
@@ -410,8 +414,10 @@ where $d$ is the current dynasty index.
 \label{fig:dynamic2}
 \end{figure}
 
-\subsection{Long Range Attacks}
+\TODO{not happy with this notation yet.}
 
+
+\subsection{Long Range Attacks}
 Note that the withdrawal delay introduces a synchronicity assumption \textit{between validators and clients}. Because validators can withdraw their deposits after the withdrawal delay, there is an attack where a coalition of validators which had more than $\frac{2}{3}$ of deposits \textit{long ago in the past} withdraws their deposits, and then uses their historical deposits to finalize a new chain that conflicts with the original chain without fear of getting slashed.  Despite violating slashing conditions to make a chain split, because the attacker has already withdrawn on both chains they do not lose any money. This is called the \textit{long-range atack}.
 
 \begin{figure}[h!tb]
@@ -467,3 +473,4 @@ This introduces the basic workings of Casper the Friendly Finality Gadget's prep
 
 
 \end{document}
+    
