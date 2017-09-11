@@ -273,7 +273,7 @@ The set of validators needs to be able to change.  New validators need to be abl
 
 For a validator to leave, they must send a ``withdraw'' message. If their withdraw message gets included during dynasty $n$, the validator similarly leaves the validator set during dynasty $n+2$; we call $n+2$ their \textit{end dynasty}. When a validator withdraws, their deposit is locked for a long period of time (the \textit{withdrawal delay}, for now think ``four months'') before they can take their money out; if they are caught violating a slashing condition within that time then their deposit is forfeited.
 
-For a checkpoint to be justified, it must be prepared by a set of validators which contains (i) at least $\frac{2}{3}$ of the current dynasty (that is, validators with $startDynasty \le curDynasty < endDynasty$), and (ii) at least $\frac{2}{3}$ of the previous dyansty (that is, validators with $startDynasty \le curDynasty - 1 < endDynasty$. Finalization with commits works similarly. The current and previous dynasties will usually greatly overlap; but in cases where they substantially diverge this ``stitching'' mechanism ensures that dynasty divergences do not lead to situations where a finality reversion or other failure can happen because different messages are signed by different validator sets and so equivocation is avoided.
+For a checkpoint to be justified, it must be prepared by a set of validators which contains (i) at least $\frac{2}{3}$ of the current dynasty (that is, validators with $startDynasty \le curDynasty < endDynasty$), and (ii) at least $\frac{2}{3}$ of the previous dynasty (that is, validators with $startDynasty \le curDynasty - 1 < endDynasty$. Finalization with commits works similarly. The current and previous dynasties will usually greatly overlap; but in cases where they substantially diverge this ``stitching'' mechanism ensures that dynasty divergences do not lead to situations where a finality reversion or other failure can happen because different messages are signed by different validator sets and so equivocation is avoided.
 
 \begin{figure}[h!tb]
 \centering
@@ -297,7 +297,7 @@ Suppose that clients can be relied on to log on at least once every time $\delta
 
 This rejection can also be partially automated, by implementing a mechanism where if a client sees a slashing condition violation before they see some block $B$ with timestamp $t$, and then the head is a descendant of $B$ with timestamp greater than $t + EIT$ (``evidence inclusion timelimit'') that does has not yet punished the malfeasant validator, the client shows a warning.
 
-\section{Recovering from Castastrophic Crashes}
+\section{Recovering from Catastrophic Crashes}
 \label{sect:leak}
 
 Suppose that $>\frac{1}{3}$ of validators crash-fail at the same time---i.e, they are no longer connected to the network due to a network partition, computer failure, or are malicious actors. Then, no later checkpoint will be able to get finalized.
@@ -319,7 +319,7 @@ If the goal is simply to achieve maximally close to 50\% fault tolerance, then c
 
 \section{Conclusions}
 
-This introduces the basic workings of Casper the Friendly Finality Gadget's prepare and commit mechanism and fork choice rule, in the context of Byzantine fault tolerance analysis. Separate papers will serve the role of explaining and analyzing incentives inside of Casper, and the different ways that they can be parametrized and the consequences of these paramtrizations.
+This introduces the basic workings of Casper the Friendly Finality Gadget's prepare and commit mechanism and fork choice rule, in the context of Byzantine fault tolerance analysis. Separate papers will serve the role of explaining and analyzing incentives inside of Casper, and the different ways that they can be parametrized and the consequences of these parameterizations.
 
 \section{Acknowledgements}
 
