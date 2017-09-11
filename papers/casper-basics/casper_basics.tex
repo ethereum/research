@@ -1,6 +1,6 @@
 \title{Casper the Friendly Finality Gadget}
 \author{
-        Vitalik Buterin \\
+        Vitalik Buterin and Virgil Griffith \\
         Ethereum Foundation}
 
 \documentclass[12pt, final]{article}
@@ -188,9 +188,7 @@ Finally, we define the ``ideal execution'' of the Casper protocol during an epoc
 \section{Proofs of Safety and Plausible Liveness}
 \label{sect:theorems}
 
-We give a proof of two properties of Casper: \textit{accountable safety} and \textit{plausible liveness}. Accountable safety means that two conflicting checkpoints cannot be finalized unless $\geq \frac{1}{3}$ of validators violate a slashing condition (meaning at least one third of the total deposits are lost). Honest validators will never violate slashing conditions, so this implies the usual Byzantine fault tolerance safety property, but expressing this in terms of slashing conditions means that we are actually proving a stronger claim: if two conflicting checkpoints get finalized, then at least $\frac{1}{3}$ of validators were malicious, \textit{and we know whom to blame, and so we can maximally penalize them in order to make such faults expensive}.
-
-Plausible liveness means that it is always possible for $\frac{2}{3}$ of honest validators to finalize a new checkpoint, regardless of what previous events took place.
+We prove Casper's two fundamental properties: \textit{accountable safety} and \textit{plausible liveness}. Accountable safety means that two conflicting checkpoints cannot be finalized unless $\geq \frac{1}{3}$ of validators violate a slashing condition (meaning at least one third of the total deposit is lost).  Plausible liveness means that, regardless of any previous events, it is always possible for $\frac{2}{3}$ of honest validators to finalize a new checkpoint.
 
 \begin{figure}[h!tb]
 \centering
@@ -209,6 +207,22 @@ Suppose the two conflicting checkpoints are $A$ in epoch $\epoch_A$ and $B$ in e
 \end{proof}
 \end{theorem}
 
+\begin{figure}[h!tb]
+\centering
+   \begin{minipage}[b]{0.48\textwidth}
+    \includegraphics[width=2.7in]{cs.pdf}
+    \centering
+    $\epoch_A = \epoch_B$
+   \end{minipage}
+   \begin{minipage}[b]{0.48\textwidth}
+    \includegraphics[width=2.7in]{cs.pdf}
+    \centering
+    $\epoch_A < \epoch_B$
+   \end{minipage}
+\label{fig:conflicting_checkpoints}
+\caption{Illustrating the two scenarios in Theorem \ref{theorem:safety}.}
+\end{figure}
+
 \begin{theorem}[Plausible Liveness]
 \label{theorem:liveness}
 It is always possible for $\frac{2}{3}$ of honest validators to finalize a new checkpoint, regardless of what previous events took place.
@@ -219,12 +233,12 @@ Suppose that all existing validators have sent some sequence of prepare and comm
 
 \end{theorem}
 
-\section{Fork Choice Rule}
+\section{Tweaking the Proposal Mechanism}
 \label{sect:forkchoice}
 
-The mechanism described above ensures \textit{plausible liveness}; however, it by itself does not ensure \textit{actual liveness} - that is, while the mechanism cannot get stuck in the strict sense, it could still enter a scenario where the proposal mechanism (i.e. the proof of work chain) gets into a state where it never ends up creating a checkpoint that could get finalized.
+Although Casper is chiefly an overlay on top of a proposal mechanism, in order to translate the \textit{plausible liveness} proven into the previous section into \textit{actual liveness in practice}, the proposal mechanism needs to be Casper-aware.  If the proposal mechanism isn't Casper-aware, as is the case with a proof of work chain that follows the typical fork-choice rule of ``always build atop the longest chain'', Casper can get stuck where no further checkpoints are finalized.  We see one such example in \figref{fig:forkchoice}.
 
-In \figref{fig:forkchoice} we see one possible example.  In this case, $HASH1$ or any descendant thereof cannot be finalized without slashing $\frac{1}{6}$ of validators. However, miners on a proof of work chain would interpret $HASH1$ as the head and forever keep mining descendants of it, ignoring the chain based on $HASH0^\prime$ which actually could get finalized.
+In this case, $HASH1$ or any descendant thereof cannot be finalized without slashing $\frac{1}{6}$ of validators. However, miners on a proof of work chain would interpret $HASH1$ as the head and forever keep mining descendants of it, ignoring the chain based on $HASH0^\prime$ which actually could get finalized.
 
 \begin{figure}[h!tb]
 \centering
@@ -233,22 +247,24 @@ In \figref{fig:forkchoice} we see one possible example.  In this case, $HASH1$ o
 \label{fig:forkchoice}
 \end{figure}
 
-In fact, when \textit{any} checkpoint gets $k > \frac{1}{3}$ commits, no conflicting checkpoint can get finalized without $k - \frac{1}{3}$ of validators getting slashed. This necessitates modifying the fork choice rule used by participants in the underlying proposal mechanism (as well as users and validators): instead of blindly following a longest-chain rule, there needs to be an overriding rule that (i) finalized checkpoints are favored, and (ii) when there are no further finalized checkpoints, checkpoints with more (justified) commits are favored.
+In fact, when \textit{any} checkpoint gets $k > \frac{1}{3}$ commits, no conflicting checkpoint can get finalized without $k - \frac{1}{3}$ of validators getting slashed. This necessitates modifying the proposal mechanism so that, in the event that some checkpoint is justified and receives any commits, any new blocks that are proposed are descendants of that checkpoint, and not conflicting checkpoints that have fewer or no commits.
+
+In the case where the proposal mechanism is a proof of work chain, this entails modifying the fork choice rule: instead of blindly following a longest-chain rule, there needs to be an overriding rule that (i) finalized checkpoints are favored, and (ii) when there are no further finalized checkpoints, checkpoints with more (justified) commits are favored.
 
 One complete description of such a rule would be:
 
 \begin{enumerate}
 \item Start with HEAD equal to the genesis of the chain.
-\item Select the descendant checkpoint of HEAD with the most commits (only justified checkpoints are admissible)
+\item Find the descendant checkpoint of HEAD with the most commits (only justified checkpoints are admissible). Set HEAD to this value.
 \item Repeat (2) until no descendant with commits exists.
 \item Choose the longest proof of work chain from there.
 \end{enumerate}
 
-The commit-following part of this rule can be viewed as mirroring the ``greegy heaviest observed subtree'' (GHOST) rule that has been proposed for proof of work chains\cite{sompolinsky2013accelerating}. The symmetry is as follows. In GHOST, a node starts with the head at the genesis, then begins to move forward down the chain, and if it encounters a block with multiple children then it chooses the child that has the larger quantity of work built on top of it (including the child block itself and its descendants).
+The commit-following part of this rule can be viewed as mirroring the ``greegy heaviest observed subtree'' (GHOST) rule that has been proposed for proof of work chains\cite{sompolinsky2013accelerating}. \footnote{The symmetry is as follows. In GHOST, a node starts with the head at the genesis, then begins to move forward down the chain, and if it encounters a block with multiple children then it chooses the child that has the larger quantity of work built on top of it (including the child block itself and its descendants).
 
-In this algorithm, we follow a similar approach, except we repeatedly seek the child that comes the closest to achieving finality. Commits on a descendant are implicitly commits on all of its lineage, and so if a given descendant of a given block has more commits than any other descendant, then we know that all children along the chain from the head to this descendant are closer to finality than any of their siblings; hence, looking for the \textit{descendant} with the most commits and not just the \textit{child} replicates the GHOST principle most faithfully. Finalizing a checkpoint requires $\frac{2}{3}$ commits within a \textit{single} epoch, and so we do not try to sum up commits across epochs and instead simply take the maximum.
+In this algorithm, we follow a similar approach, except we repeatedly seek the child closest to achieving finality. Commits on a descendant are implicitly commits on its ancestors, and so if a given descendant of a given block has the most commits, then we know that all children along the chain from the head to this descendant are closer to finality than any of their siblings; hence, looking for the \textit{descendant} with the most commits and not just the \textit{child} gives the right properties. Finalizing a checkpoint requires $\frac{2}{3}$ commits of a \textit{single} checkpoint, and so unlike GHOST we simply look for the maximum commit count instead of trying to sum up all commits in an entire subtree.}
 
-This rule ensures that if there is a checkpoint such that no conflicting checkpoint can be finalized without at least some validators violating slashing conditions, then this is the checkpoint that will be viewed as the ``head'' and thus that validators will try to commit on.
+This rule ensures that if there is a checkpoint such that no conflicting checkpoint can be finalized without at least some validators violating slashing conditions, then this is the checkpoint that will be viewed as the ``head'' and thus that validators will try to commit on. \footnote{Favoring checkpoint with even a single commit, instead of $\frac{1}{3} + \epsilon$, is desired to ensure that plausible liveness translates into actual liveness even in scenarios where up to $\frac{1}{3}$ of validators are offline.}
 
 \section{Allowing Dynamic Validator Sets}
 \label{sect:join_and_leave}
@@ -259,10 +275,11 @@ For a validator to leave, they must send a ``withdraw'' message. If their withdr
 
 For a checkpoint to be justified, it must be prepared by a set of validators which contains (i) at least $\frac{2}{3}$ of the current dynasty (that is, validators with $startDynasty \le curDynasty < endDynasty$), and (ii) at least $\frac{2}{3}$ of the previous dyansty (that is, validators with $startDynasty \le curDynasty - 1 < endDynasty$. Finalization with commits works similarly. The current and previous dynasties will usually greatly overlap; but in cases where they substantially diverge this ``stitching'' mechanism ensures that dynasty divergences do not lead to situations where a finality reversion or other failure can happen because different messages are signed by different validator sets and so equivocation is avoided.
 
-\begin{figure}
+\begin{figure}[h!tb]
 \centering
-\includegraphics[width=3in]{validator_set_misalignment.png}
+\includegraphics[width=3.5in]{validator_set_misalignment.png}
 \caption{Without the validator set stitching mechanism, it's possible for two conflicting checkpoints to be finalized with no validators slashed}
+\label{fig:dynamic2}
 \end{figure}
 
 \subsection{Long Range Attacks}
@@ -273,19 +290,19 @@ Note that the withdrawal delay introduces a synchronicity assumption \textit{bet
 \centering
 \includegraphics[width=3in]{LongRangeAttacks.png}
 \caption{Despite violating slashing conditions to make a chain split, because the attacker has already withdrawn on both chains they do not lose any money. This is often called a \textit{long-range atack}.}
-\label{fig:longrange}
+\label{fig:dynamic3}
 \end{figure}
 
-We solve this problem by simply having clients not accept a finalized checkpoint that conflicts with finalized checkpoints that they already know about. Suppose that clients can be relied on to log on at least once every time $\delta$, and the withdrawal delay is $W$. Suppose an attacker sends one finalized checkpoint at time $0$, and then another right after. We pessimistically suppose the first checkpoint arrives at all clients at time $0$, and that the second reaches a client at time $\delta$. The client will then know of the fraud, and will be able to create and publish an evidence transaction. We then add a consensus rule that requires clients to reject chains that do not include evidence transactions that the client has known about for time $\delta$. Hence, clients will not accept a chain that has not included the evidence transaction within time $2 * \delta$. So if $W > 2 * \delta$ then slashing conditions are enforcible.
+Suppose that clients can be relied on to log on at least once every time $\delta$ (think $\delta \approx$ 1 month). Then, if a client hears about two conflicting finalized checkpoints, $C_1$ at time $T_1$ and $C_2$ at time $T_2$, there are two cases. If, from the point of view of all clients, $T_2 > T_1$, then all clients will accept $C_2$ and there is no ambiguity. If on the other hand different clients see different orders (i.e. some see $T_2 > T_1$, others see $T_1 > T_2$), then it must be the case that for all clients, $|T_2 - T_1| \le 4\delta$. If the withdrawal delay is much greater than $4\delta$, then there is plenty of time during which slashing evidence can be included in both chains, and we make an assumption that if a chain does not include slashing evidence, then clients will reject this via a soft fork (see later section).
 
-In practice, this means that if the withdrawal delay is four months, then clients will need to log on at least once per two months to avoid accepting bad chains for which attackers cannot be penalized.
+This rejection can also be partially automated, by implementing a mechanism where if a client sees a slashing condition violation before they see some block $B$ with timestamp $t$, and then the head is a descendant of $B$ with timestamp greater than $t + EIT$ (``evidence inclusion timelimit'') that does has not yet punished the malfeasant validator, the client shows a warning.
 
 \section{Recovering from Castastrophic Crashes}
 \label{sect:leak}
 
 Suppose that $>\frac{1}{3}$ of validators crash-fail at the same time---i.e, they are no longer connected to the network due to a network partition, computer failure, or are malicious actors. Then, no later checkpoint will be able to get finalized.
 
-We can recover from this by instituting a ``leak'' which dissipates the deposits of validators that do not prepare or commit, until eventually their deposit sizes decrease low enough that the validators that \textit{are} preparing and committing are a $\frac{2}{3}$ supermajority. The simplest possible formula is something like ``validators with deposit size $D$ lose $D * p$ in every epoch in which they do not prepare and commit'', though to resolve catastrophic crashes more quickly a formula which increases the rate of dissipation in the event of a long streak of non-finalized blocks may be optimal.
+We can recover from this by instituting a ``leak'' which dissipates the deposits of validators that do not prepare or commit, until eventually their deposit sizes decrease low enough that the validators that \textit{are} preparing and committing become a $\frac{2}{3}$ supermajority. The simplest possible formula is something like ``validators with deposit size $D$ lose $D * p$ in every epoch in which they do not prepare and commit'', though to resolve catastrophic crashes more quickly a formula which increases the rate of dissipation in the event of a long streak of non-finalized blocks may be optimal.
 
 The dissipated portion of deposits can either be burned or simply forcibly withdrawn and immediately refunded to the validator; which of the two strategies to use, or what combination, is an economic incentive concern and thus outside the scope of this paper.
 
