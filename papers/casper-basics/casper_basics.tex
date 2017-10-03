@@ -117,26 +117,26 @@ Each validator has a \emph{deposit}; when a validator joins, their deposit is th
 
 Validators can broadcast two types of messages:
 
-$$\langle \msgPREPARE, \hash, \epoch, \hashsource, \epochsource, \signature \rangle$$
+$$\langle \msgPREPARE, \epoch, \hash, \epochsource, \hashsource, \signature \rangle$$
 
 
 	\begin{tabular}{l l}
 	\textbf{Notation} & \textbf{Description} \\
-	\hash & a checkpoint hash \\
 	\epoch & the epoch of the checkpoint \\
-	$\hashsource$ & the most recent justified hash \\
+	\hash & a checkpoint hash \\
 	$\epochsource$ & the epoch of $\hashsource$  \\
+	$\hashsource$ & the most recent justified hash \\
 	\signature & signature of $(\hash,\epoch,\hashsource,\epochsource)$ from the validator's private key \\
 	\end{tabular} \label{tbl:prepare}
 
 $$ $$
 
-$$\langle \msgCOMMIT, \hash, \epoch, \signature \rangle$$
+$$\langle \msgCOMMIT, \epoch, \hash, \signature \rangle$$
 	
 	\begin{tabular}{l l}
 	\textbf{Notation} & \textbf{Description} \\
-	\hash & a checkpoint hash \\
 	\epoch & the epoch of the checkpoint \\
+	\hash & a checkpoint hash \\
 	\signature & signature from the validator's private key \\
 	\end{tabular} 
 	\label{tbl:commit}
@@ -147,7 +147,7 @@ $$ $$
 A checkpoint $\hash$ is considered \emph{justified} if there exists some \hashsource such that:
 
 \begin{enumerate}
-\item There exist $\frac{2}{3}$ prepares of the form $\langle \msgPREPARE, \hash, \epoch(\hash), \hashsource, \epoch(\hashsource), \signature \rangle$
+\item There exist $\frac{2}{3}$ prepares of the form $\langle \msgPREPARE, \epoch(\hash), \hash, \epoch(\hashsource), \hashsource,  \signature \rangle$
 \item \hashsource itself is justified
 \end{enumerate}
 
@@ -155,7 +155,7 @@ Note that all $\frac{2}{3}$ prepares that justify \hash must have the same \hash
 
 \begin{enumerate}
 \item \hash is justified
-\item There exist $\frac{2}{3}$ commits of the form $\langle \msgCOMMIT, \hash, \epoch(\hash), \signature \rangle$
+\item There exist $\frac{2}{3}$ commits of the form $\langle \msgCOMMIT, \epoch(\hash), \hash, \signature \rangle$
 \end{enumerate}
 
 The genesis is considered to be justified and finalized, serving as the base case for the recursive definition.
