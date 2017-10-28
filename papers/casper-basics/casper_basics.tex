@@ -1,62 +1,76 @@
+\documentclass[12pt]{article}
+
 \title{Casper the Friendly Finality Gadget}
 \author{
-        Vitalik Buterin and Virgil Griffith \\
+%        Vitalik Buterin \\
+        Vitalik Buterin \textnormal{ and } Virgil Griffith \\        
         Ethereum Foundation}
 
-\documentclass[12pt, final]{article}
 
-%\input{eth_header.tex}
+% My goal is for the majority of Ethereum-related papers we publish use this "eth_header" template.
+\input{eth_header.tex}
 
-\usepackage{color}
-\newcommand*{\todo}[1]{\color{red} #1}
-%\newcommand{\eqref}[1]{eq.~\ref{#1}}
-\newcommand{\figref}[1]{Figure~\ref{#1}}
-\usepackage{amsthm}
-\usepackage{amsmath}
-\newtheorem{theorem}{Theorem}
-\newtheorem{definition}{Definition}
-\usepackage{graphicx}
-\graphicspath{{figs/}{figures/}{images/}{./}}
+\usepackage{mdframed}
+
+\usepackage{upgreek}
+\usepackage{datetime}
 
 %% Special symbols we'll probably iterate on
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % we will probably iterate on these symbols until we have a notation we like
-\newcommand{\epoch}{\ensuremath{e}\space}
-\newcommand{\hash}{\textnormal{h}\space}
+\newcommand{\epoch}{\ensuremath{e}\xspace}
+\newcommand{\hash}{\ensuremath{c}\xspace}
 
 % symbols for the epoch and hash source
-\newcommand{\epochsource}{\ensuremath{\epoch_{\star}}\space}
-\newcommand{\hashsource}{\ensuremath{\hash_{\star}}\space}
+\newcommand{\epochsource}{\ensuremath{\overset{\to}{\epoch}}\space}
+\newcommand{\hashsource}{\ensuremath{\overset{\to}{\hash}}\xspace}
 
-\newcommand{\signature}{\ensuremath{\mathcal{S}}\space}
+\newcommand{\signature}{\ensuremath{\mathcal{S}}\xspace}
 
-\newcommand{\totaldeposit}{\textnormal{TD}\space}
+\newcommand{\totaldeposit}{\textnormal{TD}\xspace}
+
+\newcommand{\h}{\operatorname{h}\xspace}
 
 \newcommand{\gamesymbol}{\reflectbox{G}}
 
-\newcommand{\msgPREPARE}{\textbf{\textsc{prepare}}\space}
-\newcommand{\msgCOMMIT}{\textbf{\textsc{commit}}\space}
+\newcommand{\DS}{\operatorname{DS}}
+\newcommand{\DE}{\operatorname{DE}}
+
+
+\newcommand{\msgPREPARE}{\textbf{\textsc{prepare}}\xspace}
+\newcommand{\msgCOMMIT}{\textbf{\textsc{commit}}\xspace}
+\newcommand{\msgVOTE}{\textbf{\textsc{vote}}\xspace}
 
 % Symbols for the Last Justified Epoch and Hash
-\newcommand{\epochLJ}{\ensuremath{\epoch_{\textnormal{LJ}}}\space}
+\newcommand{\epochLJ}{\ensuremath{\epoch_{\textnormal{LJ}}}\xspace}
 \newcommand{\hashLJ}{\ensuremath{\hash_{\textnormal{LJ}}}\space}
 
 % Symbols for the Last Finalized Epoch and Hash
-\newcommand{\epochLF}{\ensuremath{\epoch_{\textnormal{LF}}}\space}
+\newcommand{\epochLF}{\ensuremath{\epoch_{\textnormal{LF}}}\xspace}
 \newcommand{\hashLF}{\ensuremath{\hash_{\textnormal{LF}}}\space}
 
 % Griefing Factor symbol
-\newcommand{\GF}[1]{\mathds{GF}\left( #1 \right)\space}
+\newcommand{\GF}[1]{\mathds{GF}\left( #1 \right)\xspace}
+
+% Griefing Factor symbol
+\newcommand{\J}{\mathcal{J}\xspace}
+
 
 % Genesis block symbol
-\newcommand{\Genesisblock}{\ensuremath{G}\space}
+\newcommand{\Genesisblock}{\ensuremath{G}\xspace}
+
 
 \begin{document}
 
+
 \maketitle
+%\TODO{\vspace{-0.2in} \today\ \ \currenttime}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \begin{abstract}
-We give an introduction to the consensus algorithm details of Casper: the Friendly Finality Gadget, as an overlay on an existing proof of work blockchain such as Ethereum. Casper is a partial consensus mechanism inspired by a combination of existing proof of stake algorithm research and Byzantine fault tolerant consensus theory, which if overlaid onto another blockchain (which could theoretically be proof of work or proof of stake) adds strong \textit{finality} guarantees that improve the blockchain's resistance to transaction reversion (or ``double spend'') attacks.
+We introduce Casper, a proof of stake-based finality system which overlays an existing proof of work blockchain. Casper is a partial consensus mechanism combining proof of stake algorithm research and Byzantine fault tolerant consensus theory.  We introduce our system, prove some desirable features, and show defenses against long range revisions and catastrophic crashes.  The Casper overlay provides almost any proof of work chain with additional protections against block reversions.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -64,277 +78,346 @@ We give an introduction to the consensus algorithm details of Casper: the Friend
 \section{Introduction}
 \label{sect:intro}
 
-In the past few years there has been considerable research into ``proof of stake''-based blockchain consensus algorithms. In a proof of stake system, a blockchain grows and agrees on new blocks through a process where anyone who holds coins inside of the system can participate, and the amount of influence that any given coin holder has is proportional to the number of coins (or ``stake'') that they hold. This represents an alternative to proof of work ``mining'', allowing blockchains to operate without the high hardware and electricity costs that proof of work blockhains require.
+Over the past few years there has been considerable research into ``proof of stake'' (PoS) based blockchain consensus algorithms. In a PoS system, a blockchain appends and agrees on new blocks through a process where anyone who holds coins inside of the system can participate, and the influence an agent has is proportional to the number of coins (or ``stake'') it holds. This is a vastly more efficient alternative to proof of work (PoW) ``mining'' and enables blockchains to operate without mining's high hardware and electricity costs.
 
-There are two major schools of thought in proof of stake algorithm design. The first, \textit{chain-based proof of stake}, tries to closely mimic the mechanics of proof of work, featuring a chain of blocks and an algorithm that ``simulates'' mining by pseudorandomly assigning the right to create new blocks to stakeholders. This includes Peercoin\cite{king2012ppcoin}, Blackcoin\cite{vasin2014blackcoin} and Iddo Bentov's work\cite{bentov2016pos}.
+There are two major schools of thought in PoS design. The first, \textit{chain-based proof of stake}\cite{shi2017,dfinity}, mimics proof of work mechanics and features a chain of blocks and and simulates mining by pseudorandomly assigning the right to create new blocks to stakeholders.  This includes Peercoin\cite{king2012ppcoin}, Blackcoin\cite{vasin2014blackcoin}, and Iddo Bentov's work\cite{bentov2016pos}.
 
-The other school, \textit{BFT-based proof of stake}, is based on a thirty year old body of research into \textit{Byzantine fault tolerant consensus algorithms} such as PBFT \cite{castro1999practical}. BFT algorithms tend to have strong and rigorously proven mathematical properties; for example, one can usually mathematically prove that as long as at more than $\frac{2}{3}$ of participants in the protocol are following the protocol correctly, then the algorithm cannot possibly finalize conflicting block hashes at the same time (``safety''); this result holds regardless of network latency. The idea of repurposing BFT algorithms for proof of stake was first introduced by Tendermint\cite{kwon2014tendermint}.
+The other school, \textit{Byzantine fault tolerant} (BFT) based proof of stake, is based on a thirty-year-old body of research into BFT consensus algorithms such as PBFT\cite{castro1999practical}. BFT algorithms typically have proven mathematical properties; for example, one can usually mathematically prove that as long as $>\!\frac{2}{3}$ of protocol participants are following the protocol honestly, then, regardless of network latency, the algorithm cannot finalize conflicting blocks.  Repurposing BFT algorithms for proof of stake was first introduced by Tendermint\cite{kwon2014tendermint}, and has modern inspirations such as \cite{algorand}.  Casper follows this BFT tradition, though with some modifications.
 
 \subsection{Our Work}
+Casper the Friendly Finality Gadget is an overlay atop a \emph{proposal mechanism}---a mechanism which proposes blocks\footnote{This functionality serves a similar role to the common abstraction of ``leader election'' used in traditional BFT algorithms, but is adapted to accomodate Casper's construction of being a finality overlay atop an existing blockchain.}.  Casper is responsible for finalizing these blocks, essentially selecting a
+unique chain which represents the canonical transactions of the ledger.  Casper provides safety, but liveness depends on the chosen proposal mechanism.  That is, if attackers wholly control the proposal mechanism, Casper protects against finalizing two conflicting checkpoints, but the attackers could prevent Casper from finalizing any future checkpoints.
 
-We follow the BFT tradition, though with some modifications. Casper the Friendly Finality Gadget is an \textit{overlay} atop a \textit{proposal mechanism}---a mechanism which proposes \textit{checkpoints} (this is similar to the common BFT abstraction of ``leader election'' except it is more complex so as to accommodate Casper's chain-based nature).  Casper is responsible for \textit{finalizing} these checkpoints.  Casper provides safety, but does not guarantee liveness by itself---Casper depends on the proposal mechanism for liveness.  That is, even if the proposal mechanism is wholly controlled by attackers, Casper prevents attackers from finalizing two conflicting checkpoints, however, the attackers can prevent Casper from finalizing any future checkpoints.
-
-The proposal mechanism will initially be the existing Ethereum proof of work chain, making the first version of Casper a \textit{hybrid PoW/PoS algorithm} that relies on proof of work for liveness but not safety, but in future versions the proposal mechanism can be substituted with something else.
-
-Our algorithm introduces several new properties that BFT algorithms do not necessarily support.
+Casper introduces several new features that BFT algorithms do not necessarily support:
 \begin{itemize}
-\item We flip the emphasis of the proof statement from the traditional ``as long as $>\frac{2}{3}$ of validators are honest, there will be no safety failures'' to the contrapositive ``if there is a safety failure, then $\ge \frac{1}{3}$ of validators violated some protocol rule.''
+\item \textbf{Accountability}.  If a validator violates a rule, we can detect the violation and know which validator violated the rule.  Accountability allows us to penalize malfeasant validators, solving the ``nothing at stake'' problem that plagues chain-based PoS. The penalty for violating a rule is a validator's entire deposit.  This maximal penalty is the defense against violating the protocol.  Because proof of stake security is based on the size of the penalty, which can be set to greatly exceed the gains from the mining reward, proof of stake provides strictly stronger security incentives than proof of work.
 
-\item We add \textit{accountability}.  If a validator violates the rules, we can detect the violation, and know who violated the rule: ``$\ge \frac{1}{3}$ violated the rules, \textit{and we know who they are}''.  Accountability allows us to penalize malfeasant validators, solving the \textit{nothing at stake} problem\cite{} that often plagues chain-based PoS. The penalty is the malfeasant validator's entire deposit.  This maximum penalty provides a bulwark against violating the protocol by making violations immensely expensive.  The economic robustness of protocol guarantees is much higher than the size of the rewards that the system pays out during normal operation.  This provides a \textit{much stronger} security guarantee than possible with proof of work.
+\item \textbf{Dynamic validators}. We introduce a safe way for the validator set to change over time (Section \ref{sect:join_and_leave}).
 
-\item We introduce a provably safe way for the validator set to change over time (Section \ref{sect:join_and_leave}).
-\item We introduce a way to recover from attacks where more than $\frac{1}{3}$ of validators drop offline, at the cost of a very weak \textit{tradeoff synchronicity assumption} (Section \ref{sect:leak}).
-\item The design of the algorithm as an overlay makes it easier to implement as an upgrade to an existing proof of work chain.
+\item \textbf{Defenses}.  We introduce defenses against long range revision attacks as well as attacks where more than $\frac{1}{3}$ of validators drop offline, at the cost of a very weak tradeoff synchronicity assumption (Section \ref{sect:attacks}).
+
+\item \textbf{Modular overlay}.  Casper's design as an overlay makes it easier to implement as an upgrade to an existing proof of work chain.
 \end{itemize}
 
-We will describe the protocol in stages, starting with a simple version (Section \ref{sect:protocol}) and then progressively adding features such as validator set changes (Section \ref{sect:join_and_leave}) and mass liveness fault recovery.
+We describe Casper in stages, starting with a simple version (Section \ref{sect:protocol}) and then progressively adding validator set changes (Section \ref{sect:join_and_leave}) and finally defenses against attacks (Section \ref{sect:attacks}).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \section{The Casper Protocol}
 \label{sect:protocol}
-In the simple version, we assume there is a set of validators and a \textit{proposal mechanism} which is any system that proposes blocks (such as a proof of work chain). Under normal operation, almost all of the blocks proposed by the proposal mechanism would form a chain, but if the proposal mechanism operation is faulty (in proof of work, this may arise due to high latency or 51\% attacks) there may be multiple divergent chains being extended at the same time.
+
+Within Ethereum, the proposal mechanism will initially be the existing proof of work chain, making the first version of Casper a hybrid PoW/PoS system.  In future versions the PoW proposal mechanism will be replaced with something more efficient.  For example, we can imagine converting the block proposal into a some kind of PoS round-robin block signing scheme.
 
 
-We order a chain of blockhashes into a sequence called a \emph{blockchain} $\mathbf{B}$.  Within blockchain $\mathbf{B}$ is there is a subset called \emph{checkpoints},
 
-\begin{equation}
-\begin{split}
-    \mathbf{B} &\equiv \left( b_0, b_1, b_2, \ldots \right) \\
-    \mathbf{C} &\equiv \left( b_0, b_{99}, b_{199}, b_{299}, \ldots \right) \;
-\end{split}
-\end{equation}
+In this simple version of Casper, we assume there is a fixed set of validators and a proposal mechanism (e.g., the familiar proof of work proposal mechanism) which produces child blocks of existing blocks, forming an ever-growing \emph{block tree}.  From \cite{nakamoto} the root of the tree is typically called the ``genesis block''.
 
-This leads to the formula for an arbitrary checkpoint,
-\begin{equation}
-    C_i = \begin{cases}
-     b_0 \qquad \qquad \qquad\ \  \textnormal{if } i = 0, \\
-     b_{ 100*i - 1 } \qquad \qquad \textnormal{otherwise.}
-     \end{cases}
-\end{equation}
-
-$C_0$ is called the \textit{genesis}. An \emph{epoch} is defined as the contiguous sequence of blocks between two checkpoints, including the later checkpoint but not the earlier one.  The \textit{epoch of a block} is the index of the epoch containing that hash, e.g., the epoch of block 599 is 5. \footnote{To get the epoch of a particular block $b_i$, it is $epoch(b_i) = \lfloor i / 100 \rfloor$.}
-
-Each validator has a \emph{deposit}; when a validator joins, their deposit is the number of coins that they deposited, and from there on each validator's deposit rises and falls with rewards and penalties. For the rest of this paper, when we say ``$\frac{2}{3}$ of validators'', we are referring to a \emph{deposit-weighted} fraction; that is, a set of validators whose sum deposit size equals to at least $\frac{2}{3}$ of the total deposit size of the entire set of validators. ``$\frac{2}{3}$ prepares'' will be used as shorthand for ``prepares from $\frac{2}{3}$ of validators''.
-
-Validators can broadcast two types of messages:
-
-$$\langle \msgPREPARE, \hash, \epoch, \hashsource, \epochsource, \signature \rangle$$
+%Note that for an individual block, there will often be multiple blocks added as new children by this mechanism, so the block tree will have many branches.
 
 
-	\begin{tabular}{l l}
-	\textbf{Notation} & \textbf{Description} \\
-	\hash & a checkpoint hash \\
-	\epoch & the epoch of the checkpoint \\
-	$\hashsource$ & the most recent justified hash \\
-	$\epochsource$ & the epoch of $\hashsource$  \\
-	\signature & signature of $(\hash,\epoch,\hashsource,\epochsource)$ from the validator's private key \\
-	\end{tabular} \label{tbl:prepare}
-
-$$ $$
-
-$$\langle \msgCOMMIT, \hash, \epoch, \signature \rangle$$
-	
-	\begin{tabular}{l l}
-	\textbf{Notation} & \textbf{Description} \\
-	\hash & a checkpoint hash \\
-	\epoch & the epoch of the checkpoint \\
-	\signature & signature from the validator's private key \\
-	\end{tabular} 
-	\label{tbl:commit}
-	\label{fig:messages}
-
-$$ $$
-
-A checkpoint $\hash$ is considered \emph{justified} if there exists some \hashsource such that:
-
-\begin{enumerate}
-\item There exist $\frac{2}{3}$ prepares of the form $\langle \msgPREPARE, \hash, \epoch(\hash), \hashsource, \epoch(\hashsource), \signature \rangle$
-\item \hashsource itself is justified
-\end{enumerate}
-
-Note that all $\frac{2}{3}$ prepares that justify \hash must have the same \hashsource; half with $\hashsource^1$ and half with $\hashsource^2$ will not suffice. A checkpoint \hash is considered \emph{finalized} if:
-
-\begin{enumerate}
-\item \hash is justified
-\item There exist $\frac{2}{3}$ commits of the form $\langle \msgCOMMIT, \hash, \epoch(\hash), \signature \rangle$
-\end{enumerate}
-
-The genesis is considered to be justified and finalized, serving as the base case for the recursive definition.
+Under normal circumstances, we expect that the proposal mechanism will typically propose blocks one after the other in a linked list (i.e., each ``parent'' block having exactly one ``child'' block).  But in the case of network latency or deliberate attacks, the proposal mechanism will inevitably occassionally produce multiple children of the same parent. Casper's job is to choose a single child from each parent, thus choosing one canonical chain from the block tree.
 
 
-During epoch $n$, validators are expected to send prepare and commit messages with $\epoch = n$ and $h$ equal to a checkpoint of epoch $n$. Prepare messages may specify as \hashsource a checkpoint for any previous epoch (preferably the preceding checkpoint) of \hash, and which is \textit{justified} (see below), and the \epochsource is expected to be the epoch of that checkpoint.
-
-Validators only recognize prepares and commits that have been included in blocks (even if those blocks are not part of the main chain). \footnote{This simplifies our finalty mechanism because it allows it to be expressed as a fork choice rule where the ``score'' of a block only depends on the block and its descendants, similarly to the longest chain rule and GHOST\cite{sompolinsky2013accelerating} in proof of work. Also, because the blockchain will not accept (i) commits that do not point to an already justified checkpoint, (ii) prepares that do not point to an already justified \hashsource value, or (iii) prepares or commits that supply incorrect epoch numbers, this makes two of the four slashing conditions in earlier versions of Casper\cite{minslashing} superfluous.}
-
-\subsection{Casper Commandments}
-
-The most notable property of Casper is that it is impossible for two conflicting checkpoints to be finalized unless $\geq \frac{1}{3}$ of the validators violated one of the two Casper Commandments (a.k.a. slashing conditions).  These are:
-
-\begin{enumerate}
-   \item[\textbf{I.}] \textsc{A validator shalt not publish two or more nonidentical Prepares for same epoch.}
+Rather than deal with the full block tree, for efficiency purposes\footnote{A long distance between checkpoints reduces the overhead of the algorithm, but also increases the time it takes to come to consensus.  We choose a spacing of 100 blocks between checkpoints as a middle ground.} Casper only considers the subtree of \emph{checkpoints} forming the \emph{checkpoint tree} (\figref{fig:2a}).  The genesis block is a checkpoint, and every block whose height in the block tree (or “block number”) is an exact multiple of 100 is also a checkpoint. The ``checkpoint height'' of a block with block height $100 * k$ is simply $k$; equivalently, the height $\h(c)$ of a checkpoint $c$ is the number of elements in the checkpoint chain stretching from $c$ all the way back to root along the parent links (\figref{fig:2b}).\footnote{Specifically, the height of a checkpoint is \emph{not} the same as the number of ancestors in the checkpoint tree all the way back to root along the supermajority links (defined in the next section).}
    
-   In other words, a validator may prepare at most exactly one (\hash, \epochsource, \hashsource) triplet for any given epoch \epoch.
 
-   \item[\textbf{II.}] \textsc{A validator shalt not publish a Commit between the epochs of a Prepare statement.} 
-    
-   Equivalently, a validator may not publish both $\langle \msgPREPARE, \epoch_p, \hash_p, \epochsource, \hashsource, \signature \rangle$ AND $\langle \msgCOMMIT, \epoch_c, \hash_c, \signature \rangle $ if $\epochsource < \epoch_c < \epoch_p$.
-
-\end{enumerate}
-
-If a validator violates a slashing condition, the evidence that they did this can be included into the blockchain as a transaction, at which point the validator's entire deposit will be taken away, with a 4\% ``finder's fee'' given to the submitter of the evidence transaction.
-
-Finally, we define the ``ideal execution'' of the Casper protocol during an epoch $n$, as every validator preparing $C_{n}$ with $\hashsource = C_{n-1}$ and commiting $C_{n}$.  For example, during epoch $2$ (blocks $200 \ldots 299$), all validators prepare $b_{199}$ with $\hashsource = b_{99}$ and commit $b_{199}$.
-
-\section{Proofs of Safety and Plausible Liveness}
-\label{sect:theorems}
-
-We prove Casper's two fundamental properties: \textit{accountable safety} and \textit{plausible liveness}. Accountable safety means that two conflicting checkpoints cannot be finalized unless $\geq \frac{1}{3}$ of validators violate a slashing condition (meaning at least one third of the total deposit is lost).  Plausible liveness means that, regardless of any previous events, it is always possible for $\frac{2}{3}$ of honest validators to finalize a new checkpoint.
-
-\begin{figure}[h!tb]
+\begin{figure}[htb]
 \centering
-    \includegraphics[width=5in]{conflicting_checkpoints.png}
-\caption{Two checkpoints are \textit{conflicting} if they are on distinct chains, i.e. one is not an ancestor or a descendant of the other.}
+   \begin{subfigure}[b]{0.90\textwidth}
+   \centering
+   \includegraphics[width=2.8in]{checkpoints_checkpoints.pdf}
+	\caption{The checkpoint tree.  The dashed line represents 100 blocks between the checkpoints, which are represented by rounded rectangles.  The root of the tree is denoted ``r''.}
+	\label{fig:2a}	
+	\end{subfigure}
+	\vspace{0.2in}
+	
+\begin{subfigure}[b]{0.45\textwidth}
+   \centering
+   \includegraphics[height=2.8in]{checkpoints_lengths.pdf}
+	\caption{The height function}
+	\label{fig:2b}	
+	\end{subfigure} \hspace{0.05\textwidth} 	 \begin{subfigure}[b]{0.45\textwidth}
+   \centering
+   \includegraphics[height=2.8in]{checkpoints_justifiedchain.pdf}
+%	\caption{The justified chain $(r, b_1, b_2, b_3)$}
+	\caption{The justified chain $r \to b_1 \to b_2 \to b_3$}
+	\label{fig:2c}	
+	\end{subfigure}
+
+\caption{Illustrating a checkpoint tree, the height function, and a justified chain within the checkpoint tree.}
 \label{fig:conflicting_checkpoints}
 \end{figure}
 
+
+
+Each validator has a \emph{deposit}; when a validator joins, its deposit is the number of deposited coins.  After joining, each validator's deposit rises and falls with rewards and penalties.  Proof of stake's security derives from the size of the deposits, not the number of validators, so for the rest of this paper, when we say ``$\frac{2}{3}$ of validators'', we are referring to the \emph{deposit-weighted} fraction; that is, a set of validators whose sum deposit size equals to $\frac{2}{3}$ of the total deposit size of the entire set of validators.
+
+Validators can broadcast a \textit{vote} message containing four pieces of information (Table \ref{tbl:messages}): two checkpoints $s$ and $t$ together with their heights $\h(s)$ and $\h(t)$.  We require that $s$ be an ancestor of $t$ in the checkpoint tree, otherwise the vote is considered invalid.  If the public key of the validator $\upnu$ is not in the validator set, the vote is considered invalid.  Together with the signature of the validator, we will write these votes in the form $\left\langle \upnu, s, t, \h(s), \h(t) \right\rangle$.
+
+
+\begin{table}[bth]
+\centering
+
+   \begin{tabular}{l l}
+	\toprule
+	\textbf{Notation} & \textbf{Description} \\
+	\midrule
+	$s$ & the hash of any justified checkpoint (the ``source'') \\
+	$t$ & any checkpoint hash that is a descendent of  $s$ (the ``target'') \\
+	$\h(s)$ & the height of checkpoint $s$ in the checkpoint tree \\
+	$\h(t)$ & the height of checkpoint $t$ in the checkpoint tree \\
+	\signature & signature of $\left\langle s, t, \h(s), \h(t) \right\rangle$ from the validator $\upnu$'s private key \\
+	\bottomrule
+	\end{tabular}
+
+
+\vspace{0.15in}
+\caption{The schematic of a single \msgVOTE message denoted $\left\langle \upnu, s, t, \h(s), \h(t) \right\rangle$.}
+\label{tbl:messages}
+\end{table}
+
+
+
+We define the following terms:
+\begin{itemize}
+\item A \emph{supermajority link} is an ordered pair of checkpoints $(a, b)$, also written $a \rightarrow b$, such that at least $\frac{2}{3}$ of validators (by deposit) have published votes with source $a$ and target $b$.  Supermajority links \emph{can skip checkpoints}, i.e., it's perfectly okay for $\h(b) > \h(a) + 1$.  \figref{fig:2c} shows three distinct supermajority links in red: $r \to b_1$, $b_1 \to b_2$, and $b_2 \to b_3$.
+
+\item Two checkpoints $a$ and $b$ are called \emph{conflicting} if and only if they are nodes in distinct branches, i.e., neither is an ancestor or descendant of the other.
+
+\item A checkpoint $c$ is called \emph{justified} if (1) it is the root, or (2) there exists a supermajority link $c^\prime \to c$ where $c^\prime$ is justified.  \figref{fig:2c} shows a chain of four justified blocks.
+
+\item A checkpoint $c$ is called \emph{finalized} if it is justified and there is a supermajority link $c \to c^\prime$ where $c^\prime$ is a \emph{direct child} of $c$.  Equivalently, checkpoint $c$ is finalized if and only if: checkpoint $c$ is justified, there exists a supermajority link $c \to c^\prime$, checkpoints $c$ and $c^\prime$ are not conflicting, and $\h(c^\prime) = \h(c) + 1$.
+\end{itemize}
+
+
+
+The most notable property of Casper is that it is impossible for two conflicting checkpoints to be finalized without $\geq \frac{1}{3}$ of the validators violating one of the two\footnote{Earlier versions of Casper had two types of messages and four slashing conditions\cite{minslashing}, but we have reduced this to one message type and two slashing conditions.  We removed the conditions: (i) Committed hashes must already be justified, and (ii) prepare messages must point to an already justified ancestor.  This is a design choice.  We made this choice so that slashing violations are independent of the state of the chain.} Casper Commandments/slashing conditions (\figref{fig:commandments}).  
+
+
+
+%\clearpage
+
+\begin{figure}
+\begin{mdframed}
+\textsc{An individual validator $\upnu$ must not publish two distinct votes,}
+\begin{equation*}
+\left\langle \upnu, s_1, t_1, \h(s_1), \h(t_1)\right\rangle \hspace{0.5in} \textsc{and} \hspace{0.5in} \left\langle \upnu, s_2, t_2, \h(s_2), \h(t_2)\right\rangle \; ,
+\end{equation*}
+\textsc{such that either:}
+
+\begin{enumerate}
+   \item[\textbf{I.}] $\h(t_1) = \h(t_2)$.
+
+   Equivalently, a validator must not publish two distinct votes for the same target height.
+\end{enumerate}
+\vspace{-0.15in}
+\textsc{or}
+
+\begin{enumerate}
+   \item[\textbf{II.}] $\h(s_1) < \h(s_2) < \h(t_2) < \h(t_1)$.
+
+   Equivalently, a validator must not vote within the span of its other votes.
+\end{enumerate}
+\end{mdframed}
+\caption{The two Casper Commandments.  Any validator who violates either of these commandments gets their deposit slashed.}
+\label{fig:commandments}
+\end{figure}
+
+
+If a validator violates either slashing condition, the evidence of the violation can be included into the blockchain as a transaction, at which point the validator's entire deposit is taken away with a small ``finder's fee'' given to the submitter of the evidence transaction. In current Ethereum, stopping the enforcement of a slashing condition requires a successful $51\%$ attack on Ethereum's proof-of-work block proposer.
+
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Proving Safety and Plausible Liveness}
+\label{sect:theorems}
+
+We prove Casper's two fundamental properties: \textit{accountable safety} and \textit{plausible liveness}. Accountable safety means that two conflicting checkpoints cannot both be finalized unless $\geq \frac{1}{3}$ of validators violate a slashing condition (meaning at least one third of the total deposit is lost).  Plausible liveness means that, regardless of any previous events (e.g., slashing events, delayed blocks, censorship attacks, etc.), if $\geq \frac{2}{3}$ of validators follow the protocol, then it's always possible to finalize a new checkpoint without any validator violating a slashing condition.
+
+\emph{Under the assumption that $\frac{2}{3}$ of the validators by weight do not violate a slashing condition}, we have the following properties:
+
+\begin{enumerate}
+    \item[(i)] If $s_1 \rightarrow t_1$ and $s_2 \rightarrow t_2$ are distinct supermajority links, then $\h(t_1) \not= \h(t_2)$.
+    \item[(ii)] If $s_1 \rightarrow t_1$ and $s_2 \rightarrow t_2$ are distinct supermajority links, then the inequality $\h(s_1)~<~\h(s_2)~<~\h(t_2)~<~\h(t_1)$ cannot hold.
+\end{enumerate}
+
+From these two properties, we can immediately see that, for any height $n$: 
+\begin{enumerate}
+\item[(iii)] there exists at most one supermajority link $s \to t$ with $\h(t) = n$.
+\item[(iv)] there exists at most one justified checkpoint with height $n$.  
+\end{enumerate}
+
+With these four properties in hand, we move to the main theorems.
 
 \begin{theorem}[Accountable Safety]
 \label{theorem:safety}
-Two conflicting checkpoints cannot be finalized unless $\geq \frac{1}{3}$ of validators violate a slashing condition.
-
+Two conflicting checkpoints $a_m$ and $b_n$ cannot both be finalized.
 \begin{proof}
-Suppose the two conflicting checkpoints are $A$ in epoch $\epoch_A$ and $B$ in epoch $\epoch_B$. If both are finalized, this implies $\frac{2}{3}$ commits and $\frac{2}{3}$ prepares in epochs $\epoch_A$ and $e_B$. In the trivial case where $\epoch_A = \epoch_B$, this implies that some intersection of $\frac{1}{3}$ of validators must have violated slashing condition (1). In other cases, there must exist two chains $\Genesisblock < \ldots < \epoch_A^2 < \epoch_A^1 < \epoch_A$ and $\Genesisblock < \ldots < \epoch_B^2 < \epoch_B^1 < \epoch_B$ of justified checkpoints, both terminating at the genesis. Suppose without loss of generality that $\epoch_A > \epoch_B$. Then, there must be some $\epoch_A^i$ that either $\epoch_A^i = \epoch_B$ or $\epoch_A^i > \epoch_B > \epoch_A^{i+1}$. In the first case, since $A^i$ and $B$ both have $\frac{2}{3}$ prepares, at least $\frac{1}{3}$ of validators violated slashing condition (I). Otherwise, $B$ has $\frac{2}{3}$ commits and there exist $\frac{2}{3}$ prepares with $\epoch > B$ and $\epochsource < B$, so at least $\frac{1}{3}$ of validators violated slashing condition (II).
+Let $a_m$ (with justified direct child $a_{m+1}$) and $b_n$ (with justified direct child $b_{n+1}$) be distinct finalized checkpoints as in \figref{fig:proof1}. Now suppose $a_m$ and $b_n$ conflict, and without loss of generality $\h(a_m) < \h(b_n)$ (if $\h(a_m) = \h(b_n)$, then it is clear that $\frac{1}{3}$ of validators violated condition \textbf{I}). Let $r \rightarrow b_1 \rightarrow b_2 \rightarrow \cdots \rightarrow b_n$ be a chain of checkpoints, such that there exists a supermajority link $r \to b_1$, $\ldots$, $b_i \to b_{i+1}, \ldots, b_{n} \to b_{n+1}$.  We know that no $\h(b_i)$ equals either $\h(a_m)$ or $\h(a_{m+1})$, because that violates property (iv). Let $j$ be the lowest integer such that $\h(b_j) > \h(a_{m+1})$; then $\h(b_{j-1}) < \h(a_m)$. However, this implies the existence of a supermajority link from a checkpoint with an epoch number less than $\h(a_m)$ to a checkpoint with an epoch number greater than $\h(a_{m+1})$, which is incompatible with the supermajority link from $a_m$ to $a_{m+1}$.
 \end{proof}
 \end{theorem}
-
-\begin{figure}[h!tb]
-\centering
-   \begin{minipage}[b]{0.48\textwidth}
-    \includegraphics[width=2.7in]{cs.pdf}
-    \centering
-    $\epoch_A = \epoch_B$
-   \end{minipage}
-   \begin{minipage}[b]{0.48\textwidth}
-    \includegraphics[width=2.7in]{cs.pdf}
-    \centering
-    $\epoch_A < \epoch_B$
-   \end{minipage}
-\label{fig:conflicting_checkpoints}
-\caption{Illustrating the two scenarios in Theorem \ref{theorem:safety}.}
-\end{figure}
+% $(r, b_1, b_2, \ldots, b_n)$ 
 
 \begin{theorem}[Plausible Liveness]
 \label{theorem:liveness}
-It is always possible for $\frac{2}{3}$ of honest validators to finalize a new checkpoint, regardless of what previous events took place.
-
+Supermajority links can always be added to produce new finalized checkpoints, provided there exist children extending the finalized chain.
 \begin{proof}
-Suppose that all existing validators have sent some sequence of prepare and commit messages. Let $M$ with epoch $\epoch_M$ be the highest-epoch checkpoint that was justified, and let $n \ge \epoch_M$ be the highest epoch in which an honest validator prepared. Honest validators have not committed on any block which is not justified. Hence, neither slashing condition stops them from making prepares on a descendant of $M$ in epoch $n+1$, using $\epoch_M$ as $\epochsource$, and then committing this child.
+Let $a$ be the justified checkpoint with the greatest height, and $b$ be the target checkpoint with the greatest height for which any validator has made a vote. Any checkpoint $a^\prime$ which is a descendant of $a$ with height $\h(a^\prime) = \h(b) + 1$ can be justified without violating either commandments \textbf{I} or \textbf{II}, and then $a^\prime$ can be finalized by adding a supermajority link from $a^\prime$ to a direct child of $a^\prime$, also without violating either \textbf{I} or \textbf{II}.
 \end{proof}
+
 
 \end{theorem}
 
-\section{Tweaking the Proposal Mechanism}
+
+\begin{figure}[h!tb]
+\centering
+   \includegraphics[width=4in]{checkpoints_proof1.pdf}
+\caption{Figure for Theorem \ref{theorem:safety} (Accountable Safety).}
+\label{fig:proof1}	
+\end{figure}
+
+
+
+\subsection{Casper's Fork Choice Rule}
 \label{sect:forkchoice}
 
-Although Casper is chiefly an overlay on top of a proposal mechanism, in order to translate the \textit{plausible liveness} proven into the previous section into \textit{actual liveness in practice}, the proposal mechanism needs to be Casper-aware.  If the proposal mechanism isn't Casper-aware, as is the case with a proof of work chain that follows the typical fork-choice rule of ``always build atop the longest chain'', there are pathological scenarios where Casper gets ``stuck'' and any blocks built atop the longest chain cannot be finalized (or even justified) without violating a Commandment---one such pathological scenario is the fork in \figref{fig:forkchoice}.
+Casper is more complicated than standard PoW designs.  As such, the fork-choice must be adjusted.  Our modified fork-choice rule should be followed by all users, validators, and even the underlying block proposal mechanism.  If the users, validators, or block-proposers instead follow the standard PoW fork-choice rule of ``always build atop the longest chain'', there are pathological scenarios where Casper gets ``stuck'' and any blocks built atop the longest chain cannot be finalized (or even justified) without some validators altruistically sacrificing their deposit.  To avoid this, we introduce a novel, correct by construction, fork choice rule: \textsc{Follow the chain containing the justified checkpoint of the greatest height}.  This fork choice rule is correct by construction because it follows from the plausible liveness proof (Theorem \ref{theorem:liveness}), which precisely states that it's always possible to finalize a new checkpoint on top of the justified checkpoint with the greatest height.  This fork choice rule will be tweaked in Sections \ref{sect:join_and_leave} and \ref{sect:attacks}.
 
-In this case, $A_1$ or any descendant thereof cannot be finalized without slashing at least $\frac{1}{6}$ of validators. Finalizing $A_1$ itself would require $\frac{1}{3}$ of validators to violate Commandment \textbf{I} due to conflict with $B_1$, and finalizing any descendant would require $\frac{2}{3}$ prepares using $S$ as \hashsource, creating an intersection of size at least $\frac{1}{6}$ of validators that also committed $B_1$ and would thus violate Commandment \textbf{II}. However, miners on a proof of work chain would interpret $HASH1$ as the head and forever keep mining descendants of it, ignoring the chain based on $B_1$ which actually could get finalized.
-
-\begin{figure}[h!tb]
-\centering
-\includegraphics[width=5.5in]{fork4.png}
-\caption{Miners following the traditional proof of work fork choice rule would create blocks on HASH1, but because of the slashing conditions only blocks on top of HASH1' can be finalized.}
-\label{fig:forkchoice}
-\end{figure}
-
-In fact, when \textit{any} checkpoint gets $k > \frac{1}{3}$ commits, no conflicting checkpoint can get finalized without $k - \frac{1}{3}$ of validators getting slashed. This necessitates modifying the proposal mechanism so that, in the event that some checkpoint is justified and receives any commits, any new blocks that are proposed are descendants of that checkpoint, and not conflicting checkpoints that have fewer or no commits.
-
-In the case where the proposal mechanism is a proof of work chain, this entails modifying the fork choice rule: instead of blindly following a longest-chain rule, there needs to be an overriding rule that (i) finalized checkpoints are favored, and (ii) when there are no further finalized checkpoints, checkpoints with more (justified) commits are favored.
-
-One complete description of such a rule would be:
-
-\begin{enumerate}
-\item Start with HEAD equal to the genesis of the chain.
-\item Find the descendant checkpoint of HEAD with the most commits (only justified checkpoints are admissible). Set HEAD to this value.
-\item Repeat (2) until no descendant with commits exists.
-\item Choose the longest proof of work chain from there.
-\end{enumerate}
-
-The commit-following part of this rule can be viewed as mirroring the ``greegy heaviest observed subtree'' (GHOST) rule that has been proposed for proof of work chains\cite{sompolinsky2013accelerating}. \footnote{The symmetry is as follows. In GHOST, a node starts with the head at the genesis, then begins to move forward down the chain, and if it encounters a block with multiple children then it chooses the child that has the larger quantity of work built on top of it (including the child block itself and its descendants).
-
-In this algorithm, we follow a similar approach, except we repeatedly seek the child closest to achieving finality. Commits on a descendant are implicitly commits on its ancestors, and so if a given descendant of a given block has the most commits, then we know that all children along the chain from the head to this descendant are closer to finality than any of their siblings; hence, looking for the \textit{descendant} with the most commits and not just the \textit{child} gives the right properties. Finalizing a checkpoint requires $\frac{2}{3}$ commits of a \textit{single} checkpoint, and so unlike GHOST we simply look for the maximum commit count instead of trying to sum up all commits in an entire subtree.}
-
-This rule ensures that if there is a checkpoint such that no conflicting checkpoint can be finalized without at least some validators violating slashing conditions, then this is the checkpoint that will be viewed as the ``head'' and thus that validators will try to commit on. \footnote{Favoring checkpoint with even a single commit, instead of $\frac{1}{3} + \epsilon$, is desired to ensure that plausible liveness translates into actual liveness even in scenarios where up to $\frac{1}{3}$ of validators are offline.}
-
-\section{Allowing Dynamic Validator Sets}
+\section{Enabling Dynamic Validator Sets}
 \label{sect:join_and_leave}
 
-The set of validators needs to be able to change.  New validators must be able to join, and existing validators must be able to leave.  To accomplish this, we define a variable in the state called the \textit{dynasty counter}. When a would-be valdiator's deposit message is included in dynasty $d$, then the validator will be \textit{inducted} at the start of dynasty $d+2$.  We call $d+2$ this validator's \textit{start dynasty}.
+The set of validators needs to be able to change.  New validators must be able to join, and existing validators must be able to leave.  To accomplish this, we define the \textit{dynasty} of a block.  The \emph{dynasty of block $b$} is the number of finalized checkpoints in the chain from root to the parent of block $b$.  When a would-be validator's \emph{deposit message} is included in a block with dynasty $d$, then the validator $\upnu$ will join the validator set at first block with dynasty $d+2$.  We call $d+2$ this validator's \textit{start dynasty}, $\DS(\upnu)$.
 
-The dynasty counter increments when the chain detects that the checkpoint of the current epoch that is part of its own history has been \textit{perfectly finalized} (that is, the checkpoint of epoch \epoch must be finalized during epoch \epoch, and the chain must learn about this before epoch \epoch ends). In simpler terms, when a user sends a ``deposit'' transaction, they need to wait for the transaction to be perfectly finalized, and then they need to wait again for the next epoch to be finalized; after this, they become part of the validator set.
 
-For a validator to leave, they must send a ``withdraw'' message. If their withdraw message gets included during dynasty $n$, the validator similarly leaves the validator set during dynasty $n+2$; we call $n+2$ their \textit{end dynasty}. When a validator withdraws, their deposit is locked for a long period of time, the \textit{withdrawal delay} (think ``four months'') before they can take their money out. If, during the withdrawal delay, the validator violates any Commandment, the deposit is forfeited.
+To leave the validator set, a validator must send a ``withdraw'' message. If validator $\upnu$'s  withdraw message is included in a block with dynasty $d$, it similarly leaves the validator set at the first block with dynasty $d+2$; we call $d+2$ the validator's \textit{end dynasty}, $\DE(\upnu)$.  If a withdraw message has not yet been included, then $\DE(\upnu) = \infty$.  Once validator $\upnu$ leaves the validator set, the validator's public key is forever forbidden from rejoining the validator set.  This removes the need to handle multiple start/end dynasties for a single identifier.
 
-For a checkpoint to be justified, it must be prepared by a set of validators which contains (i) at least $\frac{2}{3}$ of the current dynasty (that is, validators with $startDynasty \le curDynasty < endDynasty$), and (ii) at least $\frac{2}{3}$ of the previous dyansty (that is, validators with $startDynasty \le curDynasty - 1 < endDynasty$. Finalization works similarly. The current and previous dynasties will usually greatly overlap; but in cases where they substantially diverge this ``stitching'' mechanism ensures that dynasty divergences do not lead to situations where a finality reversion or other failure can happen because different messages are signed by different validator sets and so equivocation is avoided.
 
-\begin{figure}[h!tb]
+At the start of the end dynasty, the validator's deposit is locked for a long period of time, called the \textit{withdrawal delay} (think ``four months' worth of blocks''), before the deposit is withdrawn.  If, during the withdrawal delay, the validator violates any commandment, the deposit is slashed.
+
+%We define $\mathbf{V}$ as the set of all validators who have sever joined the validator set. Then, 
+We define two functions that generate two subsets of validators for any given dynasty $d$, the \emph{forward validator set} and the \emph{rear validator set}.  They are defined as,
+
+\begin{align*}
+    \mathcal{V}_{\operatorname{f}}(d) &\equiv \left\{ \upnu : \DS(\upnu) \leq d < \DE(\upnu)  \right\} \\
+    \mathcal{V}_{\operatorname{r}}(d) &\equiv \left\{ \upnu : \DS(\upnu) < d \leq \DE(\upnu) \right\} \; .
+\end{align*}
+
+
+Note this means that the forward validator set of dynasty $d$ is the rear validator set of dynasty $d+1$.
+
+Note that in order for the chain to be able to ``know'' its own current dynasty, we need to restrict our definition of ``finalization'' slightly:		
+Before, a checkpoint $c$ is called \emph{finalized} if it is justified and there is a supermajority link from $c$ to any of its direct children in the checkpoint tree.  Now, finalization has one additional condition---$c$ is finalized only if the votes for the supermajority link $c \rightarrow c^\prime$, as well as all of the supermajority links recursively justifying $c$, are included in the block chain before the child of $c^\prime$, i.e., before block number $\h(c^\prime) * 100$.		
+To support dynamic validator sets, we redefine a supermajority link and finalization as follows:
+\begin{itemize}
+
+\item An ordered pair of checkpoints $(s, t)$, where $t$ is in dynasty $d$, has a \emph{supermajority link} if both at least $\frac{2}{3}$ of the forward validator set of dynasty $d$ have published votes $s \rightarrow t$ and at least $\frac{2}{3}$ of the rear validator set of dynasty $d$ have published votes $s \rightarrow t$.
+
+\item A checkpoint $c$ is called currently \emph{finalized} if $c$ is justified and there is a supermajority link from $c \to c^\prime$ where $c^\prime$ is a child of $c$.  We add the condition that $c$ is finalized only if the votes for the supermajority link $c \rightarrow c^\prime$, as well as the supermajority link justifying $c$, are included in $c^\prime$'s  block chain and before the child of $c^\prime$---i.e., before block number $\h(c^\prime) * 100$.
+\end{itemize}
+
+
+
+The forward and rear validator sets will usually greatly overlap; but if the two validator sets substantially differ, this ``stitching'' mechanism prevents safety failure in the case when two grandchildren of a finalized checkpoint have different dynasties because the evidence was included in one chain but not the other.  For an example of this, see \figref{fig:DYN}.
+
+\begin{figure}[htb]
 \centering
-\includegraphics[width=3.5in]{validator_set_misalignment.png}
-\caption{Without the validator set stitching mechanism, it's possible for two conflicting checkpoints to be finalized with no validators slashed}
-\label{fig:dynamic2}
+\includegraphics[height=3in]{dynamic_validator_sets.pdf}
+\caption{\textbf{Attack from dynamic validator sets}.  Without the validator set stitching mechanism, it's possible for two conflicting checkpoints $c$ and $c^\prime$ to both be finalized without any validator getting  slashed.  In this case $c$ and $c^\prime$ are the same height thus violating commandment \textbf{I}, but because the validator sets finalizing $c$ and $c^\prime$ are disjoint, no one gets slashed.}
+\label{fig:DYN}
 \end{figure}
 
-\subsection{Long Range Attacks}
 
-Note that the withdrawal delay introduces a synchronicity assumption \textit{between validators and clients}. Because validators can withdraw their deposits after the withdrawal delay, there is an attack where a coalition of validators which had more than $\frac{2}{3}$ of deposits \textit{long ago in the past} withdraws their deposits, and then uses their historical deposits to finalize a new chain that conflicts with the original chain without fear of getting slashed. Despite violating slashing conditions to make a chain split, because the attacker has already withdrawn on both chains they do not lose any money. This is called the \textit{long-range atack}.
+\section{Stopping attacks}
+\label{sect:attacks}
+There are two well-known attacks against proof-of-stake systems: \emph{long range revisions} and \emph{catastrophic crashes}.  We discuss each in turn.
 
-\begin{figure}
+\subsection{Long Range Revisions}
+The withdrawal delay after a validator's end dynasty introduces a synchronicity assumption between validators and clients. Once a coalition of validators has withdrawn their deposits, if that coalition had more than $\frac{2}{3}$ of deposits \emph{long ago in the past}, they can use their historical supermajority to finalize conflicting checkpoints without fear of getting slashed (because they have already withdrawn their money).  This is called the \emph{long-range revision attack}, see in \figref{fig:longrange}.
+
+In simple terms, long-range attacks are prevented by a fork choice rule to never revert a finalized block, as well as an expectation that each client will ``log on'' and gain a complete up-to-date view of the chain at some regular frequency (e.g., once per 1--2 months). A ``long range revision'' fork that finalizes blocks older than that will simply be ignored, because all clients will have already seen a finalized block at that height and will refuse to revert it.
+
+
+
+We make an informal proof of the mechanism as follows. Suppose that:
+
+\begin{itemize}
+
+\item There is a maximum communication delay $\delta$ between two clients, so if one client hears some message at time $t$, all other clients are guaranteed to have heard it by time $t + \delta$. This means that we can talk about the ``time window'' $[t_{\min}, t_{\max}]$ during which a block was received by the network, with width $t_{\max} - t_{\min}$ at most $\delta$.
+\item We assume all clients have local clocks are perfectly synchronized (any discrepancy can be treated as being part of the communication delay $\delta$).
+\item Blocks are required to have timestamps. If a client has local time $T_L$, then it will reject blocks whose timestamp $T_B$ satisfies $T_B > T_L$ (i.e., in the future), and they will refuse to accept as finalized (but may still accept as part of the chain) blocks where $T_B < T_L - \delta$ (i.e., too far in the past)
+\item If a validator sees a slashing violation at time $t$ (that's the time they hear the \emph{later} of the two votes), then they reject blocks with timestamps $> t + 2\delta$ that are part of chains that have not yet included this slashing evidence.
+\end{itemize}
+
+Suppose that a large set of slashing violations results in two conflicting finalized checkpoints, $c_1$ and $c_2$.  If the two time windows do not intersect, then all validators agree which checkpoint came first and everyone follows the rule to not revert finalized checkpoints then there is no issue.
+
+If the two time windows \emph{do} intersect, then we can handle the case as follows. Let $c_1$'s time window be $[0, \delta]$ and $c_2$'s  time window be $[\delta - \epsilon, 2\delta - \epsilon]$. Then the timestamps of both are at least $0$. By time $2\delta$ it is guaranteed that all clients have seen the slashing violation, so they reject blocks with timestamp $> 4\delta$ whose chains that have not yet included the evidence transaction. Hence, as long as $\omega > 4\delta$, it's guaranteed that malfeasant validators will lose their deposits in all chains that any client accepts, where $\omega$ is the ``withdraw delay'' (\figref{fig:longrange}), the delay between the end-epoch and when validators actually receive their deposits back.
+
+Due to network delays, it's possible that clients will disagree whether a given piece of slashing evidence was submitted into a given chain ``on time'' or as having accepted it too late. However, this is only a liveness failure, not a safety failure, and this possibility does not weaken our security claims because it is already known that a corrupted proposal mechanism (which would be required to prevent evidence inclusion) can prevent finality.
+
+We can also sidestep the issue of evidence inclusion timeouts by informally arguing that attacks  will be short-lived, because the validators will perceive a long-running chain without including slashing evidence as an attack and switch to another branch supported by an honest minority of validators that are not part of the attack (see Section \ref{sect:leak}) thus stopping the attack and slashing the attacker.
+
+\begin{figure}[tb]
 \centering
-\includegraphics[width=3in]{LongRangeAttacks.png}
-\caption{Despite violating slashing conditions to make a chain split, because the attacker has already withdrawn on both chains they do not lose any money. This is often called a \textit{long-range atack}.}
-\label{fig:dynamic3}
+\includegraphics[width=3in]{longrange.pdf}
+\caption{\textbf{The long range attack}.  As long as a client gains complete knowledge of the justified chain at a regular interval, it will not be susceptible to a long range attack.}
+\label{fig:longrange}
 \end{figure}
 
-Suppose that clients can be relied on to log on at least once every time $\delta$ (think $\delta \approx$ 1 month). Then, if a client hears about two conflicting finalized checkpoints, $C_1$ at time $T_1$ and $C_2$ at time $T_2$, there are two cases. If, from the point of view of all clients, $T_2 > T_1$, then all clients will accept $C_2$ and there is no ambiguity. If on the other hand different clients see different orders (i.e. some see $T_2 > T_1$, others see $T_1 > T_2$), then it must be the case that for all clients, $|T_2 - T_1| \le 4\delta$. If the withdrawal delay is much greater than $4\delta$, then there is plenty of time during which slashing evidence can be included in both chains, and we make an assumption that if a chain does not include slashing evidence, then clients will reject this via a soft fork (see later section).
 
-This rejection can also be partially automated, by implementing a mechanism where if a client sees a slashing condition violation before they see some block $B$ with timestamp $t$, and then the head is a descendant of $B$ with timestamp greater than $t + EIT$ (``evidence inclusion timelimit'') that does has not yet punished the malfeasant validator, the client shows a warning.
 
-\section{Recovering from Castastrophic Crashes}
+\subsection{Castastrophic Crashes}
 \label{sect:leak}
 
-Suppose that $>\frac{1}{3}$ of validators crash-fail at the same time---i.e, they are no longer connected to the network due to a network partition, computer failure, or are malicious actors. Then, no later checkpoint will be able to get finalized.
+Suppose that $>\frac{1}{3}$ of validators crash-fail at the same time---i.e., they are no longer connected to the network due to a network partition, computer failure, or the validators themselves are malicious. Intuitively, from this point on, no supermajority links can be created, and thus no future checkpoints can be finalized.
 
-We can recover from this by instituting a ``leak'' which dissipates the deposits of validators that do not prepare or commit, until eventually their deposit sizes decrease low enough that the validators that \textit{are} preparing and committing become a $\frac{2}{3}$ supermajority. The simplest possible formula is something like ``validators with deposit size $D$ lose $D * p$ in every epoch in which they do not prepare and commit'', though to resolve catastrophic crashes more quickly a formula which increases the rate of dissipation in the event of a long streak of non-finalized blocks may be optimal.
+We can recover from this by instituting an ``inactivity leak'' which slowly drains the deposit of any validator that does not vote for checkpoints, until eventually its deposit sizes decrease low enough that the validators who \emph{are} voting are a supermajority.  The simplest formula is something like ``in every epoch a validator with deposit size $D$ fails to vote, it loses $D * p$ (for $0 < p < 1$)'', though to resolve catastrophic crashes more quickly a formula which increases the leak rate in the event of a long streak of non-finalized blocks may be optimal.
 
-The dissipated portion of deposits can either be burned or simply forcibly withdrawn and immediately refunded to the validator; which of the two strategies to use, or what combination, is an economic incentive concern and thus outside the scope of this paper.
+This drained ether can be burned or returned to the validator after $\omega$ days.  Whether leaked assets should be burned or returned as well as  the exact formula for the inactivity leak is outside the scope of this paper as these are questions of economic incentives, not Byzantine-fault-tolerance.
 
-Note that this does introduce the possibility of two conflicting checkpoints being finalized, with validators only losing money on one of the two checkpoints as seen in \figref{fig:commitsync}.
+The inactivity leak introduces the possibility of two conflicting checkpoints being finalized without any validator getting slashed (as in Figure \ref{fig:bigcrash}), with validators only losing money on only one of the two checkpoints. Assume the validators are split into two subsets, with subset $\mathbf{V}_A$ voting on chain $A$ and subset $\mathbf{V}_B$ voting on chain $B$.  On chain $A$, $\mathbf{V}_B$'s deposits will leak, and vice versa, leading to each subset having a supermajority on its respective chain, allowing two conflicting checkpoints to be finalized without any validators being explicitly slashed (but each subset will lose a large portion of their deposit on one of the two chains due to leaks).  If this situation happens, then each validator should simply favor whatever finalized checkpoint it saw first.
 
-\begin{figure}[h!tb]
+The exact algorithm for recovering from these various attacks remains an open problem.  For now, we assume validators can detect obviously malfeasant behavior (e.g., not including evidence) and manually create a ``minority soft fork''.  This minority fork can be viewed as a blockchain in its own right that competes with the majority chain in the market, and if the majority chain truly is operated by colluding malicious attackers then we can assume that the market will favor the minority fork.
+
+\begin{figure}[htb]
 \centering
-\includegraphics[width=4in]{CommitsSync.png}
-\caption{The checkpoint on the left can be finalized immediately. The checkpoint on the right can be finalized after some time, once offline validator deposits sufficiently dissipate.}
-\label{fig:commitsync}
+\includegraphics[width=3in]{bigcrash.pdf}
+\caption{\textbf{Inactivity leak}.  The checkpoint on the left can be finalized immediately. The checkpoint on the right can be finalized after some time, once offline validator deposits sufficiently deplete.}
+\label{fig:bigcrash}
 \end{figure}
 
-If the goal is simply to achieve maximally close to 50\% fault tolerance, then clients should simply favor the finalized checkpoint that they received earlier. However, if clients are also interested in defeating 51\% censorship attacks, then they may want to at least sometimes choose the minority chain. All forms of ``51\% attacks'' can thus be resolved fairly cleanly via ``user-activated soft forks'' that reject what would normally be the dominant chain. Particularly, note that finalizing even one block on the dominant chain precludes the attacking validators from preparing on the minority chain because of Commandment II, at least until their balances decrease to the point where the minority can commit, so such a fork would also serve the function of costing the majority attacker a very large portion of their deposits.
 
 \section{Conclusions}
+We presented Casper, a novel proof of stake system derived from the Byzantine fault tolerance literature.  Casper includes: two slashing conditions, a correct-by-construction fork choice rule inspired by \cite{sompolinsky2013accelerating}, and dynamic validator sets.  Finally we introduced extensions to Casper (not reverting finalized checkpoints and the inactivity leak) to defend against two common attacks.
 
-This introduces the basic workings of Casper the Friendly Finality Gadget's prepare and commit mechanism and fork choice rule, in the context of Byzantine fault tolerance analysis. Separate papers will serve the role of explaining and analyzing incentives inside of Casper, and the different ways that they can be parametrized and the consequences of these paramtrizations.
-
-\section{Acknowledgements}
-
-We thank Virgil Griffith for review and Sandro Lera for mathematics.
+Casper remains imperfect.  For example, a wholly compromised block proposal mechanism will prevent Casper from finalizing new blocks.  Casper is a PoS-based strict security improvement to almost any PoW chain.  The problems that Casper does not wholly solve, particularly related to 51\% attacks, can still be corrected using user-activated soft forks.  Future developments will undoubtedly improve Casper's security and  reduce the need for user-activated soft forks.
 
 
-%\section{References}
-\bibliographystyle{abbrv}
+
+
+
+\textbf{Future Work.} The current Casper system builds upon a proof of work block proposal mechanism.  We wish to convert the block proposal mechanism to proof of stake.  We wish to prove accountable safety and plausible liveness even when the weights of the validator set change with rewards and penalties.  Another problem for future work is a formal specification of a fork-choice rule taking into account the common attacks on proof of stake.  Future workpapers will explain and analyze the financial incentives within Casper and their consequences.  A particular economic problem related to such automated strategies to block attackers is proving upper bounds on the ratio between the degree of disagreement between different clients and the cost incurred by the attacker. 
+
+
+
+\textbf{Acknowledgements.} We thank Jon Choi, Karl Floersch, Ozymandias Haynes, and Vlad Zamfir for frequent discussions.
+
+\bibliographystyle{naturemag}
 \bibliography{ethereum}
+%\section{References}
+%\bibliographystyle{plain}
+%\bibliography{ethereum}
+%\thebibliography
 
 %\input{appendix.tex}
+%\clearpage
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 \end{document}
-        
+ 
