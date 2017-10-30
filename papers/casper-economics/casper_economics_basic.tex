@@ -431,31 +431,18 @@ The griefing factor for censoring is the inverse of this. If we want the griefin
 
 Note that for $\alpha = \frac{1}{2}$, this would set the \NCCP to infinity. Hence, with this design a griefing factor of $1$ is infeasible. We \emph{can} achieve that effect in a different way - by making \NCP itself a function of $\alpha$; in this case, $\NCCP = 1$ and $\NCP = \max[0, 1 - 2\alpha]$ would achieve the desired effect. If we want to keep the formula for \NCP constant, and the formula for \NCCP reasonably simple and bounded, then one alternative is to set $\NCCP(\alpha) = \frac{\alpha}{1-\alpha}$; this keeps griefing factors bounded between $\frac{1}{2}$ and $2$.
 
-\section{Pools}
+\section{Future Work}
+\textbf{Protocol Utility Function.} There will be more work on refining the protocol utility function. In particular, the current utility function is a cost function to be precise. To fully model utility, the benefit of the protocol needs to be parametrized, which will enable further optimization of the rewards and penalties in the system.
 
-In a traditional (i.e., not sharded or otherwise scalable) blockchain, there is a limit to the number of validators that can be supported, because each validator imposes a substantial amount of overhead on the system. If we accept a maximum overhead of two consensus messages per second, and an epoch time of 1400 seconds, then this means that the system can handle 1400 validators (not 2800 because we need to count prepares and commits). Given that the number of individual users interested in staking will likely exceed 1400, this necessarily means that most users will participate through some kind of ``stake pool''.
-
-There are several possible kinds of stake pools:
-
-\begin{itemize}
-\item \textbf{Fully centrally managed}: users $B_1 \ldots B_n$ send coins to pool operator $A$. $A$ makes a few deposit transactions containing their combined balances, fully controls the Prepare and Commit process, and occasionally withdraws one of their deposits to accommodate users wishing to withdraw their balances. Requires complete trust.
-\item \textbf{Centrally managed but trust-reduced}: users $B_1 \ldots B_n$ send coins to a pool contract. The contract sends a few deposit transactions containing their combined balances, assigning pool operator $A$ control over the Prepare and Commit process, and the task of keeping track of withdrawal requests. $A$ occasionally withdraws one of their deposits to accommodate users wishing to withdraw their balances; the withdrawals go directly into the contract, which ensures each user's right to withdraw a proportional share. Users need to trust the operator not to get their deposits penalized, but the operator cannot steal the coins. The trust requirement can be reduced further if the pool operator themselves contributes a large portion of the coins, as this will disincentivize them from staking maliciously.
-\item \textbf{2-of-3}: a user makes a deposit transaction and specifies as validation code a 2-of-3 multisig, consisting of (i) the user's online key, (ii) the pool operator's online key, and (iii) the user's offline backup key. The need for two keys to sign off on a prepare, Commit or withdraw minimizes key theft risk, and a liveness failure on the pool side can be handled by the user using their backup key.
-\item \textbf{Multisig managed}: users $B_1 \ldots B_n$ send coins to a pool contract that works in the exact same way as a centrally managed pool, except that a multisig of several semi-trusted parties needs to approve each Prepare and Commit message.
-\item \textbf{Collective}: users $B_1 \ldots B_n$ send coins to a pool contract that that works in the exact same way as a centrally managed poolg
-, except that a threshold signature of at least portion $p$ of the users themselves (say, $p = 0.6$) needs to approve each Prepare and Commit messagge.
-\end{itemize}
-
-We expect pools of different types to emerge to accomodate smaller users. In the long term, techniques such as blockchain sharding will make it possible to increase the number of users that can validate directly, and extensions to allow validators to temporarily ``drop out'' from the validator set when they are offline can mitigate liveness risk.
+\textbf{Pools.} In a traditional (i.e., not sharded or otherwise scalable) blockchain, there is a limit to the number of validators that can be supported, because each validator imposes a substantial amount of overhead on the system. Most users will likly participate via ``stake pool''. We expect pools of different types to emerge to accomodate smaller users. In the long term, techniques such as blockchain sharding will make it possible to increase the number of users that can validate directly, and extensions to allow validators to temporarily ``drop out'' from the validator set when they are offline can mitigate liveness risk.
 
 \section{Conclusions}
 
 The above analysis gives a parametrized scheme for incentivizing in Casper, and shows that it is a Nash equilibrium in an uncoordinated-choice model with a wide variety of settings. We then attempt to derive one possible set of specific values for the various parameters by starting from desired objectives, and choosing values that best meet the desired objectives. This analysis does not include non-economic attacks, as those are covered by other materials, and does not cover more advanced economic attacks, including extortion and discouragement attacks. We hope to see more research in these areas, as well as in the abstract theory of what considerations should be taken into account when designing reward and penalty schedules.
 
-
-\textbf{Future Work.} We would like to see a better protocol utility function \eqref{eq:utilityfunction}.  \todo{fill me in}
-
 \textbf{Acknowledgements.}  We thank Virgil Griffith for review.
+
+
 
 %\section{References}
 \bibliographystyle{abbrv}
