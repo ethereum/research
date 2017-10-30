@@ -12,11 +12,21 @@
 \usepackage{graphicx}
 \graphicspath{{figs/}{figures/}{images/}{./}}
 
+\usepackage{mdframed} % for floating boxes for commandments
+\usepackage{upgreek} % for upright greek characters
+%\usepackage{datetime}
+
 %% Special symbols we'll probably iterate on
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % we will probably iterate on these symbols until we have a notation we like
 \newcommand{\epoch}{\ensuremath{e}\space}
 \newcommand{\hash}{\textnormal{h}\space}
+\newcommand{\h}{\operatorname{h}\xspace}
+
+\newcommand{\source}{\ensuremath{s}\space}
+\newcommand{\target}{\ensuremath{t}\space}
+\newcommand{\sourceheight}{\textnormal{h(\ensuremath{s})}\space} % How do we directly refer to \source without the spacing issue?
+\newcommand{\targetheight}{\textnormal{h(\ensuremath{t})}\space}
 
 % symbols for the epoch and hash source
 \newcommand{\epochsource}{\ensuremath{\epoch_{\star}}\space}
@@ -28,8 +38,7 @@
 
 \newcommand{\gamesymbol}{\reflectbox{G}}
 
-\newcommand{\msgPREPARE}{\textbf{\textsc{prepare}}\space}
-\newcommand{\msgCOMMIT}{\textbf{\textsc{commit}}\space}
+\newcommand{\msgVOTE}{\textbf{\textsc{vote}}\space}
 
 % Symbols for the Last Justified Epoch and Hash
 \newcommand{\epochLJ}{\ensuremath{\epoch_{\textnormal{LJ}}}\space}
@@ -48,10 +57,8 @@
 % Econ-specific symbols
 \newcommand{\BIR}{\textsc{BIR}\space}
 \newcommand{\BP}{\textsc{BP}\space}
-\newcommand{\NCP}{\textsc{NCP}\space}
-\newcommand{\NCCP}{\textsc{NCCP}\space}
-\newcommand{\NPP}{\textsc{NPP}\space}
-\newcommand{\NPCP}{\textsc{NPCP}\space}
+\newcommand{\NVP}{\textsc{NVP}\space}
+\newcommand{\NVCP}{\textsc{NVCP}\space}
 
 \begin{document}
 
@@ -63,46 +70,53 @@ We give an introduction to the incentives in the Casper the Friendly Finality Ga
 We assume the "Casper the Friendly Finality Gadget" paper as a dependency.
 \end{abstract}
 
-\section{Recap: The Casper Protocol}
+\section{Review: The Casper FFG Protocol}
 \label{sect:casperprotocol}
-In the Casper protocol, there is a set of validators, and in each epoch validators have the ability to send two kinds of messages:
 
-$$\langle \msgPREPARE, \hash, \epoch, \hashsource, \epochsource, \signature \rangle$$
+The blockchain state maintains the \textit{current validator set} $V_c: v \rightarrow R^+$, a mapping of validators to their deposit sizes (non-negative real numbers) and the \textit{previous validator set} $V_p: v \rightarrow R^+$. The \textit{total current deposit size} is equal to $\sum_{v \in V} V_c[v]$, the sum of all deposits in the current validator set, and the \textit{total previous deposit size} is likewise equal to the $\sum_{v \in V} V_p[v]$. Validators can deposit $n$ coins to join both validator sets with deposit size $n$, and a validator with deposit size $n'$ can withdraw $n'$ coins with a delay. For any deposit or withdraw action to fully take effect, three checkpoints need to be finalized in a chain after the withdraw is included in that chain (validators get inducted to and ejected from the current validator set first, so after two finalized hashes, a validator will be in one validator set but not the other). \todo{simplify notation}
 
+A checkpoint is either the genesis, or a block with block number $i * 100 + 99$ for some integer $i \ge 0$. An \emph{epoch} is defined as the contiguous sequence of blocks between two checkpoints, including the later checkpoint but not the earlier one.  The \textit{epoch of a block} is the index of the epoch containing that hash, e.g., the epoch of block 599 is 5. \todo{define in list instead}
 
-	\begin{tabular}{l l}
+In the Casper protocol, there is a set of validators, and in each epoch validators have the ability to send a message in the following form:
+
+% Vote Message Parameters shown in table.
+\begin{table}[bth]
+\centering
+
+   \begin{tabular}{l l}
+	\toprule
 	\textbf{Notation} & \textbf{Description} \\
-	\hash & a checkpoint hash \\
-	\epoch & the epoch of the checkpoint \\
-	$\hashsource$ & the most recent justified hash \\
-	$\epochsource$ & the epoch of $\hashsource$  \\
-	\signature & signature of $(\hash,\epoch,\hashsource,\epochsource)$ from the validator's private key \\
-	\end{tabular} \label{tbl:prepare}
+	\midrule
+	$s$ & the hash of any justified checkpoint (the ``source'') \\
+	$t$ & any checkpoint hash that is a descendent of  $s$ (the ``target'') \\
+	$\h(s)$ & the height of checkpoint $s$ in the checkpoint tree \\
+	$\h(t)$ & the height of checkpoint $t$ in the checkpoint tree \\
+	\signature & signature of $\left\langle s, t, \h(s), \h(t) \right\rangle$ from the validator $\upnu$'s private key \\
+	\bottomrule
+	\end{tabular}
 
-$$ $$
 
-$$\langle \msgCOMMIT, \hash, \epoch, \signature \rangle$$
-	
-	\begin{tabular}{l l}
-	\textbf{Notation} & \textbf{Description} \\
-	\hash & a checkpoint hash \\
-	\epoch & the epoch of the checkpoint \\
-	\signature & signature from the validator's private key \\
-	\end{tabular} 
-	\label{tbl:commit}
-	\label{fig:messages}
+\vspace{0.15in}
+\caption{The schematic of a single \msgVOTE message denoted $\left\langle \upnu, s, t, \h(s), \h(t) \right\rangle$.}
+\label{tbl:messages}
+\end{table}
 
-$$ $$
+% Definitions (supermajority, conflicting, justified, finalized)
+The following terms were also defined (refer back to the original paper for more details):
+\begin{itemize}
+\item A \emph{supermajority link} is an ordered pair of checkpoints $(a, b)$, also written $a \rightarrow b$, such that at least $\frac{2}{3}$ of validators (by deposit) have published votes with source $a$ and target $b$.  Supermajority links can skip checkpoints.
 
-The blockchain state maintains the \textit{current validator set} $V_c: v \rightarrow R^+$, a mapping of validators to their deposit sizes (non-negative real numbers) and the \textit{previous validator set} $V_p: v \rightarrow R^+$. The \textit{total current deposit size} is equal to $\sum_{v \in V} V_c[v]$, the sum of all deposits in the current validator set, and the \textit{total previous deposit size} is likewise equal to the $\sum_{v \in V} V_p[v]$. Validators can deposit $n$ coins to join both validator sets with deposit size $n$, and a validator with deposit size $n'$ can withdraw $n'$ coins with a delay. For any deposit or withdraw action to fully take effect, three checkpoints need to be finalized in a chain after the withdraw is included in that chain (validators get inducted to and ejected from the current validator set first, so after two finalized hashes, a validator will be in one validator set but not the other).
+\item Two checkpoints $a$ and $b$ are called \emph{conflicting} if and only if they are nodes in distinct branches, i.e., neither is an ancestor or descendant of the other.
 
-A checkpoint is either the genesis, or a block with block number $i * 100 + 99$ for some integer $i \ge 0$. An \emph{epoch} is defined as the contiguous sequence of blocks between two checkpoints, including the later checkpoint but not the earlier one.  The \textit{epoch of a block} is the index of the epoch containing that hash, e.g., the epoch of block 599 is 5.
+\item A checkpoint $c$ is called \emph{justified} if there exists a supermajority link $c^\prime \to c$ where $c^\prime$ is the target of a supermajority link. \todo{Define it the same as Basics paper}
+
+\item A checkpoint $c$ is called \emph{finalized} if (1) it is justified and (2) there is a supermajority link $c \to c^\prime$ where $c^\prime$ is a direct child of $c$.
+\end{itemize}
+
 
 We will use ``$p$ of validators'' for any fraction $p$ (eg. $\frac{2}{3}$) as shorthand for ``some set of validators $V_s$ such that $\sum_{v \in V_s} V_c[v] \ge \sum_{v \in V_c} V_c[v] * p$ and $\sum_{v \in V_s} V_p[v] \ge \sum_{v \in V_p} V_p[v] * p$'' - that is, such a set must make up \textit{both} $p$ of the current validator set \textit{and} $p$ of the previous validator set. The ``portion of validators that did X'' refers to the largest value $0 \le p \le 1$ such that $p$ of validators (using the definition above) did X.
 
-A hash \hash is justified if, for some \hashsource (which must be an ancestor of \hash), there exist $\frac{2}{3}$ prepares of the form $\langle \msgPREPARE, \hash, \epoch(\hash), \hashsource, \epoch(\hashsource), \signature \rangle$, and \hashsource is itself justified. A hash \hash is finalized if it is justified and there exist $\frac{2}{3}$ commits of the form $\langle \msgCOMMIT, \hash, \epoch(\hash), \signature \rangle$. The genesis is considered both justified and finalized, and serves as the base case for the recursive definition.
-
-An ``ideal execution'' of the protocol is one where, at the start of every epoch, every validator prepares and commits the same checkpoint for that epoch, specifying the same $\epochsource$ and $\hashsource$; thus, in every epoch, that checkpoint gets finalized. We wish to incentivize this ideal execution.
+An ``ideal execution'' of the protocol is one where, at the start of every epoch, every validator votes on the same checkpoint for that epoch, specifying the same $\source$ and $\sourceheight$; thus, in every epoch, that checkpoint gets finalized. We wish to incentivize this ideal execution.
 
 Possible deviations from this ideal execution that we want to minimize or avoid include:
 
@@ -115,40 +129,51 @@ These are both failures \textit{of the protocol}. The next step from here is \te
 
 \subsection{Safety faults}
 
-There exists a proof that any safety fault can only be caused by at least $\frac{1}{3}$ of validators violating one of the two Casper Commandments (``slashing conditions''), defined below:
+The most notable property of Casper is that it is impossible for two conflicting checkpoints to be finalized without $\geq \frac{1}{3}$ of the validators violating one of the two Casper Commandments/slashing conditions (\figref{fig:commandments}).
+
+%\clearpage
+\todo{render figure 1 here}
+
+\begin{figure}
+\begin{mdframed}
+\textsc{An individual validator $\upnu$ must not publish two distinct votes,}
+\begin{equation*}
+\left\langle \upnu, s_1, t_1, \h(s_1), \h(t_1)\right\rangle \hspace{0.5in} \textsc{and} \hspace{0.5in} \left\langle \upnu, s_2, t_2, \h(s_2), \h(t_2)\right\rangle \; ,
+\end{equation*}
+\textsc{such that either:}
 
 \begin{enumerate}
-   \item[\textbf{I.}] \textsc{A validator shalt not publish two or more nonidentical Prepares for same epoch.}
-   
-   In other words, a validator may Prepare at most exactly one (\hash, \epochsource, \hashsource) triplet for any given epoch \epoch.
+   \item[\textbf{I.}] $\h(t_1) = \h(t_2)$.
 
-   \item[\textbf{II.}] \textsc{A validator shalt not publish an Commit between the epochs of a Prepare statement.} 
-    
-   Equivalently, a validator may not publish
-
-\begin{equation}
-\langle \msgPREPARE, \epoch_p, \hash_p, \epochsource, \hashsource, \signature \rangle \hspace{0.5in} \textnormal{\textsc{and}} \hspace{0.5in} \langle \msgCOMMIT, \epoch_c, \hash_c, \signature \rangle \;, 
-\label{eq:msgPREPARE}
-\end{equation}
-
-where the epochs satisfy $\epochsource < \epoch_c < \epoch_p$.
-
+   Equivalently, a validator must not publish two distinct votes for the same target height.
 \end{enumerate}
+\vspace{-0.15in}
+\textsc{or}
 
-Hence, we can adequately penalize safety failures by simply taking away the deposits of any validator that violates either of the two slashing conditions.
+\begin{enumerate}
+   \item[\textbf{II.}] $\h(s_1) < \h(s_2) < \h(t_2) < \h(t_1)$.
+
+   Equivalently, a validator must not vote within the span of its other votes.
+\end{enumerate}
+\end{mdframed}
+\caption{The two Casper Commandments.  Any validator who violates either of these commandments gets their deposit slashed.}
+\label{fig:commandments}
+\end{figure}
+
+If a validator violates either slashing condition, the evidence of the violation can be included into the blockchain as a transaction, at which point the validator's entire deposit is taken away with a small ``finder's fee'' given to the submitter of the evidence transaction. In current Ethereum, stopping the enforcement of a slashing condition requires a successful $51\%$ attack on Ethereum's proof-of-work block proposer.
 
 \subsection{Liveness Faults}
 
-Penalizing liveness faults is more difficult. If the only kind of faulty behavior that were possible is nodes going offline, then penalization would also be simple: find the validators that did not send prepares and commits during any epoch, and take away their deposits. However, there are several other faulty behaviors that are possible:
+Penalizing liveness faults is more difficult. If the only kind of faulty behavior that were possible is nodes going offline, then penalization would also be simple: find the validators that did not send votes during any epoch, and take away their deposits. However, there are several other faulty behaviors that are possible:
 
 \begin{enumerate}
-\item Preparing or committing too late
-\item Preparing a different \hash from the hash prepared by most other validators.
-\item Using a different \hashsource and \epochsource from that used by most other validators.
+\item Voting too late
+\item Voting on a different \target from the hash voted on by most other validators.
+\item Using a different \source and \sourceheight from that used by most other validators.
 \item Network latency
-\item A majority coalition finalizing a chain that does not include prepares or commits sent by those outside of some coalition (a ``censorship fault'')
-\item A majority coalition waiting for other validators to prepare one \hash, and then preparing another \hash instead.
-\item A majority coalition waiting for other validators to prepare with one \hashsource, and then preparing another \hashsource instead.
+\item A majority coalition finalizing a chain that does not include votes sent by those outside of some coalition (a ``censorship fault'')
+\item A majority coalition waiting for other validators to vote on one \target, and then voting on another \target instead.
+\item A majority coalition waiting for other validators to vote on one \source, and then voting on another \source instead.
 \end{enumerate}
 
 The list above is deliberately organized symmetrically, to illustrate a fundamental problem with attributing liveness faults known as \textit{speaker/listener fault equivalence}: given only a transcript of messages that were sent earlier, that contain a record of user B sending a message that shows the absence of an expected message from user A, this could arise because A was not speaking, or because B was not listening, and \textit{there is no way to tell the two apart}. In this case, (1) and (5) are indistinguishable, as are (2) and (6), and (3) and (7). Finally, all seven may be indistuiguishable from network latency.
@@ -165,7 +190,7 @@ Note that this use of the ``market oracle'' is NOT a special feature of proof of
 
 \section{Rewards and Penalties, Not Penalizing Majority Censorship}
 
-Suppose that we temporarily rule out cases (5), (6) and (7) above, so the only possible explanations for a lack of prepares and commits are either validators being offline or network latency that is not of their own fault. Maximizing fairness clearly entails minimizing penalties, ideally to zero, as any failed prepare or commit could possibly have been not of the validator's own fault; however, this runs counter to the goal of disincentivizing harm. If we want to create a parametrized incentive scheme that can trade off between these two goals, a simple way to do so is to maximize fairness \textit{subject to} some minimum level of harm disincentivization.
+Suppose that we temporarily rule out cases (5), (6) and (7) above, so the only possible explanations for a lack of votes are either validators being offline or network latency that is not of their own fault. Maximizing fairness clearly entails minimizing penalties, ideally to zero, as any failed vote could possibly have been not of the validator's own fault; however, this runs counter to the goal of disincentivizing harm. If we want to create a parametrized incentive scheme that can trade off between these two goals, a simple way to do so is to maximize fairness \textit{subject to} some minimum level of harm disincentivization.
 
 We can formalize this further by introducing the notion of a \textit{protocol utility function}. A protocol utility function estimate how much harm the users of a protocol have received from a given protocol execution. We will define the utility as $0$ in a perfect execution, and negative in an execution that has any imperfections. One simple protocol utility function is the simple sum-of-indicator function:
 
@@ -183,18 +208,18 @@ $$U = -\sum_{\epoch} log(\epoch - LFE(\epoch))$$
 
 In a ``perfect execution'', every epoch is finalized, and so $\epoch - LFE(\epoch) = 1$, so $log(\epoch - LFE(\epoch)) = 0$. But if epochs are skipped, then there is a penalty, and if a protocol execution skips many epochs in a row then the penalty ramps up logarithmically. This is designed to fit a simple intuition: \textit{the increment in pain from increasing the time between finalized epochs by some factor is roughly the same, regardless of the specific time in question}. Going from 1 minute finality to 2 minute finality is as annoying as going from 1 hour finality to 2 hour finality.
 
-We now define the ``level of harm disincentivization'' simply: the level of harm disincentivization is the smallest ratio that an attacker could achieve between the amount of money that they lose and the loss to protocol utility. And from here, the optimal tradeoff between fairness and harm disincentivization is simple: \textit{we set the penalties for not preparing and not committing to equal the current impact of another unfinalized epoch to protocol utility}.
+We now define the ``level of harm disincentivization'' simply: the level of harm disincentivization is the smallest ratio that an attacker could achieve between the amount of money that they lose and the loss to protocol utility. And from here, the optimal tradeoff between fairness and harm disincentivization is simple: \textit{we set the penalties for not voting to equal the current impact of another unfinalized epoch to protocol utility}.
 
 The next question is, how do we set rewards? There are a few considerations:
 
 \begin{enumerate}
 \item Setting rewards too high makes the protocol expensive to operate.
 \item Users are looking for not just low issuance and high security, but also \textit{stability} of the level of issuance and security. Having rewards decrease as the total deposit size increases accomplishes the former goal trivially, and the latter goal by ``trying harder'' to attract validators when the total deposit size is small.
-\item If, in the normal case, the net reward for preparing and committing is more than half the penalty for doing neither of the two, then it will be profitable to join the validator set and prepare or commit less than $\frac{2}{3}$ of the time, which prevents finality.
+\item If, in the normal case, the net reward for voting is more than half the penalty for not doing so, then it will be profitable to join the validator set and vote on less than $\frac{2}{3}$ of the time, which prevents finality.
 \item Setting rewards too low increases the possibility of \textit{discouragement attacks}, where an attacker either performs a censorship attacks or finds a way to cause high latency (e.g. by splitting the network), causing validators to lose money; the threat of this may encourage validators to leave or discourage them from joining.
 \end{enumerate}
 
-We can define the \textbf{base penalty factor} as $BP = k * log(\epoch - LFE(\epoch))$ (with the caveat that here $LFE$ refers to the last epoch \textit{that has been observed as finalized by that particular chain}; this is an imperfection in measurement that is unavoidable), and we make two constants $NPP$ (``non-prepare penalty'') and $NCP$ (``non-commit penalty''). If the blockchain does not see a prepare from a validator for epoch \epoch during epoch \epoch, and the validator's deposit is $ then the validator is penalized $
+We can define the \textbf{base penalty factor} as $BP = k * log(\epoch - LFE(\epoch))$ (with the caveat that here $LFE$ refers to the last epoch \textit{that has been observed as finalized by that particular chain}; this is an imperfection in measurement that is unavoidable), and we make the constant $NVP$ (``non-vote penalty''). If the blockchain does not see a vote from a validator for epoch \epoch during epoch \epoch, and the validator's deposit is $ then the validator is penalized $
 
 \section{Rewards and Penalties}
 
@@ -205,29 +230,22 @@ We define the following nonnegative functions, all of which return a nonnegative
 
 \item $\BP(\totaldeposit, \epoch - \epochLF )$: returns the ``base penalty constant''---a value expressed as a percentage rate that is used as the scaling factor for all penalties; for example, if at the current time $\BP(\cdot, \cdot, \cdot) = 0.001$, then a penalty of $1.5$ means a validator loses $0.15\%$ of their deposit. Takes as inputs the current total quantity of deposited coins $\totaldeposit$, the current epoch $e$ and the last finalized epoch \epochLF. Note that in a perfect protocol execution, $\epoch - \epochLF = 1$.
 
-\item $\NPCP(\alpha)$ (``non-prepare collective penalty''): if $\alpha$ of validators ($0 \leq \alpha \leq 1$) are not seen to have Prepared during an epoch, then \emph{all} validators are charged a penalty of $\NCCP(\alpha)$. $\NPCP$ must be monotonically increasing, and satisfy $\NPCP(0) = 0$.
+\item $\NVCP(\alpha)$ (``non-vote collective penalty''): if $\alpha$ of validators ($0 \leq \alpha \leq 1$) are not seen to have Voted during an epoch, then \emph{all} validators are charged a penalty of $\NVCP(\alpha)$. $\NVCP$ must be monotonically increasing, and satisfy $\NVCP(0) = 0$. \todo{Refine for voting. Also, differentiate justifing votes vs finalizing votes.}
 
-\item $\NCCP(\alpha)$ (``non-commit collective penalty''): if $\alpha$ of validators ($0 \leq \alpha \leq 1$) are not seen to have Committed during an epoch, and that epoch had a justified hash so any validator \emph{could} have Committed, then all validators are charged a penalty proportional to $\NCCP(\alpha)$. $\NCCP$ must be monotonically increasing, and satisfy $\NCCP(0) = 0$.
-\end{itemize}
+\item $\NVP$ (``non-vote penalty''): the penalty for not Voting any block during the epoch. This is a nonnegative constant. \todo{Discuss merits of non-negative vs negative.}
 
-We also define the following nonnegative constants:
-\begin{itemize}
-    \item $\NPP$ (``non-prepare penalty''): the penalty for not Preparing any block during the epoch. \todo{correct?}
-    \item $\NCP$ (``non-commit penalty''): the penalty for not Committing any block during the epoch, if there was a justified hash which the validator \emph{could} have Committed. \todo{correct?}
 \end{itemize}
 
 
-Note that a validator publishing a Prepare/Commit doesn't entail escaping a \NPP/\NCP; it could be the case that either because of high network latency or a malicious majority censorship attack, the Prepares and Commits are not included into the blockchain in time and so the incentivization mechanism does not see them. Likewise, for $\NPCP$ and $\NCCP$, the $\alpha$ input is the proportion of validators whose Prepares and Commits are \emph{not visible}, not the proportion of validators who \emph{tried to send} a Prepare/Commit. 
+Note that a validator publishing a Vote doesn't entail escaping a $\NVP$; it could be the case that either because of high network latency or a malicious majority censorship attack, the Votes are not included into the blockchain in time and so the incentivization mechanism does not see them. Likewise, for $\NVCP$, the $\alpha$ input is the proportion of validators whose Vote are \emph{not visible}, not the proportion of validators who \emph{tried to send} a Vote.
 
-When we talk about Preparing and Committing the ``correct value'', we are referring to the hash \hash and the parent epoch $\epochsource$ and parent hash $\hashsource$.
+When we talk about Voting the ``correct value'', we are referring to the hash \hash and the parent epoch $\epochsource$ and parent hash $\hashsource$.
 
 We define the following reward and penalty schedule.  This is the procedure for rewards and penalties, and is the entirety of the incentivization structure.  It runs at the \emph{end} of every epoch:
     \begin{enumerate}
     \item All validators get a reward of $\BIR(\totaldeposit)$ (e.g., if $\BIR(\totaldeposit) = 0.0002$ then a validator with $10,000$ coins deposited gets a per-epoch reward of $2$ coins)
-    \item If the protocol does not see a Prepare from a given validator during the epoch, the validator is penalized $\BP(\totaldeposit, \epoch - \epochLF) * \NPP$ \todo{how does the incentive mechanism know \epoch?}
-    \item If the protocol does not see a Commit from a given validator during the epoch, and a block was justified (so a Commit \emph{could have} been seen), the validator is penalized $\BP(\totaldeposit, \epoch - \epochLF) * \NCP$.
-    \item If the protocol saw Prepares from proportion $p$ validators during the epoch, then \emph{every} validator is penalized $\BP(\totaldeposit, \epoch - \epochLF) * \NPCP(1 - p)$.
-    \item If the protocol saw Commits from proportion $p$ validators during the epoch, and a block was justified (so validators \emph{could have} Commited), then \emph{every} validator is penalized $\BP(\totaldeposit, \epoch - \epochLF) * \NCCP(1 - p)$.
+    \item If the protocol does not see a Vote from a given validator during the epoch, the validator is penalized $\BP(\totaldeposit, \epoch - \epochLF) * \NVP$ \todo{how does the incentive mechanism know \epoch?}
+    \item If the protocol saw Votes from proportion $p$ validators during the epoch, then \emph{every} validator is penalized $\BP(\totaldeposit, \epoch - \epochLF) * \NVCP(1 - p)$.
     \item The blockchain's recorded \epochLF and \hashLF are updated to the latest values. \todo{correct?}
     \end{enumerate}
 
@@ -240,7 +258,7 @@ We seek to prove the following:
 
 \begin{theorem}[\todo{First theorem}]
 \label{theorem1}
-If no validator has more than $\frac{1}{3}$ of the total deposit, i.e., $\max_i(D) \leq \frac{\totaldeposit}{3}$, then Preparing the last blockhash of the previous epoch and then Committing that hash is a Nash equilibrium. (Section \ref{sect:indivchoice})
+If no validator has more than $\frac{1}{3}$ of the total deposit, i.e., $\max_i(D) \leq \frac{\totaldeposit}{3}$, then Voting on the last blockhash of the previous epoch and then Voting on that hash is a Nash equilibrium. (Section \ref{sect:indivchoice})
 \end{theorem}
 
 \begin{theorem}[\todo{Second theorem}]
@@ -256,32 +274,30 @@ Even when the attackers hold a majority of the total deposit, the ratio of the p
 \subsection{Individual choice analysis}
 \label{sect:indivchoice}
 
-The individual choice analysis is simple. Suppose that during epoch $\epoch$ the proposal mechanism Prepares a hash $\hash$ and the Casper incentivization mechanism specifies some $\epochsource$ and $\hashsource$. Because, as per definition of the Nash equilibrium, we are assuming that all validators except for the validator that we are analyzing are following the equilibrium strategy, we know that $\ge \frac{2}{3}$ of validators Prepared in the last epoch and so $\epochsource = \epoch - 1$, and $\hashsource$ is the direct parent of $\hash$.
+\todo{update epochsource and hashsource with source/target}
 
-Hence, the PREPARE\_COMMIT\_CONSISTENCY slashing condition poses no barrier to Preparing $(\epoch, \hash, \epochsource, \hashsource)$. Since, in epoch \epoch, we are assuming that all other validators \emph{will} Prepare these values and then Commit \hash, we know \hash will be a hash in the main chain, and so a validator will pay a penalty if they do not Prepare $(\epoch, \hash, \epochsource, \hashsource)$, and they can avoid the penalty if they do Prepare these values.
+The individual choice analysis is simple. Suppose that during epoch $\epoch$ the proposal mechanism Votes on a hash $\hash$ and the Casper incentivization mechanism specifies some $\epochsource$ and $\hashsource$. Because, as per definition of the Nash equilibrium, we are assuming that all validators except for the validator that we are analyzing are following the equilibrium strategy, we know that $\ge \frac{2}{3}$ of validators Voted in the last epoch and so $\epochsource = \epoch - 1$, and $\hashsource$ is the direct parent of $\hash$.
 
-We are assuming there are $\frac{2}{3}$ Prepares for $(\epoch, \hash, \epochsource, \hashsource)$, and so \textsc{prepare\_req} also poses no barrier to committing \hash. Committing \hash allows a validator to avoid \NCP. Hence, there is an economic incentive to Commit \hash. This shows that, if the proposal mechanism succeeds at presenting to validators a single primary choice, Preparing and Committing the value selected by the proposal mechanism is a Nash equilibrium.
+Hence, the second slashing condition poses no barrier to Voting on $(\epoch, \hash, \epochsource, \hashsource)$. Since, in epoch \epoch, we are assuming that all other validators \emph{will} Vote on these values and then again on \hash, we know \hash will be a hash in the main chain, and so a validator will pay a penalty if they do not Vote on $(\epoch, \hash, \epochsource, \hashsource)$, and they can avoid the penalty if they do Vote on these values.
 
+We are assuming there \hash is justified, allowing validators to Vote again on \hash. Voting to finalize \hash allows a validator to avoid \NVP. Hence, there is an economic incentive to Voting again on \hash. This shows that, if the proposal mechanism succeeds at presenting to validators a single primary choice, Voting on the value selected by the proposal mechanism is a Nash equilibrium.
+
+\todo{rework this section for Votes}
 
 \begin{table}[h!bt]
 	\centering
    
-	Preparing $\langle \epoch, \hash, \epochsource, \hashsource \rangle$  
+	Voting $\langle \epoch, \hash, \epochsource, \hashsource \rangle$
     { \begin{tabular}{l c}
 	\textbf{Action} & \textbf{Payoff} \\
-	Preparing & 0 \\
-	Not Preparing & $-\NPP - \NPCP(\alpha)$ \\
-	\end{tabular}} \hspace{0.5in} Committing $\langle \epoch, \hash \rangle$ 
-    { \begin{tabular}{l c} 
-	\textbf{Action} & \textbf{Payoff} \\
-	Commiting & 0 \\
-	Not Commiting & $-\NCP - \NCCP(\alpha)$ \\
-	\end{tabular} 
-	\label{tbl:commit} }	
+	Voting & 0 \\
+	Not Voting & $-\NVP - \NVCP(\alpha)$ \\
+	\end{tabular}} \hspace{0.5in}
 	\caption{Payoffs for ideal individual behaviors.}
 	\label{fig:individualpayoffs}
 \end{table}
 
+\todo{Replace this table with something more compelling.}
 
 \subsection{Collective choice model}
 \label{sect:collectivechoice}
@@ -307,12 +323,13 @@ The second term in the function is easy to justify: safety failures are very bad
 
 This can be justified in two ways. First, one can intuitively argue that a user's psychological discomfort of waiting for finality roughly matches a logarithmic schedule. At the very least, the difference between 3600 sec and 3610 sec finality feels much more negligible than the difference between 1 sec and 11 sec finality, and so the claim that the difference between 10 sec and 20 sec finality is similar to the difference between 1 hour finality and 2 hour finality seems reasonable.\footnote{One can look at various blockchain use cases, and see that they are roughly logarithmically uniformly distributed along the range of finality times between around 200 miliseconds (``Starcraft on the blockchain'') and one week (land registries and the like). \todo{add a citation for this or delete.}}
 
-Now, we need to show that, for any given total deposit size, $\frac{loss\_to\_protocol\_utility}{validator\_penalties}$ is bounded. There are two ways to reduce protocol utility: (i) cause a safety failure, or (ii) prevent finality by having $> \frac{1}{3}$ of deposit-weighted validators not Prepare or Commit to the same hash.  Causing a safety failure requires violating one of the Casper Commandments (Section \ref{sect:casperprotocol}) and thus ensures immense loss in deposits.  In the second case, in a chain that has not been finalized for $\epoch - \epochLF$ epochs, the penalty to attackers is at least,
+Now, we need to show that, for any given total deposit size, $\frac{loss\_to\_protocol\_utility}{validator\_penalties}$ is bounded. There are two ways to reduce protocol utility: (i) cause a safety failure, or (ii) prevent finality by having $> \frac{1}{3}$ of deposit-weighted validators not Vote on the same hash.  Causing a safety failure requires violating one of the Casper Commandments (Section \ref{sect:casperprotocol}) and thus ensures immense loss in deposits.  In the second case, in a chain that has not been finalized for $\epoch - \epochLF$ epochs, the penalty to attackers is at least,
 
 \begin{equation}
-\min \left[ \NPP \left(\frac{1}{3}\right) + \NPCP\left(\frac{1}{3}\right), \NCP \left(\frac{1}{3}\right) + \NCCP\left(\frac{1}{3}\right) \right] * \BP(\totaldeposit, \epoch - \epochLF) \\
-\left(\frac{1}{3}\right) \min \left[ \NPP + \NPCP, \NCP + \NCCP \right] * \BP(\totaldeposit, \epoch - \epochLF) \\
+\left[ \NVP \left(\frac{1}{3}\right) + \NVCP\left(\frac{1}{3}\right), \right] * \BP(\totaldeposit, \epoch - \epochLF) \\
+\left(\frac{1}{3}\right) \left[ \NVP + \NVCP \right] * \BP(\totaldeposit, \epoch - \epochLF) \\
 \end{equation}
+\todo{rework this equation}
 
 To enforce a ratio between validator losses and loss to protocol utility, we set,
 
@@ -321,11 +338,11 @@ To enforce a ratio between validator losses and loss to protocol utility, we set
 \end{equation}
 \todo{what is $p$ in the in the above equation?}
 
-The first term serves to take profits for non-committers away; the second term creates a penalty which is proportional to the loss in protocol utility.
+The first term serves to take profits for non-voters away; the second term creates a penalty which is proportional to the loss in protocol utility.
 
 This connection between validator losses and loss to protocol utility has several consequences. First, it establishes that harming the protocolexecution is always a net loss, with the net loss increasing with the harm inflicted. Second, it establishes that the protocol approximates the properties of a \emph{game} \cite{monderer1996potential}. Potential games have the property that Nash equilibria of the game correspond to local maxima of the potential function (in this case, protocol utility), and so correctly following the protocol is a Nash equilibrium even in cases where attackers control $>\frac{1}{3}$ of the total deposit.
 
-Here, the protocol utility function is not a perfect potential function, as it does not always take into account changes in the \emph{quantity} of Prepares and Commits whereas validator rewards do, but it does come close. \todo{Could someone do better than our \eqref{eq:utilityfunction}?}
+Here, the protocol utility function is not a perfect potential function, as it does not always take into account changes in the \emph{quantity} of Votes whereas validator rewards do, but it does come close. \todo{Improve utility function?}
 
 \subsection{Griefing factor analysis}
 \label{sect:griefingfactor}
@@ -336,14 +353,14 @@ We define the degree that malicious validators can create penalties for honest v
 \begin{equation}
 \GF{ \gamesymbol,C } \equiv \max_{S \in strategies(T \setminus C)} \frac{loss(C) }{\min[ 0, loss(Players \setminus C) ] } \; .
 \end{equation}
-\todo{I need to work on this equation more.  I don't like it yet.}
+\todo{Improve equation.}
 
 
 
 
 
 \begin{definition}
-A strategy used by a coalition in a given mechanism has a \emph{griefing factor} $B$ if it can be shown that this strategy imposes a loss of $B * x$ to those outside the coalition at the cost of a loss of $x$ to those inside the coalition. If all strategies that cause deviations from some given baseline state have griefing factors less than or equal to some bound B, then we call B a \emph{griefing factor bound}. \todo{I plan to write this in terms of classical game theory.}
+A strategy used by a coalition in a given mechanism has a \emph{griefing factor} $B$ if it can be shown that this strategy imposes a loss of $B * x$ to those outside the coalition at the cost of a loss of $x$ to those inside the coalition. If all strategies that cause deviations from some given baseline state have griefing factors less than or equal to some bound B, then we call B a \emph{griefing factor bound}. \todo{Revise.}
 \end{definition}
 
 A strategy that imposes a loss to outsiders either at no cost to a coalition, or to the benefit of a coalition, is said to have a griefing factor of infinity. Proof of work blockchains have a griefing factor bound of infinity because a 51\% coalition can double its revenue by refusing to include blocks from other participants and waiting for difficulty adjustment to reduce the difficulty. With selfish mining, the griefing factor may be infinity for coalitions of size as low as 23.21\%. \cite{selfishminingBTC}
@@ -366,11 +383,10 @@ Then to define the griefing factor over the entire game, we sum the area under t
 Let us start off our griefing analysis by not taking into account validator churn, so the validator set is always the same. In Casper, we can identify the following deviating strategies:
 
 \begin{enumerate}
-\item A minority of validators do not Prepare, or Prepare incorrect values.
-\item (Mirror image of 1) A censorship attack where a majority of validators does not accept Prepares from a minority of validators (or other isomorphic attacks such as waiting for the minority to Prepare hash $H_1$ and then preparing $H_2$, making $H_2$ the dominant chain and denying the victims their rewards).
-\item A minority of validators do not commit.
-\item (Mirror image of 3) A censorship attack where a majority of validators does not accept commits from a minority of validators.
+\item A minority of validators do not Vote, or Vote on incorrect values.
+\item (Mirror image of 1) A censorship attack where a majority of validators does not accept Votes from a minority of validators (or other similar attacks such as waiting for the minority to Vote on hash $H_1$ and then Vote on $H_2$, making $H_2$ the dominant chain and denying the victims their rewards).
 \end{enumerate}
+\todo{With only two, maybe no need to enumerate}
 
 Notice that, from the point of view of griefing factor analysis, it is immaterial whether or not any hash in a given epoch was justified or finalized. The Casper mechanism only pays attention to finalization in order to calculate $\BP(D, \epoch - \epochLF)$, the penalty scaling factor. This value scales penalties evenly for all participants, so it does not affect griefing factors.
 
@@ -383,48 +399,47 @@ Let us now analyze the attack types:
     \renewcommand{\arraystretch}{2}
     \begin{tabular}{l l l }
     \textbf{Attack} & \textbf{Amount lost by malicious validators}  & \textbf{Amount lost by honest validators} \\
-    Minority of size $\alpha < \frac{1}{2}$ non-Prepares & $\NPP * \alpha + \NPCP(\alpha) * \alpha$ & $\NPCP(\alpha) * (1-\alpha)$ \\
-    Majority censors $\alpha < \frac{1}{2}$ Prepares & $\NPCP(\alpha) * (1-\alpha)$ & $\NPP * \alpha + \NPCP(\alpha) * \alpha$ \\
-    Minority of size $\alpha < \frac{1}{2}$ non-Commits & $\NCP * \alpha + \NCCP(\alpha) * \alpha$ & $\NCCP(\alpha) * (1-\alpha)$ \\
-    Majority censors $\alpha < \frac{1}{2}$ Commits & $\NCCP(\alpha) * (1-\alpha)$ & $\NCP * \alpha + \NCCP(\alpha) * \alpha$ \\
+    Minority of size $\alpha < \frac{1}{2}$ non-Votes & $\NVP * \alpha + \NVCP(\alpha) * \alpha$ & $\NVCP(\alpha) * (1-\alpha)$ \\
+    Majority censors $\alpha < \frac{1}{2}$ Votes & $\NVCP(\alpha) * (1-\alpha)$ & $\NVP * \alpha + \NVCP(\alpha) * \alpha$ \\
     \end{tabular}
     \caption{Attacks on the protocols and their costs to malicious validators and honest validators.}
 \end{table}
 
 \subsection{Shape of the penalities}
-There is a symmetry between the non-Prepare case and the non-Commit case, so we assume $\frac{\NCCP(\alpha)}{\NCP} = \frac{\NPCP(\alpha)}{\NPP}$. Also, from a protocol utility standpoint (\ref{fig:utility}), increasing Commits are always useful as long as $p > \frac{1}{3}$, as it gives at least some economic security against finality reversions.  However, Prepares $< \frac{2}{3}$ is exceedingly harmful as is it prevents \emph{any} Commits.
+\todo{need to redo this section}
+%There is a symmetry between the non-Prepare case and the non-Commit case, so we assume $\frac{\NCCP(\alpha)}{\NCP} = \frac{\NPCP(\alpha)}{\NPP}$. Also, from a protocol utility standpoint (\ref{fig:utility}), increasing Commits are always useful as long as $p > \frac{1}{3}$, as it gives at least some economic security against finality reversions.  However, Prepares $< \frac{2}{3}$ is exceedingly harmful as is it prevents \emph{any} Commits.
 
 
 
-\begin{figure}[h!bt]
-	\centering
+%\begin{figure}[h!bt]
+%	\centering
+%
+%	Utility with function of $p${ 	\includegraphics[width=3in]{goodness-with-p.pdf} \label{fig:utility} }
+%	\NCCP and \NPCP as a function of $\alpha${ 	\includegraphics[width=3in]{cs.pdf} \label{fig:collectivepenalties} }
+%
+%	\caption{Plotting the griefing factor as a function of the proportion of players coordinating to grief.}
+%	\label{fig:GF}
+%\end{figure}
 
-	Utility with function of $p${ 	\includegraphics[width=3in]{goodness-with-p.pdf} \label{fig:utility} }
-	\NCCP and \NPCP as a function of $\alpha${ 	\includegraphics[width=3in]{cs.pdf} \label{fig:collectivepenalties} }
-	
-	\caption{Plotting the griefing factor as a function of the proportion of players coordinating to grief.}
-	\label{fig:GF}
-\end{figure}
 
+%In the normal case, anything less than $\frac{1}{3}$ Commits provides no economic security, so we can treat $p_c < \frac{1}{3}$ Commits as equivalent to no Commits; this thus suggests $\NPP = 2 * \NCP$. We can also normalize $\NCP = 1$.
 
-In the normal case, anything less than $\frac{1}{3}$ Commits provides no economic security, so we can treat $p_c < \frac{1}{3}$ Commits as equivalent to no Commits; this thus suggests $\NPP = 2 * \NCP$. We can also normalize $\NCP = 1$.
+%Now, let us analyze the griefing factors, to try to determine an optimal shape for $\NCCP$. The griefing factor for non-Committing is,
 
-Now, let us analyze the griefing factors, to try to determine an optimal shape for $\NCCP$. The griefing factor for non-Committing is,
+%\begin{equation}
+%GF = \frac{(1-\alpha) * \NCCP(\alpha)}{\alpha * (1 + \NCCP(\alpha))} \; .
+%\end{equation}
 
-\begin{equation}
-GF = \frac{(1-\alpha) * \NCCP(\alpha)}{\alpha * (1 + \NCCP(\alpha))} \; .
-\end{equation}
+%The griefing factor for censoring is the inverse of this. If we want the griefing factor for non-Committing to equal one, then we could compute:
 
-The griefing factor for censoring is the inverse of this. If we want the griefing factor for non-Committing to equal one, then we could compute:
+%\begin{eqnarray}
+%\alpha * (1 + \NCCP(\alpha)) &=& (1-\alpha) * \NCCP(\alpha) \\
+%\frac{1 + \NCCP(\alpha)}{\NCCP(\alpha)} &=& \frac{1-\alpha}{\alpha} \\
+%\frac{1}{\NCCP(\alpha)} &=& \frac{1-\alpha}{\alpha} - 1 \\
+%\NCCP(\alpha) &=& \frac{\alpha}{1-2\alpha}
+%\end{eqnarray}
 
-\begin{eqnarray}
-\alpha * (1 + \NCCP(\alpha)) &=& (1-\alpha) * \NCCP(\alpha) \\
-\frac{1 + \NCCP(\alpha)}{\NCCP(\alpha)} &=& \frac{1-\alpha}{\alpha} \\
-\frac{1}{\NCCP(\alpha)} &=& \frac{1-\alpha}{\alpha} - 1 \\
-\NCCP(\alpha) &=& \frac{\alpha}{1-2\alpha}
-\end{eqnarray}
-
-Note that for $\alpha = \frac{1}{2}$, this would set the \NCCP to infinity. Hence, with this design a griefing factor of $1$ is infeasible. We \emph{can} achieve that effect in a different way - by making \NCP itself a function of $\alpha$; in this case, $\NCCP = 1$ and $\NCP = \max[0, 1 - 2\alpha]$ would achieve the desired effect. If we want to keep the formula for \NCP constant, and the formula for \NCCP reasonably simple and bounded, then one alternative is to set $\NCCP(\alpha) = \frac{\alpha}{1-\alpha}$; this keeps griefing factors bounded between $\frac{1}{2}$ and $2$.
+%Note that for $\alpha = \frac{1}{2}$, this would set the \NCCP to infinity. Hence, with this design a griefing factor of $1$ is infeasible. We \emph{can} achieve that effect in a different way - by making \NCP itself a function of $\alpha$; in this case, $\NCCP = 1$ and $\NCP = \max[0, 1 - 2\alpha]$ would achieve the desired effect. If we want to keep the formula for \NCP constant, and the formula for \NCCP reasonably simple and bounded, then one alternative is to set $\NCCP(\alpha) = \frac{\alpha}{1-\alpha}$; this keeps griefing factors bounded between $\frac{1}{2}$ and $2$.
 
 \section{Pools}
 
