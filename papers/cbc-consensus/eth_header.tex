@@ -1,0 +1,144 @@
+% make in the latest NIPS format (as of this writing, 2017)
+
+\usepackage[nonatbib,final]{nips_2017}
+%\usepackage[nonatbib,final]{nips_2017}
+
+\usepackage{color}
+\usepackage{graphicx}
+\DeclareGraphicsExtensions{.pdf,.eps,.png,.jpg}     % search for .pdf, then .eps, then .pngs, then .jpg
+
+% look in these subdirectories for graphics referenced by \includegraphics
+% each entry must end with a /
+\graphicspath{{figs/}{figures/}{images/}{./}}
+
+\newcommand*{\red}[1]{ \color{red} #1}
+
+%\usepackage{tabularx}
+\usepackage{url}
+\usepackage{amsmath}
+
+% this is for environments \subfigure and \subtable
+\usepackage{subcaption}
+
+% These packages are FORBIDDEN
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\usepackage{lmodern} % messes up \textsc
+%\usepackage{cite} % messes up NIPS
+%\usepackage{fullpage} % messes up NIPS
+%\usepackage{natbib} % messes up NIPS
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\usepackage{array}          % replacement for eqnarray.  Must be BEFORE \usepackage{arydshln}
+\usepackage{units}          % for \nicefrac{\alpha}{\beta}
+
+
+\usepackage{amsthm}     % for theorems
+\newtheorem{definition}{Definition}
+
+% text looks a little better
+\usepackage{microtype}
+
+\usepackage{wasysym}
+
+\usepackage{textcomp, marvosym} % pretty symbols
+\usepackage{booktabs}   % for much better looking tables
+
+% for indicator functions
+\usepackage{dsfont}
+
+% For automatic capitalizaton of section names, etc.
+\usepackage{titlesec,titlecaps}
+
+
+\Addlcwords{is with of the and in}
+\Addlcwords{of the}
+\Addlcwords{and}
+\titleformat{\section}[block]{}{\normalfont\Large\bfseries\thesection.\;}{0pt}{\formatsectiontitle}
+\newcommand{\formatsectiontitle}[1]{\normalfont\Large\bfseries\titlecap{#1}}
+
+\titleformat{\subsection}[block]{}{\normalfont\large\bfseries\thesubsection.\;}{0pt}{\formatsubsectiontitle}
+\newcommand{\formatsubsectiontitle}[1]{\normalfont\large\bfseries\titlecap{#1}}
+
+
+
+
+
+% for pretty Euler script
+% \usepackage[mathscr]{euscript}
+% \usepackage{bold-extra}
+
+
+
+
+
+%\usepackage{subfig}
+\usepackage{float} % for \subfloat
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% More customizable Lists
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Better symbols custom enumerative lists, define any symbol you'd like
+% \usepackage{enumitem}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Custom Symbols 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% \xspace at the end of custom macros never screws up spacing.
+\usepackage{xspace}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Abbreviations you'll always want
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand*{\TODO}[1]{{\centering {\small \sffamily \color{red} #1} \vskip10pt }}
+\newcommand*{\todo}[1]{{\small \sffamily [{\color{red} #1}]}}
+\newcommand*{\q}[1]{{\small \sffamily [{\color{blue} #1}]}}
+\newcommand*{\fix}[1]{{\sffamily [{\textnormal{\color{red} #1}}]}}
+
+
+
+%-----------------------------------------------------------------------------
+%  Cross references
+%-----------------------------------------------------------------------------
+% The following code defines how you make references to figures, tables, etc...
+% It is defined in one place only, and can be modified for all references
+% in the document at the same time.
+% Instead of typing each time: "see Fig. \ref{myfig}" you can create a command
+% \figref which will do the job. Then in text you only type \figref{myfig} and LaTeX
+% will do the rest.
+\newcommand{\tblref}[1]{Table~\ref{#1}}
+%\renewcommand*{\figref}[1]{Fig.~\ref{#1}}
+\renewcommand{\eqref}[1]{eq.~(\ref{#1})}
+\newcommand{\Subref}[1]{(\subref{#1})}
+
+
+\newcommand{\figref}[1]{Figure~\ref{#1}}
+\newcommand{\Figref}[1]{Figure~\ref{#1}}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% for \sout{} for strikeout
+% \usepackage[normalem]{ulem}
+
+
+% for better manipulation of tables
+\usepackage{makecell}
+\renewcommand\theadfont{\bfseries}
+
+
+%-----------------------------------------------------------------------------
+%  Misc symbols that I like
+%-----------------------------------------------------------------------------
+\newcommand*{\opname}[1]{\operatorname{#1}}
+
+
+\renewcommand*{\to}{\rightarrow}
+
+
+%%%%
+
+

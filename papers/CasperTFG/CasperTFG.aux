@@ -1,0 +1,28 @@
+\relax 
+\citation{lamport_1998}
+\citation{nakamoto}
+\citation{paxos}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Comparing Traditional Consensus to Blockchain Consensus}{1}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Overview of the Work Presented}{2}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Consensus Safety Proof}{2}}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Casper the Friendly Binary Consensus}{3}}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Casper the Friendly Ghost}{6}}
+\@writefile{loa}{\contentsline {algocf}{\numberline {1}{\ignorespaces The Greedy Heaviest-Observed Sub-tree Fork-choice rule, $\mathcal  {E}$\relax }}{7}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}A Simple Safety Oracle}{8}}
+\@writefile{loa}{\contentsline {algocf}{\numberline {2}{\ignorespaces The ``Clique Oracle'', $S_t$\relax }}{10}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Subjective Fault Tolerance Thresholds}{10}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Casper the Friendly Ghost with Validator Rotation}{11}}
+\@writefile{toc}{\contentsline {section}{\numberline {7}Liveness Considerations}{11}}
+\@writefile{toc}{\contentsline {section}{\numberline {8}Experimental Observations}{13}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces A Binary consensus protocol execution. Dotted lines are messages included in the justification of the later message. The label on the nodes represents the estimate of the message. A message is coloured if it has achieved some amount of Byzantine fault tolerant estimate safety, accoring to a clique oracle given its justification. The darker the colour, the more faults are tolerated by the estimate\relax }}{13}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Blockchain protocol execution with 3 validators, $v_0, v_1, v_2$. Each node labeled $0$ is the first message from that validator, and the nodes verically aligned above each validator represent messages made by that validator. Dotted black lines are messages included in the justification of the later message. Blue lines represent the forkchoices of the validators given by their latest blocks. Solid grey lines are prevblock pointers (that aren't blue because they are no longer the validator's forkchoice). The red line is the result of applying GHOST to the set of messages displayed here.\relax }}{14}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces In this execution of the blockchain consensus protocol, we observe some safe blocks. They are colour coded the same way as in the earlier, however this time they represent the blocks that are seen to be safe from the view that includes all of the nodes. In contrast, in the binary consensus we displayed safety that was detected locally.\relax }}{14}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Finally, in this execution of the blockchain consensus protocol where the validators are able to pass blocks around in a ``round-robin'' configuration, we observe the $\mathcal  {O}(1)$ messages received per (finalized) block. This is possible because each block contributes to the consensus safety of many blocks.\relax }}{15}}
+\bibstyle{naturemag}
+\bibdata{ethereum}
+\bibcite{lamport_1998}{1}
+\bibcite{nakamoto}{2}
+\bibcite{paxos}{3}
+\@writefile{toc}{\contentsline {section}{\numberline {9}Conclusion}{16}}
+\@writefile{toc}{\contentsline {section}{\numberline {10}Acknowledgements}{16}}

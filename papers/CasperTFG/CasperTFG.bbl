@@ -1,0 +1,25 @@
+\begin{thebibliography}{1}
+\expandafter\ifx\csname url\endcsname\relax
+  \def\url#1{\texttt{#1}}\fi
+\expandafter\ifx\csname urlprefix\endcsname\relax\def\urlprefix{URL }\fi
+\providecommand{\bibinfo}[2]{#2}
+\providecommand{\eprint}[2][]{\url{#2}}
+
+\bibitem{lamport_1998}
+\bibinfo{author}{Lamport, L.}
+\newblock \bibinfo{title}{The part-time parliament}.
+\newblock \emph{\bibinfo{journal}{ACM Transactions on Computer Systems}}
+  \textbf{\bibinfo{volume}{16}}, \bibinfo{pages}{133–169}
+  (\bibinfo{year}{1998}).
+
+\bibitem{nakamoto}
+\bibinfo{author}{Nakamoto, S.}
+\newblock \bibinfo{title}{Bitcoin: A peer-to-peer electronic cash systems}
+  (\bibinfo{year}{2008}).
+\newblock \urlprefix\url{https://bitcoin.org/bitcoin.pdf}.
+
+\bibitem{paxos}
+\bibinfo{title}{Paxos made moderately complex}.
+\newblock \urlprefix\url{http://paxos.systems/}.
+
+\end{thebibliography}
