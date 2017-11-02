@@ -44,7 +44,7 @@
   \mathrm{1}_{#1}
 }
 
-\AtBeginEnvironment{quote}{\singlespacing\small}
+\AtBeginEnvironment{quote}{\small}
 
 \setlength{\parskip}{1em}
 \setlength{\parindent}{2em}
@@ -62,7 +62,7 @@
 \begin{abstract}
 We present a specification and limited experimental observations of a blockchain-based consensus protocol, ``Casper the Friendly Ghost.''
 
-The protocol uses an adaptation of Y.\ Jompolovsky and A.\ Zohar's Greedy Heaviest Observed Sub-tree (GHOST) as a ``fork-choice rule.'' It is able to finalize/decide on blocks with asynchronous and Byzantine fault tolerant consensus safety. It allows blocks to be finalized while the network operates with the network overhead of the Bitcoin blockchain, with each node receiving $\mathcal{O}(1)$ messages/block. This is in contrast to the $\mathcal{O}(N)$ traditionally required for Byzantine fault tolerant state machine replication.
+The protocol uses an adaptation of Y.\ Sompolinsky and A.\ Zohar's Greedy Heaviest Observed Sub-tree (GHOST) \cite{GHOST} as a ``fork-choice rule.'' It is able to finalize/decide on blocks with asynchronous and Byzantine fault tolerant consensus safety. It allows blocks to be finalized while the network operates with the network overhead of the Bitcoin blockchain, with each node receiving $\mathcal{O}(1)$ messages/block. This is in contrast to the $\mathcal{O}(N)$ traditionally required for Byzantine fault tolerant state machine replication.
 
 For pedagogical reasons, we first specify a binary consensus protocol (which decides on a bit, $0$ or $1$). This binary consensus protocol satisfies the same consensus safety proof as the blockchain consensus protocol and is therefore very similar to the blockchain consensus protocol.
 
