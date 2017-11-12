@@ -156,9 +156,7 @@ def check_column_proof(data, proof, deg_lt, checks, modulus):
         # There are `subdeg` of these.
         xs = [x for x in range(modulus) if pow(x, subdeg, modulus) == check_row]
         print('Taking columns from data:', [(x, data[x]) for x in xs])
-        if len(xs) != subdeg:
-            print('Row inadmissible; does not have %d roots' % subdeg)
-            continue
+        assert len(xs) == subdeg
         # Interpolate a degree subdeg-1 polynomial from the above
         row_poly = lagrange_interp(xs, [data[x] for x in xs], modulus)
         print('Eval', eval_poly_at(row_poly, check_col, modulus))
