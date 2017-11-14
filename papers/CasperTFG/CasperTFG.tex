@@ -130,7 +130,7 @@ The definition of ``protocol messages'' is parametric in a set of ``validator na
 
 Protocol messages have three parts. An ``estimate'' (a $0$ or a $1$), a ``sender'' (a validator name), and a ``justification''. The justification is itself a set of protocol messages. Validators use these protocol messages to update each other on their current estimates. Further, the estimate values are not arbitrary because a protocol message is ``valid'' only if the ``estimate'' is the result of applying the estimator on the message's ``justification''.
 
-The definitions of the estimator and of validity appear later. For now, we denote the set of all possible protocol messages in the binary consensus pwill rotocol as $\mathcal{M}$, and define it as follows:
+The definitions of the estimator and of validity appear later. For now, we denote the set of all possible protocol messages in the binary consensus protocol as $\mathcal{M}$, and define it as follows:
 
 \begin{defn}[Protocol Messages, $\mathcal{M}$]
 \begin{equation*}
@@ -148,7 +148,7 @@ The estimator is a function that maps sets of protocol messages to $0$ or $1$, o
   
 \begin{equation*}
 \begin{split}
-    \mathcal{E}:\mathcal{P}(\mathcal{M}) \to \{0, 1\} \cup \{\emptyset\}
+    \mathcal{E}:\mathcal{P}(\mathcal{M}) \to \{0, 1\} 	\lor \{\emptyset\}
 \end{split}
 \end{equation*}
 
