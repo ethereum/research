@@ -130,7 +130,7 @@ The definition of ``protocol messages'' is parametric in a set of ``validator na
 
 Protocol messages have three parts. An ``estimate'' (a $0$ or a $1$), a ``sender'' (a validator name), and a ``justification''. The justification is itself a set of protocol messages. Validators use these protocol messages to update each other on their current estimates. Further, the estimate values are not arbitrary because a protocol message is ``valid'' only if the ``estimate'' is the result of applying the estimator on the message's ``justification''.
 
-The definitions of the estimator and of validity appear later. For now, we denote the set of all possible protocol messages in the binary consensus pwill rotocol as $\mathcal{M}$, and define it as follows:
+The definitions of the estimator and of validity appear later. For now, we denote the set of all possible protocol messages in the binary consensus protocol as $\mathcal{M}$, and define it as follows:
 
 \begin{defn}[Protocol Messages, $\mathcal{M}$]
 \begin{equation*}
@@ -143,9 +143,9 @@ The definitions of the estimator and of validity appear later. For now, we denot
 \end{defn}
 
 $\mathcal{M}_0$ is the ``base case'', the set of messages with ``null justifications''. $\mathcal{M}_n$ is the set of messages at ``height'' $n$, which have messages of height $n-1$ (and/or lower) in their justification. Note that messages $\mathcal{M}_0$ have height $0$. $\mathcal{P}$ denotes the ``power set'' function, which maps set to the set of all of its subsets, so $\mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i)$ denotes all sets of protocol messages at height $n-1$ or lower.
-  
+
 The estimator is a function that maps sets of protocol messages to $0$ or $1$, or a null value denoted by $\emptyset$:
-  
+
 \begin{equation*}
 \begin{split}
     \mathcal{E}:\mathcal{P}(\mathcal{M}) \to \{0, 1\} \cup \{\emptyset\}
@@ -179,7 +179,7 @@ We define ``the dependencies'' of a message $m$ as all of the messages $m'$ such
 
 \begin{equation*}
 \begin{split}
-D(m) = &\{m\}\cup \bigcup_{m' \in J(m)} D(m') 
+D(m) = &\{m\}\cup \bigcup_{m' \in J(m)} D(m')
 \end{split}
 \end{equation*}
 
@@ -241,7 +241,7 @@ B(v,M) \iff \exists m_1, m_2 \in D(M) \text{ such that } v = V(m_1) \land Eq(m_1
 \end{align}
 \end{defn}
 
-We then define the Byzantine nodes visible in $M$ as 
+We then define the Byzantine nodes visible in $M$ as
 
 $$
 B(M) = \{v \in V: B(v,M)\}
@@ -296,7 +296,7 @@ We again first define the set of all protocol messages and then the estimator, w
 
 Protocol messages are called ``blocks'' and have the same three components as the messages in the binary consensus protocol; an estimate, a sender and a justification. The estimate is a block, called ``the prevblock'' or ``the parent block''. For valid messages, the estimate is the block on the head of the blockchain chosen by the GHOST fork choice rule in the justification. The ``sender'' (a validator name) field is defined precisely as before. Finally, the justification is again simply a set of protocol messages.
 
-Formally, in Casper the Friendly Ghost we have protocol messages, $\mathcal{M}$, with the following form (again parametric in a set of validator names, $\mathcal{V}$): 
+Formally, in Casper the Friendly Ghost we have protocol messages, $\mathcal{M}$, with the following form (again parametric in a set of validator names, $\mathcal{V}$):
 
 
 \begin{defn}[Blocks]
@@ -316,7 +316,7 @@ We do need a couple of new terms, though, to define the fork choice rule. We wri
 
 \begin{defn}[Blockchain membership, $b_1 \downarrow b_2$]
 \begin{align}
-  b_1 \downarrow b_2 &\iff b_1 = b_2 \text{ or } b_1 \downarrow E(b_2) 
+  b_1 \downarrow b_2 &\iff b_1 = b_2 \text{ or } b_1 \downarrow E(b_2)
 \end{align}
 \end{defn}
 
@@ -362,7 +362,7 @@ We now have the language required to define the estimator for the blockchain con
 
 We assume that ``hash'' has the property that out of any set of blocks, only one has the lowest hash. Using the hashes of blocks to eliminate ``ties'' means that the estimator for the blockchain consensus never outputs an exception. Previously the binary estimator return $\emptyset$ when $0$ and $1$ had the same score. This means that a message $m$ is valid if $E(m) = \mathcal{E}(J(m))$, and just as in the binary consensus we insist that all the blocks are valid. \footnote{Following the process decribed in the footnote about excluding invalid messages from the binary consensus.}
 
-``Equivocation'', ``Byzantine faulty'', ``fault weight'', ``protocol states'', and ``protocol executions'' are defined here in \emph{precisely} the same way as in the binary consensus. We therefore do not give the definitions again. 
+``Equivocation'', ``Byzantine faulty'', ``fault weight'', ``protocol states'', and ``protocol executions'' are defined here in \emph{precisely} the same way as in the binary consensus. We therefore do not give the definitions again.
 
 We can now give the definition of estimate safety for Casper the Friendly Ghost, for a block $b$ in a protocol state $\sigma$.
 
@@ -372,7 +372,7 @@ S_t(b, \sigma) \iff \forall \sigma' \in \Sigma_t: \sigma \to \sigma',\hspace{1.5
 $$
 \end{defn}
 
-Because this construction satisfies the terms of our consensus safety proof, we know that decisions on safe estimates in this protocol are consensus safe (if there are less than $t$ Byzantine faults (by weight)). 
+Because this construction satisfies the terms of our consensus safety proof, we know that decisions on safe estimates in this protocol are consensus safe (if there are less than $t$ Byzantine faults (by weight)).
 
 We now present a mechanism that nodes can use to detect which of their estimates are safe in both the binary and the blockchain consensus.
 
@@ -424,7 +424,7 @@ We can also show that if $e$-clique in $M$ with total weight $W'$, and $2*W' > \
 We present the pseudocode for the ``clique oracle'' that uses this result to detect estimate safety:
 
 \begin{algorithm}[H]
- \KwData{An estimate $e$, a set of messages $M \in \Sigma_t$} 
+ \KwData{An estimate $e$, a set of messages $M \in \Sigma_t$}
  \KwResult{True or False, an indicator when $e$ is safe in $M \in \Sigma_t$}
 
 
@@ -452,7 +452,7 @@ We present the pseudocode for the ``clique oracle'' that uses this result to det
     \Return{False}
   }
 
-  \If{2*clique\_weight $>$ total\_weight}{ 
+  \If{2*clique\_weight $>$ total\_weight}{
     initial\_fault\_weight = $F(M)$ (this will be $\leq t$ because $M \in \Sigma_t$)
 
     fault\_tolerance = 2*clique\_weight - total\_weight
