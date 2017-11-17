@@ -517,7 +517,7 @@ The rest of the definitions in the protocol remain completely identical (includi
 
 Traditionally, we would like to show that the protocol ``has liveness'', i.e. that nodes running the consensus protocol \emph{eventually} decide on a value. For us, the corresponding guarantee is that nodes \emph{eventually} detect that they have a safe estimate.
 
-FLP impossibility shows that it is impossible for consensus protocols like ours (which don't use non-determinism or cryptography) to be live in an ``asynchronous network,'' which is to say, without making assumptions about the timing of message propagation (or the order of message arrival)[CITE].
+The FLP impossibility (where FLP refers to the authors of \cite{Fischer_Lynch_Paterson_FLP_Impossibility_1985}) shows that it is impossible for consensus protocols like ours (which don't use non-determinism or cryptography) to be live in an ``asynchronous network,'' which is to say, without making assumptions about the timing of message propagation (or the order of message arrival).
 
 We have not yet made any synchrony assumptions of any kind, which is why the consensus protocols given here are asynchronously safe. Moreover, we have not said anything about when nodes \emph{should} send protocol messages. We have instead imposed relatively loose constraints on the protocol executions that nodes can take (they can receive messages and move to any state $\sigma' \supset \sigma$ from $\sigma$, as long as $\sigma'$ does not evidence too many Byzantine faults).
 
