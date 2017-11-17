@@ -225,7 +225,7 @@ Finally, we define the estimator for the Binary consensus, it returns the estima
 
 At this stage we have protocol messages and an estimator. If we can define a method for counting Byzantine faults from a set of protocol messages, then we can give the set of protocol states with their state transitions for a binary consensus protocol that tolerates $t$ Byzantine faults.
 
-Each protocol message $m$ is supposed to represent a record of messages that were seen by validator $V(m)$. Any ``correct'' node has a growing record of messages that they have received and sent. Specifically, a corret node is never the sender of a pair of messages $m_1$ and $m_2$ such that neither $m_1 \prec m_2$ nor $m_1 \succ m_2$. We call such a pair of messages ``an equivocation''.
+Each protocol message $m$ is supposed to represent a record of messages that were seen by validator $V(m)$. Any ``correct'' node has a growing record of messages that they have received and sent. Specifically, a correct node is never the sender of a pair of messages $m_1$ and $m_2$ such that neither $m_1 \prec m_2$ nor $m_1 \succ m_2$. We call such a pair of messages ``an equivocation''.
 
 
 \begin{defn}[Equivocation]
