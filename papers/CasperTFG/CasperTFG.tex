@@ -76,7 +76,7 @@ There are, roughly speaking, two broad classes of consensus protocols known toda
 
 \subsection{Comparing Traditional Consensus to Blockchain Consensus}
 
-Traditional consensus protocols (such as multi-Paxos and pbft) are notoriously difficult to understand\cite{paxos}. Blockchain consensus protocols, on the other hand, are much more accessible. This difference comes at least in part from the relative simplicity of Bitcoin's specification.
+Traditional consensus protocols (such as multi-Paxos and pbft \cite{Castro_Liskov_1999_pbft}) are notoriously difficult to understand.\cite{paxos} Blockchain consensus protocols, on the other hand, are much more accessible. This difference comes at least in part from the relative simplicity of Bitcoin's specification.
 
 In the context of state machine replication, traditional protocols decide (with irrevocable finality) on one ``block'' of state transitions/transactions to add to the shared operation log at a time. To decide on a block, a node must receive $\mathcal{O}(N)$ messages, where $N$ is the number of consensus-forming nodes.
 
