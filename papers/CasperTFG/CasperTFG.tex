@@ -192,7 +192,7 @@ We now have the language to talk about the latest message from a sender $v$ out 
 \begin{defn}[Latest message]
 \begin{equation*}
 \begin{split}
-m \in L(v, M) \iff & \nexists m' \in D(M) \text{ such that } V(m') = v \text{ and } m' \succ m
+m \in L(v, M) \iff & \nexists m' \in D(M) : V(m') = v \text{ and } m' \succ m
 \end{split}
 \end{equation*}
 \end{defn}
@@ -208,7 +208,7 @@ Now we define the ``score'' of an estimate $e$ in a set of messages $M$ as the t
 
 \begin{defn}[Score of a binary estimate]
 \begin{align}
-\text{Score}(e, M) = \sum_{\substack{v \in V \\ \text{such that } m \in L(v,M) \\ \text{with } E(m) = e}} W(v)
+\text{Score}(e, M) = \sum_{\substack{v \in V \\ : m \in L(v,M) \\ \text{with } E(m) = e}} W(v)
 \end{align}
 \end{defn}
 
@@ -237,7 +237,7 @@ A sender $v$ with an equivocation in a set of protocol messages $M$, is said to 
 
 \begin{defn}[Byzantine faulty node]
 \begin{align}
-B(v,M) \iff \exists m_1, m_2 \in D(M) \text{ such that } v = V(m_1) \land Eq(m_1, m_2)
+B(v,M) \iff \exists m_1, m_2 \in D(M) : v = V(m_1) \land Eq(m_1, m_2)
 \end{align}
 \end{defn}
 
@@ -405,7 +405,7 @@ And we say that a validator $v_i$ ``can see $v_j$ disagreeing with estimate $e$ 
 \begin{itemize}
 \item $v_i$ has exactly one latest message in $M$, $L(v_i, M)$
 \item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M))))$
-\item $v_j$ has a ``new latest message for $v_i$'' $m \in M$ such that $m \succ L(v_j, J(L(v_i, M))))$
+\item $v_j$ has a ``new latest message for $v_i$'' $m \in M$ : $m \succ L(v_j, J(L(v_i, M))))$
 \item And this $m$ disagrees with $e$, $E(m) \not\equiv e$
 \end{itemize}
 
