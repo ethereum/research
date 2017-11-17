@@ -391,8 +391,8 @@ We identify such a set of circumstances. To discuss more generally, we denote ``
 We say that validator $v_i$ ``sees validator $v_j$ agreeing with estimate $e$ in a set of protocol messages $M$'' if:
 \begin{itemize}
 \item $v_i$ has exactly one latest message in $M$ (we are denoting this message as $L(v_i, M)$)
-\item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M))))$
-\item This message's estimate agrees with $e$, i.e. $E(L(v_j, J(L(v_i, M))))) \equiv e$
+\item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M)))$
+\item This message's estimate agrees with $e$, i.e. $E(L(v_j, J(L(v_i, M)))) \equiv e$
 \end{itemize}
 
 \begin{defn}[$v_i$ sees $v_j$ agreeing with $e$ in $M$]
@@ -404,14 +404,14 @@ $$
 And we say that a validator $v_i$ ``can see $v_j$ disagreeing with estimate $e$ in a set of protocol messages $M$'' if:
 \begin{itemize}
 \item $v_i$ has exactly one latest message in $M$, $L(v_i, M)$
-\item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M))))$
-\item $v_j$ has a ``new latest message for $v_i$'' $m \in M$ such that $m \succ L(v_j, J(L(v_i, M))))$
+\item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M)))$
+\item $v_j$ has a ``new latest message for $v_i$'' $m \in M$ such that $m \succ L(v_j, J(L(v_i, M)))$
 \item And this $m$ disagrees with $e$, $E(m) \not\equiv e$
 \end{itemize}
 
 \begin{defn}[$v_i$ can see $v_j$ disagreeing with $e$ in $M$]
 $$
-v_i \xRightarrow[\text{$M$}]{\text{$\not\equiv, e$}} v_j \iff \exists m \in M : V(m) = v_j \land m \succ L(v_j, J(L(v_i, M)))) \land E(m) \not\equiv e
+v_i \xRightarrow[\text{$M$}]{\text{$\not\equiv, e$}} v_j \iff \exists m \in M : V(m) = v_j \land m \succ L(v_j, J(L(v_i, M))) \land E(m) \not\equiv e
 $$
 \end{defn}
 
