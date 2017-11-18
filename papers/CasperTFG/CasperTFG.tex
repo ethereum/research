@@ -170,7 +170,7 @@ We also call $m_1$ a dependency of $m_2$ if $m_1 = m_2$:
 \begin{defn}[dependency, $\prec$]
 \begin{equation*}
 \begin{split}
-m_1 \prec m_2 \iff & m_1 = m_2 \or \exists m' \in J(m_2) \hspace{1mm} . \hspace{1mm} m_1 \prec m'
+m_1 \prec m_2 \iff & m_1 = m_2 \lor \exists m' \in J(m_2) \hspace{1mm} . \hspace{1mm} m_1 \prec m'
 \end{split}
 \end{equation*}
 \end{defn}
@@ -316,7 +316,7 @@ We do need a couple of new terms, though, to define the fork choice rule. We wri
 
 \begin{defn}[Blockchain membership, $b_1 \downarrow b_2$]
 \begin{align}
-  b_1 \downarrow b_2 &\iff b_1 = b_2 \or b_1 \downarrow E(b_2)
+  b_1 \downarrow b_2 &\iff b_1 = b_2 \lor b_1 \downarrow E(b_2)
 \end{align}
 \end{defn}
 
