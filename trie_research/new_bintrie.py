@@ -229,6 +229,29 @@ def _get_branch(db, node, keypath):
         else:
             return [b'\x03'+L] + _get_branch(db, R, keypath[1:])
 
+# Get a long-format Merkle branch
+def _get_long_format_branch(db, node, keypath):
+    if not keypath:
+        return [db.get(node)]
+    L, R, nodetype = parse_node(db.get(node))
+    if nodetype == KV_TYPE:
+        path = encode_bin_path(L)
+        if keypath[:len(L)] == L:
+            return [db.get(node)] + _get_branch(db, R, keypath[len(L):])
+        else:
+            return [db.get(node), db.get(R)]
+    elif nodetype == BRANCH_TYPE:
+        if keypath[:1] == b0:
+            return [db.get(node)] + _get_branch(db, L, keypath[1:])
+        else:
+            return [db.get(node)] + _get_branch(db, R, keypath[1:])
+
+def _verify_long_format_branch(branch, root, keypath, value):
+    db = EphemDB()
+    db.kv = {sha3(node): node for node in branch}
+    assert _get(db, root, keypath) == value
+    return True
+
 # Verify a Merkle proof
 def _verify_branch(branch, root, keypath, value):
     nodes = [branch[-1]]
@@ -273,6 +296,11 @@ class Trie():
     def get_branch(self, key):
         o = _get_branch(self.db, self.root, encode_bin(key))
         assert _verify_branch(o, self.root, encode_bin(key), self.get(key))
+        return o
+
+    def get_long_format_branch(self, key):
+        o = _get_long_format_branch(self.db, self.root, encode_bin(key))
+        assert _verify_long_format_branch(o, self.root, encode_bin(key), self.get(key))
         return o
 
     def update(self, key, value):
