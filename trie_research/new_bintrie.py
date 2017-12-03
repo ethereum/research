@@ -2,8 +2,8 @@ from bin_utils import encode_bin_path, decode_bin_path, common_prefix_length, en
 from ethereum.utils import sha3, encode_hex
 
 class EphemDB():
-    def __init__(self):
-        self.kv = {}
+    def __init__(self, kv=None):
+        self.kv = kv or {}
 
     def get(self, k):
         return self.kv.get(k, None)
@@ -212,23 +212,6 @@ def print_nodes(db, node, prefix=b''):
         print_nodes(db, L, prefix + b0)
         print_nodes(db, R, prefix + b1)
 
-# Get a Merkle proof
-def _get_branch(db, node, keypath):
-    if not keypath:
-        return [db.get(node)]
-    L, R, nodetype = parse_node(db.get(node))
-    if nodetype == KV_TYPE:
-        path = encode_bin_path(L)
-        if keypath[:len(L)] == L:
-            return [b'\x01'+path] + _get_branch(db, R, keypath[len(L):])
-        else:
-            return [b'\x01'+path, db.get(R)]
-    elif nodetype == BRANCH_TYPE:
-        if keypath[:1] == b0:
-            return [b'\x02'+R] + _get_branch(db, L, keypath[1:])
-        else:
-            return [b'\x03'+L] + _get_branch(db, R, keypath[1:])
-
 # Get a long-format Merkle branch
 def _get_long_format_branch(db, node, keypath):
     if not keypath:
@@ -237,14 +220,14 @@ def _get_long_format_branch(db, node, keypath):
     if nodetype == KV_TYPE:
         path = encode_bin_path(L)
         if keypath[:len(L)] == L:
-            return [db.get(node)] + _get_branch(db, R, keypath[len(L):])
+            return [db.get(node)] + _get_long_format_branch(db, R, keypath[len(L):])
         else:
-            return [db.get(node), db.get(R)]
+            return [db.get(node)]
     elif nodetype == BRANCH_TYPE:
         if keypath[:1] == b0:
-            return [db.get(node)] + _get_branch(db, L, keypath[1:])
+            return [db.get(node)] + _get_long_format_branch(db, L, keypath[1:])
         else:
-            return [db.get(node)] + _get_branch(db, R, keypath[1:])
+            return [db.get(node)] + _get_long_format_branch(db, R, keypath[1:])
 
 def _verify_long_format_branch(branch, root, keypath, value):
     db = EphemDB()
@@ -252,35 +235,37 @@ def _verify_long_format_branch(branch, root, keypath, value):
     assert _get(db, root, keypath) == value
     return True
 
-# Verify a Merkle proof
-def _verify_branch(branch, root, keypath, value):
-    nodes = [branch[-1]]
-    _keypath = b''
-    for data in branch[-2::-1]:
-        marker, node = data[0], data[1:]
-        # it's a keypath
-        if marker == 1:
-            node = decode_bin_path(node)
-            _keypath = node + _keypath
-            nodes.insert(0, encode_kv_node(node, sha3(nodes[0])))
-        # it's a right-side branch
-        elif marker == 2:
-            _keypath = b0 + _keypath
-            nodes.insert(0, encode_branch_node(sha3(nodes[0]), node))
-        # it's a left-side branch
-        elif marker == 3:
-            _keypath = b1 + _keypath
-            nodes.insert(0, encode_branch_node(node, sha3(nodes[0])))
+# Get full subtrie
+def _get_subtrie(db, node):
+    dbnode = db.get(node)
+    L, R, nodetype = parse_node(dbnode)
+    if nodetype == KV_TYPE:
+        return [dbnode] + _get_subtrie(db, R)
+    elif nodetype == BRANCH_TYPE:
+        return [dbnode] + _get_subtrie(db, L) + _get_subtrie(db, R)
+    elif nodetype == LEAF_TYPE:
+        return [dbnode]
+
+# Get witness for prefix
+def _get_prefix_witness(db, node, keypath):
+    dbnode = db.get(node)
+    if not keypath:
+        return _get_subtrie(db, node)
+    L, R, nodetype = parse_node(dbnode)
+    if nodetype == KV_TYPE:
+        path = encode_bin_path(L)
+        if len(keypath) < len(L) and L[:len(keypath)] == keypath:
+            return [dbnode] + _get_subtrie(db, R)
+        if keypath[:len(L)] == L:
+            return [dbnode] + _get_prefix_witness(db, R, keypath[len(L):])
         else:
-            raise Exception("Foo")
-        L, R, nodetype = parse_node(nodes[0])
-    if value:
-        assert _keypath == keypath
-    assert sha3(nodes[0]) == root
-    db = EphemDB()
-    db.kv = {sha3(node): node for node in nodes}
-    assert _get(db, root, keypath) == value
-    return True
+            return [dbnode]
+    elif nodetype == BRANCH_TYPE:
+        if keypath[:1] == b0:
+            return [dbnode] + _get_prefix_witness(db, L, keypath[1:])
+        else:
+            return [dbnode] + _get_prefix_witness(db, R, keypath[1:])
+    
 
 # Trie wrapper class
 class Trie():
@@ -290,21 +275,24 @@ class Trie():
         assert isinstance(self.root, bytes)
 
     def get(self, key):
-        assert len(key) == 20
+        #assert len(key) == 20
         return _get(self.db, self.root, encode_bin(key))
 
-    def get_branch(self, key):
-        o = _get_branch(self.db, self.root, encode_bin(key))
-        assert _verify_branch(o, self.root, encode_bin(key), self.get(key))
-        return o
+    #def get_branch(self, key):
+    #    o = _get_branch(self.db, self.root, encode_bin(key))
+    #    assert _verify_branch(o, self.root, encode_bin(key), self.get(key))
+    #    return o
 
     def get_long_format_branch(self, key):
         o = _get_long_format_branch(self.db, self.root, encode_bin(key))
         assert _verify_long_format_branch(o, self.root, encode_bin(key), self.get(key))
         return o
 
+    def get_prefix_witness(self, key):
+        return _get_prefix_witness(self.db, self.root, encode_bin(key))
+
     def update(self, key, value):
-        assert len(key) == 20
+        #assert len(key) == 20
         self.root = _update(self.db, self.root, encode_bin(key), value)
 
     def to_dict(self, hexify=False):
