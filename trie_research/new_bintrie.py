@@ -128,6 +128,9 @@ def _update(db, node, keypath, val):
         # viii (CHILD, (k[1:], NEWCHILD))
         else:
             cf = common_prefix_length(L, keypath[:len(L)])
+            # New key-value pair can not contain empty value
+            if not val:
+                return node
             # valnode: the child node that has the new value we are adding
             # Case 1: keypath prefixes almost match, so we are in case (i), (ii), (v), (vi)
             if len(keypath) == cf + 1:
