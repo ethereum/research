@@ -64,12 +64,18 @@ def _get(db, node, keypath):
     if nodetype == LEAF_TYPE:
         return R
     elif nodetype == KV_TYPE:
+        # Keypath too short
+        if not keypath:
+            return None
         if keypath[:len(L)] == L:
             return _get(db, R, keypath[len(L):])
         else:
             return None
     # Branch node descend
     elif nodetype == BRANCH_TYPE:
+        # Keypath too short
+        if not keypath:
+            return None
         if keypath[:1] == b0:
             return _get(db, L, keypath[1:])
         else:
@@ -89,6 +95,9 @@ def _update(db, node, keypath, val):
         return hash_and_save(db, encode_leaf_node(val)) if val else b''
     # node is a key-value node
     elif nodetype == KV_TYPE:
+        # Keypath too short
+        if not keypath:
+            return node
         # Keypath prefixes match
         if keypath[:len(L)] == L:
             # Recurse into child
@@ -150,6 +159,9 @@ def _update(db, node, keypath, val):
                 return newsub
     # node is a branch node
     elif nodetype == BRANCH_TYPE:
+        # Keypath too short
+        if not keypath:
+            return node
         newL, newR = L, R
         # Which child node to update? Depends on first bit in keypath
         if keypath[:1] == b0:
