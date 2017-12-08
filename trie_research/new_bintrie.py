@@ -92,6 +92,9 @@ def _update(db, node, keypath, val):
     L, R, nodetype = parse_node(db.get(node))
     # Node is a leaf node
     if nodetype == LEAF_TYPE:
+        # Keypath must match, there should be no remaining keypath
+        if keypath:
+            raise Exception("Existing kv pair is being effaced because it's key is the prefix of the new key")
         return hash_and_save(db, encode_leaf_node(val)) if val else b''
     # node is a key-value node
     elif nodetype == KV_TYPE:
