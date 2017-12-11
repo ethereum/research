@@ -84,7 +84,7 @@ Blockchain consensus protocols like Bitcoin do not finalize/decide on one block 
 
 Traditional consensus protocol research has focused on producing protocols that are asynchronously safe (i.e.\ blocks won't be reverted due to arbitrary timing of future events) and live in asynchrony (or partial synchrony) (i.e.\ nodes eventually decide on new blocks). On the other hand, the Bitcoin blockchain is not safe in an asynchonous network but is safe and live (for unknown block-depth or ``confirmation count'') in a ``partially synchronous network''.\cite{Pass_Seeman_Shelat_2016} Specifically, the following properties are proven to be required for a blockchain to be safe (which Bitcoin is proven to satisfy), all with overwhelming probability (in $T$): \cite{Pass_Seeman_Shelat_2016, pp.~4–5}
 \begin{itemize}
-\item \textit{consistency}: at any point, the chains of two honeste players can differ only in the last $T$ blocks;
+\item \textit{consistency}: at any point, the chains of two honest players can differ only in the last $T$ blocks;
 \item \textit{future self-consistence}: at any two points, $r$ and $s$, the chains of any honest player at $r$ and $s$ differ only within the last $T$ blocks;
 \item \textit{g-chain growth}: at any point in the execution, the chain of honest players grows by at least $T$ blocks in the last $T/g$ rounds; where $g$ is called the chain-growth of the protocol.
 \item \textit{\mu-chain quality}: for any $T$ consecutive blocks in any chain held by some honest player, the fraction of blocks that were "contributed by honest players" is at least \mu.
