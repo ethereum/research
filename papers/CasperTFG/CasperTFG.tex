@@ -8,6 +8,7 @@
 \usepackage{etoolbox}
 \usepackage[]{algorithm2e}
 \usepackage[section]{placeins}
+\usepackage{hyperref}
 
 \input{eth_header.tex}
 
@@ -72,17 +73,17 @@ For pedagogical reasons, we first specify a binary consensus protocol (which dec
 
 Consensus protocols are used by nodes in distributed systems to decide on the same consensus values, or on the same list of inputs to a replicated state machine. This is a challenging problem due to both network latency and the presence of faulty nodes. Arbitrary network latency, for example, means that nodes recieve distinct sets of messages, while the messages that they each receive may arrive in different orders. Faulty nodes may go offline, or they may behave in an arbitrary manner.
 
-There are, roughly speaking, two broad classes of consensus protocols known today. One we refer to as ``traditional consensus''. This class has its ``genetic roots'' in Paxos and multi-Paxos, and in the ``traditional'' consensus protocol research from the 80s and 90s\cite{lamport_1998}. The other we refer to as ``blockchain consensus''. These are protocols that have their roots in the Bitcoin blockchain and Satoshi Nakamoto's whitepaper\cite{nakamoto}. We first discuss the differences between these classes of protocols. Then we give an overview of the safety proof that the protocols given in this document satisfy, and finally we present the specifications of the protocols at hand.
+There are, roughly speaking, two broad classes of consensus protocols known today. One we refer to as ``traditional consensus''. This class has its ``genetic roots'' in Paxos and multi-Paxos, and in the ``traditional'' consensus protocol research from the 80s and 90s \cite{lamport_1998}. The other we refer to as ``blockchain consensus''. These are protocols that have their roots in the Bitcoin blockchain and Satoshi Nakamoto's whitepaper \cite{nakamoto}. We first discuss the differences between these classes of protocols. Then we give an overview of the safety proof that the protocols given in this document satisfy, and finally we present the specifications of the protocols at hand.
 
 \subsection{Comparing Traditional Consensus to Blockchain Consensus}
 
-Traditional consensus protocols (such as multi-Paxos and pbft) are notoriously difficult to understand\cite{paxos}. Blockchain consensus protocols, on the other hand, are much more accessible. This difference comes at least in part from the relative simplicity of Bitcoin's specification.
+Traditional consensus protocols (such as multi-Paxos \cite{paxos} and pbft \cite{Castro_Liskov_1999_pbft}) are notoriously difficult to understand.\cite{paxos} Blockchain consensus protocols, on the other hand, are much more accessible. This difference comes at least in part from the relative simplicity of Bitcoin's specification.
 
-In the context of state machine replication, traditional protocols decide (with irrevocable finality) on one ``block'' of state transitions/transactions to add to the shared operation log at a time. To decide on a block, a node must receive $\mathcal{O}(N)$ messages, where $N$ is the number of consensus-forming nodes.
+In the context of state machine replication, traditional protocols decide (with irrevocable finality) on one ``block'' of state transitions/transactions to add to the shared operation log at a time.\cite{paxos} To decide on a block, a node must receive $\mathcal{O}(N)$ messages, where $N$ is the number of consensus-forming nodes.\cite{Castro_Liskov_1999_pbft}
 
-Blockchain consensus protocols like Bitcoin do not finalize/decide on one block at a time. In fact, the Bitcoin blockchain in particular does not make ``finalized decisions'' at all; blocks are ``orphaned'' if/when they are not in the highest total difficulty chain. However, if the miners are able to mine on the same blockchain, then the blocks that get deep enough into the blockchain won't be reverted (``orphaned''). A block's depth in the blockchain therefore serves as a proxy for finalization. In the average case for blockchain consensus protocols, each node only requires approximately one message, $\mathcal{O}(1)$, for every block.
+Blockchain consensus protocols like Bitcoin do not finalize/decide on one block at a time.\cite{nakamoto} In fact, the Bitcoin blockchain in particular does not make ``finalized decisions'' at all; blocks are ``orphaned'' if/when they are not in the highest total difficulty chain. \cite{orphanBitcoin} However, if the miners are able to mine on the same blockchain, then the blocks that get deep enough into the blockchain won't be reverted (``orphaned''). A block's depth in the blockchain therefore serves as a proxy for finalization. In the average case for blockchain consensus protocols, each node only requires approximately one message, $\mathcal{O}(1)$, for every block. \footnote{For Bitcoin, refer to \cite{nakamoto}, section 5 on pp. 3–4.}
 
-Traditional consensus protocol research has focused on producing protocols that are asynchronously safe (i.e.\ blocks won't be reverted due to arbitrary timing of future events) and live in asynchrony (or partial synchrony) (i.e.\ nodes eventually decide on new blocks). On the other hand, the Bitcoin blockchain is not safe in an asynchonous network but is safe and live (for unknown block-depth or ``confirmation count'') in a ``partially synchronous network.''
+Traditional consensus protocol research has focused on producing protocols that are asynchronously safe (i.e.\ blocks won't be reverted due to arbitrary timing of future events) and live in asynchrony (or partial synchrony) (i.e.\ nodes eventually decide on new blocks) \cite{Fischer_Lynch_Paterson_FLP_Impossibility_1985}. On the other hand, the Bitcoin blockchain is not safe in an asynchonous network but is safe and live (for unknown block-depth or ``confirmation count'') in a ``partially synchronous network''.
 
 Traditional Byzantine fault tolerant consensus protocols have precisely stated Byzantine fault tolerance numbers (often they can tolerate less than a third of Byzantine faults, or up to $t$ faults when there are $3t + 1$ nodes).\cite{BGP_Lamport_Shostak_Pease_1982} On the other hand, it is less clear exactly how many faults (measured as a proportion of hashrate) the Bitcoin blockchain protocol can tolerate.
 
@@ -104,11 +105,11 @@ The proof refers to an ``estimator,'' which maps protocol states to propositions
 
 An estimate in the binary consensus ($0$ or $1$) is said to be ``safe'' (have ``estimate safety'') for a particular protocol state if it is returned by the estimator on all future protocol states\footnote{I.e.\ all states accessible from that state through any valid protocol execution.}. In the blockchain consensus, a block is said to be ``safe'' for a particular protocol state if it is also in the fork choice for all future protocol states.
 
-The consensus safety proof shows that decisions on safe estimates have consensus safety\footnote{Consensus safe decisions have the following property: any decisions made on safe estimates by a protocol following node will be \emph{consistent} with decisions made on safe estimates by any other protocol following node.} (as long as there are not more than $t$ Byzantine faults).
+The consensus safety proof shows that decisions on safe estimates have consensus safety (as long as there are not more than $t$ Byzantine faults). Consensus safe decisions have the following property: any decisions made on safe estimates by a protocol following node will be \emph{consistent} with decisions made on safe estimates by any other protocol following node.
 
 The proof relies on the following key result: If node $1$ with state $\sigma_1$ has safe estimate $e_1$ and another node $2$ with state $\sigma_2$ has safe estimate $e_2$, \emph{and if they have a future state in common $\sigma_3$}, then node $1$ and node $2$'s decisions on $e_1$ and $e_2$ are consistent. The result is quite simple as it follows without much work from the definition of estimate safety. Specifically, if a state $\sigma$ has a safe estimate $e$, then any future protocol state of $\sigma$, $\sigma'$, is also safe on $e$. So if our states $\sigma_1$ and $\sigma_2$ (with safety on $e_1$ and $e_2$) share a common future, then that future has to be safe on both $e_1$ \emph{and} $e_2$, which means that they are consistent. So this first part of the proof shows that decisions on safe estimates are consensus safe \emph{for any pair of nodes who have a future protocol state in common}.
 
-Next we aim to construct protocols (``protocol states'' with ``state transitions'') which guarantee that nodes have common future protocol states unless there are more than $t$ Byzantine faults. Such a protocol has consensus safety if there are not more than $t$ such faults, from the result we just discussed. We accomplish this in a few steps.
+Next we aim to construct protocols (``protocol states'' with ``state transitions'') which guarantee that nodes have a common future protocol states unless there are more than $t$ Byzantine faults. Such a protocol has consensus safety if there are not more than $t$ such faults, from the result we just discussed. We accomplish this in a few steps.
 
 First, we assume that protocol states are sets of protocol messages and then insist that the union $\sigma_1 \cup \sigma_2$ of any two protocol states $\sigma_1$ and $\sigma_2$ is itself a protocol state. Further, we insist that there is a state transition from each protocol state $\sigma$ to $\sigma' \supset \sigma$ (any superset of $\sigma$). This means that $\sigma_1 \cup \sigma_2$ is a protocol future of $\sigma_1$ and $\sigma_2$.
 
@@ -142,7 +143,7 @@ The definitions of the estimator and of validity appear later. For now, we denot
 \end{equation*}
 \end{defn}
 
-$\mathcal{M}_0$ is the ``base case'', the set of messages with ``null justifications''. $\mathcal{M}_n$ is the set of messages at ``height'' $n$, which have messages of height $n-1$ (and/or lower) in their justification. Note that messages $\mathcal{M}_0$ have height $0$. $\mathcal{P}$ denotes the ``power set'' function, which maps set to the set of all of its subsets, so $\mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i)$ denotes all sets of protocol messages at height $n-1$ or lower.
+$\mathcal{M}_0$ is the ``base case'', the set of messages with ``null justifications''. $\mathcal{M}_n$ is the set of messages at ``height'' $n$, which have messages of height $n-1$ (and/or lower) in their justification. Note that messages $\mathcal{M}_0$ have height $0$. $\mathcal{P}$ denotes the ``power set'' function, which maps a set to the set of all of its subsets, so $\mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i)$ denotes all sets of protocol messages at height $n-1$ or lower.
 
 The estimator is a function that maps sets of protocol messages to $0$ or $1$, or a null value denoted by $\emptyset$:
 
@@ -192,7 +193,7 @@ We now have the language to talk about the latest message from a sender $v$ out 
 \begin{defn}[Latest message]
 \begin{equation*}
 \begin{split}
-m \in L(v, M) \iff & \nexists m' \in D(M) \text{ such that } V(m') = v \text{ and } m' \succ m
+m \in L(v, M) \iff & \nexists m' \in D(M) : V(m') = v \text{ and } m' \succ m
 \end{split}
 \end{equation*}
 \end{defn}
@@ -208,7 +209,7 @@ Now we define the ``score'' of an estimate $e$ in a set of messages $M$ as the t
 
 \begin{defn}[Score of a binary estimate]
 \begin{align}
-\text{Score}(e, M) = \sum_{\substack{v \in V \\ \text{such that } m \in L(v,M) \\ \text{with } E(m) = e}} W(v)
+\text{Score}(e, M) = \sum_{\substack{v \in V \\ : m \in L(v,M) \\ \text{with } E(m) = e}} W(v)
 \end{align}
 \end{defn}
 
@@ -224,7 +225,7 @@ Finally, we define the estimator for the Binary consensus, it returns the estima
 
 At this stage we have protocol messages and an estimator. If we can define a method for counting Byzantine faults from a set of protocol messages, then we can give the set of protocol states with their state transitions for a binary consensus protocol that tolerates $t$ Byzantine faults.
 
-Each protocol message $m$ is supposed to represent a record of messages that were seen by validator $V(m)$. Any ``correct'' node has a growing record of messages that they have received and sent. Specifically, a corret node is never the sender of a pair of messages $m_1$ and $m_2$ such that neither $m_1 \prec m_2$ nor $m_1 \succ m_2$. We call such a pair of messages ``an equivocation''.
+Each protocol message $m$ is supposed to represent a record of messages that were seen by validator $V(m)$. Any ``correct'' node has a growing record of messages that they have received and sent. Specifically, a correct node is never the sender of a pair of messages $m_1$ and $m_2$ such that neither $m_1 \prec m_2$ nor $m_1 \succ m_2$. We call such a pair of messages ``an equivocation''.
 
 
 \begin{defn}[Equivocation]
@@ -237,7 +238,7 @@ A sender $v$ with an equivocation in a set of protocol messages $M$, is said to 
 
 \begin{defn}[Byzantine faulty node]
 \begin{align}
-B(v,M) \iff \exists m_1, m_2 \in D(M) \text{ such that } v = V(m_1) \land Eq(m_1, m_2)
+B(v,M) \iff \exists m_1, m_2 \in D(M) : v = V(m_1) \land Eq(m_1, m_2)
 \end{align}
 \end{defn}
 
@@ -283,7 +284,7 @@ $$
 
 Because this construction satisfies the terms of our consensus safety proof, we know that decisions on such safe estimates in this protocol are consensus safe (if there are less than $t$ Byzantine faults (by weight)).
 
-We have yet to discuss how nodes running the binary consensus protocol can detect when they are in a state with a safe estimate. We discuss this following the specification of blockchain consensus protocol because we detect estimate safety in the same way for both protocols.
+We have yet to discuss how nodes running the binary consensus protocol can detect when they are in a state with a safe estimate. We discuss this following the specification of the blockchain consensus protocol because we detect estimate safety in the same way for both protocols.
 
 Now that we've covered the binary consensus protocol, it is much simpler to specify the blockchain consensus protocol.
 
@@ -386,13 +387,13 @@ An ``ideal adversary'' returns an ``attack'', a future protocol state $\sigma'$ 
 
 If we can detect \emph{only some} of the circumstances in which the ideal adversary fails to find an attack, then we can construct a safety oracle which is able to detect safety in some of the states with estimate safety. Due to efficiency considerations, the cases may be available enough for it to be useful in an implementation even though it may not be an ideal safety oracle.
 
-We identify such a set of circumstances. To discuss more generally, we denote ``agreement'' between estimate $e$ and estimate $e'$ as $e \equiv e'$. This correspond to $e = e'$ in the binary consensus, and $e \downarrow e'$ in the blockchain consensus. Disagreement will be denoted with $\not\equiv$.
+We identify such a set of circumstances. To discuss more generally, we denote ``agreement'' between estimate $e$ and estimate $e'$ as $e \equiv e'$. This corresponds to $e = e'$ in the binary consensus, and $e \downarrow e'$ in the blockchain consensus. Disagreement will be denoted with $\not\equiv$.
 
 We say that validator $v_i$ ``sees validator $v_j$ agreeing with estimate $e$ in a set of protocol messages $M$'' if:
 \begin{itemize}
 \item $v_i$ has exactly one latest message in $M$ (we are denoting this message as $L(v_i, M)$)
-\item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M))))$
-\item This message's estimate agrees with $e$, i.e. $E(L(v_j, J(L(v_i, M))))) \equiv e$
+\item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M)))$
+\item This message's estimate agrees with $e$, i.e. $E(L(v_j, J(L(v_i, M)))) \equiv e$
 \end{itemize}
 
 \begin{defn}[$v_i$ sees $v_j$ agreeing with $e$ in $M$]
@@ -405,13 +406,13 @@ And we say that a validator $v_i$ ``can see $v_j$ disagreeing with estimate $e$ 
 \begin{itemize}
 \item $v_i$ has exactly one latest message in $M$, $L(v_i, M)$
 \item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M))))$
-\item $v_j$ has a ``new latest message for $v_i$'' $m \in M$ such that $m \succ L(v_j, J(L(v_i, M))))$
+\item $v_j$ has a ``new latest message for $v_i$'' $m \in M$ : $m \succ L(v_j, J(L(v_i, M))))$
 \item And this $m$ disagrees with $e$, $E(m) \not\equiv e$
 \end{itemize}
 
 \begin{defn}[$v_i$ can see $v_j$ disagreeing with $e$ in $M$]
 $$
-v_i \xRightarrow[\text{$M$}]{\text{$\not\equiv, e$}} v_j \iff \exists m \in M : V(m) = v_j \land m \succ L(v_j, J(L(v_i, M)))) \land E(m) \not\equiv e
+v_i \xRightarrow[\text{$M$}]{\text{$\not\equiv, e$}} v_j \iff \exists m \in M : V(m) = v_j \land m \succ L(v_j, J(L(v_i, M))) \land E(m) \not\equiv e
 $$
 \end{defn}
 
@@ -500,7 +501,7 @@ Block structures are modified so that the justifications also include a weights 
 
 We use $\mathcal{W}$ to represent the set of all weights mappings $W:V \to \mathbb{R}_+$
 
-We redefine a block's ``score'' to use the weights in the parent block. The score, remember, is used to by the GHOST fork choice rule choose between children of some block. Those children (naturally) have the same parent, and therefore will have scores determined by the latest messages from the same validators.
+We redefine a block's ``score'' to use the weights in the parent block. The score, remember, is used to by the GHOST fork choice rule to choose between children of some block. Those children (naturally) have the same parent, and therefore will have scores determined by the latest messages from the same validators.
 
 \begin{defn}[Score of a block, for Casper the Friendly Ghost with validator rotation]
 \begin{align}
@@ -517,32 +518,32 @@ The rest of the definitions in the protocol remain completely identical (includi
 
 Traditionally, we would like to show that the protocol ``has liveness'', i.e. that nodes running the consensus protocol \emph{eventually} decide on a value. For us, the corresponding guarantee is that nodes \emph{eventually} detect that they have a safe estimate.
 
-FLP impossibility shows that it is impossible for consensus protocols like ours (which don't use non-determinism or cryptography) to be live in an ``asynchronous network,'' which is to say, without making assumptions about the timing of message propagation (or the order of message arrival)[CITE].
+The FLP impossibility (where FLP refers to the authors of \cite{Fischer_Lynch_Paterson_FLP_Impossibility_1985}) shows that it is impossible for consensus protocols like ours (which don't use non-determinism or cryptography) to be live in an ``asynchronous network,'' which is to say, without making assumptions about the timing of message propagation (or the order of message arrival).
 
 We have not yet made any synchrony assumptions of any kind, which is why the consensus protocols given here are asynchronously safe. Moreover, we have not said anything about when nodes \emph{should} send protocol messages. We have instead imposed relatively loose constraints on the protocol executions that nodes can take (they can receive messages and move to any state $\sigma' \supset \sigma$ from $\sigma$, as long as $\sigma'$ does not evidence too many Byzantine faults).
 
-This absence of a specified strategy for how validators should make blocks means that we cannot at the moment give a liveness proof. However, we present see some experimental observations where estimate safety is accomplished in the following section. These protocol executions correspond to message arrival orders which are live, and we can therefore construct reliable strategies for achieving liveness as long as nodes can coordinate timeouts in order to (eventually) produce the desired ``shape'' of protocol messages. In a synchronous or partically synchonous network (i.e. one where there's a known or unknown bound on the message arrival time) timeout coordination is (at least eventually) possible.
+This absence of a specified strategy for how validators should make blocks means that we cannot at the moment give a liveness proof. However, we present see some experimental observations where estimate safety is accomplished in the following section. These protocol executions correspond to message arrival orders which are live, and we can therefore construct reliable strategies for achieving liveness as long as nodes can coordinate timeouts in order to (eventually) produce the desired ``shape'' of protocol messages. In a synchronous or partially synchronous network (i.e. one where there's a known or unknown bound on the message arrival time) timeout coordination is (at least eventually) possible.
 
 Nonetheless, liveness considerations are considered largely out of scope, and should be treated in future work.
 
 \pagebreak
 \section{Experimental Observations}
 
-Early prototypes of both Casper the Friendly Binary Consensus and Casper the Friendly Ghost have been implemented, and the following graphics represent observations of executions of these protocols with various message passing orders.\footnote{The code is available at https://github.com/ethereum/casper-cbc}
+Early prototypes of both Casper the Friendly Binary Consensus and Casper the Friendly Ghost have been implemented, and the following graphics represent observations of executions of these protocols with various message passing orders.\footnote{The code is available at https://github.com/ethereum/cbc-casper}
 
 In all of these representations, each message is represented by a node in the graph. Messages from the same validator are vertically aligned. And later messages are always displayed higher than their dependencies.
 
 \begin{figure}[h!]
 \centering
 \includegraphics[width=0.5\textwidth]{3binary}
-\caption{A Binary consensus protocol execution. Dotted lines are messages included in the justification of the later message. The label on the nodes represents the estimate of the message. A message is coloured if it has achieved some amount of Byzantine fault tolerant estimate safety, accoring to a clique oracle given its justification. The darker the colour, the more faults are tolerated by the estimate}
+\caption{A Binary consensus protocol execution. Dotted lines are messages included in the justification of the later message. The label on the nodes represents the estimate of the message. A message is coloured if it has achieved some amount of Byzantine fault tolerant estimate safety, accoring to a clique oracle given its justification. The darker the colour, the more faults are tolerated by the estimate.}
 \end{figure}
 
 
 \begin{figure}[h!]
 \centering
 \includegraphics[width=0.5\textwidth]{3nodeblockchain-fix}
-\caption{Blockchain protocol execution with 3 validators, $v_0, v_1, v_2$. Each node labeled $0$ is the first message from that validator, and the nodes verically aligned above each validator represent messages made by that validator. Dotted black lines are messages included in the justification of the later message. Blue lines represent the forkchoices of the validators given by their latest blocks. Solid grey lines are prevblock pointers (that aren't blue because they are no longer the validator's forkchoice). The red line is the result of applying GHOST to the set of messages displayed here.}
+\caption{Blockchain protocol execution with 3 validators, $v_0, v_1, v_2$. Each node labeled $0$ is the first message from that validator, and the nodes vertically aligned above each validator represent messages made by that validator. Dotted black lines are messages included in the justification of the later message. Blue lines represent the forkchoices of the validators given by their latest blocks. Solid grey lines are prevblock pointers (that aren't blue because they are no longer the validator's forkchoice). The red line is the result of applying GHOST to the set of messages displayed here.}
 \end{figure}
 
 
