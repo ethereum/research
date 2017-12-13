@@ -64,12 +64,18 @@ def _get(db, node, keypath):
     if nodetype == LEAF_TYPE:
         return R
     elif nodetype == KV_TYPE:
+        # Keypath too short
+        if not keypath:
+            return None
         if keypath[:len(L)] == L:
             return _get(db, R, keypath[len(L):])
         else:
             return None
     # Branch node descend
     elif nodetype == BRANCH_TYPE:
+        # Keypath too short
+        if not keypath:
+            return None
         if keypath[:1] == b0:
             return _get(db, L, keypath[1:])
         else:
@@ -86,9 +92,15 @@ def _update(db, node, keypath, val):
     L, R, nodetype = parse_node(db.get(node))
     # Node is a leaf node
     if nodetype == LEAF_TYPE:
+        # Keypath must match, there should be no remaining keypath
+        if keypath:
+            raise Exception("Existing kv pair is being effaced because it's key is the prefix of the new key")
         return hash_and_save(db, encode_leaf_node(val)) if val else b''
     # node is a key-value node
     elif nodetype == KV_TYPE:
+        # Keypath too short
+        if not keypath:
+            return node
         # Keypath prefixes match
         if keypath[:len(L)] == L:
             # Recurse into child
@@ -116,6 +128,9 @@ def _update(db, node, keypath, val):
         # viii (CHILD, (k[1:], NEWCHILD))
         else:
             cf = common_prefix_length(L, keypath[:len(L)])
+            # New key-value pair can not contain empty value
+            if not val:
+                return node
             # valnode: the child node that has the new value we are adding
             # Case 1: keypath prefixes almost match, so we are in case (i), (ii), (v), (vi)
             if len(keypath) == cf + 1:
@@ -150,6 +165,9 @@ def _update(db, node, keypath, val):
                 return newsub
     # node is a branch node
     elif nodetype == BRANCH_TYPE:
+        # Keypath too short
+        if not keypath:
+            return node
         newL, newR = L, R
         # Which child node to update? Depends on first bit in keypath
         if keypath[:1] == b0:
