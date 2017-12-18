@@ -420,7 +420,7 @@ A set of non-Byzantine nodes in $M$ \emph{who each mutually see each other agree
 
 Our aim is to show that if there is an $e$-clique in $M$ with total weight $W'$, and $2*W' > \sum_{v\in V} W(v)$, then $e$ is safe for the protocol with states $\Sigma_t$ for $t = 0$. We won't give a rigorous proof, but the idea is simple enough. If nodes in an $e$-clique see each other agreeing on $e$ and can't see each other disagreeing on $e$, then there does not exist any new message from inside the clique that will cause them to assign lower scores to $e$. Further, if the clique has more than half of the validators by weight, then no messages external to the clique can raise the scores these validators assign to a competing estimate to be higher than the score they assign to $e$. Messages from senders who are inside or outside the clique therefore cannot change the estimates of senders inside the clique, and the ideal adversary will necessarily fail.
 
-We can also show that if $e$-clique in $M$ with total weight $W'$, and $2*W' > \sum_{v\in V} W(v)$, then $e$ is safe as long as $2*W' - \sum_{v\in V} W(v) \leq t - F(M)$, but we leave this for a future draft of this work.
+We can also show that if $e$-clique in $M$ with total weight $W'$, then $e$ is safe as long as $2*W' - \sum_{v\in V} W(v) > t - F(M)$, but we leave this for a future draft of this work.
 
 We present the pseudocode for the ``clique oracle'' that uses this result to detect estimate safety:
 
