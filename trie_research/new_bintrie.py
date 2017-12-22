@@ -182,7 +182,7 @@ def _update(db, node, keypath, val):
             if subnodetype == KV_TYPE:
                 return hash_and_save(db, encode_kv_node(first_bit + subL, subR))
             # kv node pointing to a branch node
-            elif subnodetype == BRANCH_TYPE:
+            elif subnodetype == BRANCH_TYPE or subnodetype == LEAF_TYPE:
                 return hash_and_save(db, encode_kv_node(first_bit, newL or newR))
         else:
             return hash_and_save(db, encode_branch_node(newL, newR))
