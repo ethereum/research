@@ -134,7 +134,7 @@ def _update(db, node, keypath, val):
             # valnode: the child node that has the new value we are adding
             # Case 1: keypath prefixes almost match, so we are in case (i), (ii), (v), (vi)
             if len(keypath) == cf + 1:
-                valnode = val
+                valnode = hash_and_save(db, encode_leaf_node(val))
             # Case 2: keypath prefixes mismatch in the middle, so we need to break
             # the keypath in half. We are in case (iii), (iv), (vii), (viii)
             else:
