@@ -361,7 +361,7 @@ We now have the language required to define the estimator for the blockchain con
 \caption{The Greedy Heaviest-Observed Sub-tree Fork-choice rule, $\mathcal{E}$}
 \end{algorithm}
 
-We assume that ``hash'' has the property that out of any set of blocks, only one has the lowest hash. Using the hashes of blocks to eliminate ``ties'' means that the estimator for the blockchain consensus never outputs an exception. Previously the binary estimator return $\emptyset$ when $0$ and $1$ had the same score. This means that a message $m$ is valid if $E(m) = \mathcal{E}(J(m))$, and just as in the binary consensus we insist that all the blocks are valid. \footnote{Following the process decribed in the footnote about excluding invalid messages from the binary consensus.}
+We assume that ``hash'' has the property that out of any set of blocks, only one has the lowest hash. Using the hashes of blocks to eliminate ``ties'' means that the estimator for the blockchain consensus never outputs an exception. Previously the binary estimator returned $\emptyset$ when $0$ and $1$ had the same score. This means that a message $m$ is valid if $E(m) = \mathcal{E}(J(m))$, and just as in the binary consensus we insist that all the blocks are valid. \footnote{Following the process described in the footnote about excluding invalid messages from the binary consensus.}
 
 ``Equivocation'', ``Byzantine faulty'', ``fault weight'', ``protocol states'', and ``protocol executions'' are defined here in \emph{precisely} the same way as in the binary consensus. We therefore do not give the definitions again.
 
