@@ -186,7 +186,7 @@ D(m) = &\{m\}\cup \bigcup_{m' \in J(m)} D(m')
 
 This definition can be extended in a natural way to define the dependencies of a set of messages (by taking the union of the dependencies of the individual messages).
 
-If $m_1 \prec m_2$, then we also say that $m_2$ is ``later'' than $m_1$ and write $m_2 \succ m_1$.
+If $m_1 \prec m_2$ and $m_1 \neq m_2$, then we also say that $m_2$ is ``later'' than $m_1$ and write $m_2 \succ m_1$.
 
 We now have the language to talk about the latest message from a sender $v$ out of a set of messages $M$, which we denote as $L(v, M)$:
 
