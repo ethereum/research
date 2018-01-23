@@ -1,5 +1,6 @@
 from new_bintrie import Trie, EphemDB, encode_bin, encode_bin_path, decode_bin_path
 from ethereum.utils import sha3, encode_hex
+from compress_witness import compress, expand
 import random
 import rlp
 
@@ -25,7 +26,12 @@ for _ in range(3):
         if not i % 50:
             if not i % 250:
                 t.to_dict()
-            print("Length of long-format branch at %d nodes: %d" % (i, len(rlp.encode(t.get_long_format_branch(k)))))
+            b = t.get_long_format_branch(k)
+            print("Length of long-format branch at %d nodes: %d" % (i, len(rlp.encode(b))))
+            c = compress(b)
+            b2 = expand(c)
+            print("Length of compressed witness: %d" % len(rlp.encode(c)))
+            assert sorted(b2) == sorted(b), "Witness compression fails"
     print('Added 1000 values, doing checks')
     assert r1 is None or t.root == r1
     r1 = t.root
@@ -39,6 +45,11 @@ for _ in range(3):
     for _ in range(16):
         byte = random.randrange(256)
         witness = t.get_prefix_witness(bytearray([byte]))
+        c = compress(witness)
+        w2 = expand(c)
+        assert sorted(w2) == sorted(witness), "Witness compression fails"
+        print('Witness compression for prefix witnesses: %d original %d compressed' %
+              (len(rlp.encode(witness)), len(rlp.encode(c))))
         subtrie = Trie(EphemDB({sha3(x): x for x in witness}), t.root)
         print('auditing byte', byte, 'with', len([k for k,v in kvpairs if k[0] == byte]), 'keys')
         for k, v in sorted(kvpairs):
