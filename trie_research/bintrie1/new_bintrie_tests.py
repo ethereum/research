@@ -19,19 +19,24 @@ r1 = None
 
 for _ in range(3):
     t = Trie(EphemDB(), b'')
+    total_long_length, total_short_length = 0, 0
     for i, (k, v) in enumerate(shuffle_in_place(kvpairs)):
         #print(t.to_dict())
         t.update(k, v)
         assert t.get(k) == v
-        if not i % 50:
-            if not i % 250:
-                t.to_dict()
-            b = t.get_long_format_branch(k)
-            print("Length of long-format branch at %d nodes: %d" % (i, len(rlp.encode(b))))
-            c = compress(b)
-            b2 = expand(c)
-            print("Length of compressed witness: %d" % len(rlp.encode(c)))
-            assert sorted(b2) == sorted(b), "Witness compression fails"
+        if not i % 250:
+            t.to_dict()
+        b = t.get_long_format_branch(k)
+        c = compress(b)
+        b2 = expand(c)
+        total_long_length += len(rlp.encode(b))
+        total_short_length += len(rlp.encode(c))
+        assert sorted(b2) == sorted(b), "Witness compression fails"
+        if i % 50 == 49:
+            print("Avg length of long-format branch at %d nodes: %d" % (i-24, total_long_length // 50))
+            print("Avg length of compressed witness: %d" % (total_short_length // 50))
+            total_long_length = 0
+            total_short_length = 0
     print('Added 1000 values, doing checks')
     assert r1 is None or t.root == r1
     r1 = t.root

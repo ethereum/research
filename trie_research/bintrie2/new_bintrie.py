@@ -14,7 +14,7 @@ class EphemDB():
         del self.kv[k]
 
 zerohashes = [b'\x00' * 32]
-for i in range(256):
+for i in range(255):
     zerohashes.insert(0, sha3(zerohashes[0] + zerohashes[0]))
 
 def new_tree(db):
@@ -101,3 +101,25 @@ def verify_proof(proof, root, key, value):
         path >>= 1
         v = newv
     return root == v
+
+def compress_proof(proof):
+    bits = bytearray(32)
+    oproof = b''
+    for i, p in enumerate(proof):
+        if p == zerohashes[i]:
+            bits[i // 8] ^= 1 << i % 8
+        else:
+            oproof += p
+    return bytes(bits) + oproof
+
+def decompress_proof(oproof):
+    proof = []
+    bits = bytearray(oproof[:32])
+    pos = 32
+    for i in range(256):
+        if bits[i // 8] & (1 << (i % 8)):
+            proof.append(zerohashes[i])
+        else:
+            proof.append(oproof[pos: pos + 32])
+            pos += 32
+    return proof
