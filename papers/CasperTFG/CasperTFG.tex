@@ -201,7 +201,7 @@ m \in L(v, M) \iff & \nexists m' \in D(M) : V(m') = v \text{ and } m' \succ m
 Latest messages are critical to defining the estimator, which returns $0$ if ``more'' of the nodes have latest messages with estimate $0$ than with estimate $1$. We use ``weights'' for nodes to measure which estimate has ``more'' consensus forming nodes, implemented by a map from validator names to positive real numbers. We do this without loss of generality (because it's possible that all weights are equal).
 
 $$
-W:v \in \mathcal{V} \to \mathbb{R}_+
+W:\mathcal{V} \to \mathbb{R}_+
 $$
 
 
