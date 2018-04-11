@@ -402,11 +402,11 @@ v_i \xrightarrow[\text{$M$}]{\text{$\equiv, e$}} v_j \iff E(L(v_j, J(L(v_i, M)))
 $$
 \end{defn}
 
-And we say that a validator $v_i$ ``can see $v_j$ disagreeing with estimate $e$ in a set of protocol messages $M$'' if:
+And we say that a validator $v_i$ ``can eventually see $v_j$ disagreeing with estimate $e$ in a set of protocol messages $M$'' if:
 \begin{itemize}
 \item $v_i$ has exactly one latest message in $M$, $L(v_i, M)$
 \item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M))))$
-\item $v_j$ has a ``new latest message for $v_i$'' $m \in M$ : $m \succ L(v_j, J(L(v_i, M))))$
+\item $v_j$ has a message $m \in M$ that is undelivered to $v_i$ : $m \succ L(v_j, J(L(v_i, M))))$
 \item And this $m$ disagrees with $e$, $E(m) \not\equiv e$
 \end{itemize}
 
