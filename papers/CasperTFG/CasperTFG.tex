@@ -136,8 +136,8 @@ The definitions of the estimator and of validity appear later. For now, we denot
 \begin{defn}[Protocol Messages, $\mathcal{M}$]
 \begin{equation*}
 \begin{split}
-    \mathcal{M}_0 &= \{0, 1\} \times V \times \{\emptyset\}\\
-    \mathcal{M}_n &= \{0, 1\} \times V \times \mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i)\\
+    \mathcal{M}_0 &= \{0, 1\} \times \mathcal{V} \times \{\emptyset\}\\
+    \mathcal{M}_n &= \{0, 1\} \times \mathcal{V} \times \mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i)\\
     \mathcal{M} &= \lim_{n \to \infty} \bigcup_{i=0}^{n} \mathcal{M}_i
 \end{split}
 \end{equation*}
@@ -186,7 +186,7 @@ D(m) = &\{m\}\cup \bigcup_{m' \in J(m)} D(m')
 
 This definition can be extended in a natural way to define the dependencies of a set of messages (by taking the union of the dependencies of the individual messages).
 
-If $m_1 \prec m_2$, then we also say that $m_2$ is ``later'' than $m_1$ and write $m_2 \succ m_1$.
+If $m_1 \prec m_2$ and $m_1 \neq m_2$, then we also say that $m_2$ is ``later'' than $m_1$ and write $m_2 \succ m_1$.
 
 We now have the language to talk about the latest message from a sender $v$ out of a set of messages $M$, which we denote as $L(v, M)$:
 
@@ -201,7 +201,7 @@ m \in L(v, M) \iff & \nexists m' \in D(M) : V(m') = v \text{ and } m' \succ m
 Latest messages are critical to defining the estimator, which returns $0$ if ``more'' of the nodes have latest messages with estimate $0$ than with estimate $1$. We use ``weights'' for nodes to measure which estimate has ``more'' consensus forming nodes, implemented by a map from validator names to positive real numbers. We do this without loss of generality (because it's possible that all weights are equal).
 
 $$
-W:V \to \mathbb{R}_+
+W:\mathcal{V} \to \mathbb{R}_+
 $$
 
 
@@ -209,11 +209,11 @@ Now we define the ``score'' of an estimate $e$ in a set of messages $M$ as the t
 
 \begin{defn}[Score of a binary estimate]
 \begin{align}
-\text{Score}(e, M) = \sum_{\substack{v \in V \\ : m \in L(v,M) \\ \text{with } E(m) = e}} W(v)
+\text{Score}(e, M) = \sum_{\substack{v \in \mathcal{V} \\ : m \in L(v,M) \\ \text{with } E(m) = e}} W(v)
 \end{align}
 \end{defn}
 
-Finally, we define the estimator for the Binary consensus, it returns the estimate with the highest score, if there is one, otherwise it returns $\emptyset$.
+Finally, we define the estimator for the Binary consensus: it returns the estimate with the highest score, if there is one, and otherwise it returns $\emptyset$.
 
 \begin{defn}[Binary estimator]
 \begin{align}
@@ -245,7 +245,7 @@ B(v,M) \iff \exists m_1, m_2 \in D(M) : v = V(m_1) \land Eq(m_1, m_2)
 We then define the Byzantine nodes visible in $M$ as
 
 $$
-B(M) = \{v \in V: B(v,M)\}
+B(M) = \{v \in \mathcal{V}: B(v,M)\}
 $$
 
 The weight of Byzantine faults evidenced in a set of messages $M$ is the sum of the weights of validators who are Byzantine in $M$.
@@ -304,8 +304,8 @@ Formally, in Casper the Friendly Ghost we have protocol messages, $\mathcal{M}$,
 \begin{equation*}
 \begin{split}
   &\text{Genesis Block} = \{\emptyset\}\\
-    &\mathcal{M}_0 = \{\text{Genesis Block}\} \times V \times \{\text{Genesis Block}\}\\
-    &\mathcal{M}_n = \bigcup_{i=0}^{n-1} \mathcal{M}_i \times V \times \mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i)\\
+    &\mathcal{M}_0 = \{\text{Genesis Block}\} \times \mathcal{V} \times \{\text{Genesis Block}\}\\
+    &\mathcal{M}_n = \bigcup_{i=0}^{n-1} \mathcal{M}_i \times \mathcal{V} \times \mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i)\\
     &\mathcal{M} = \{\text{Genesis Block}\} \cup \lim_{n \to \infty} \bigcup_{i=0}^{n} \mathcal{M}_i
 \end{split}
 \end{equation*}
@@ -325,7 +325,7 @@ We define the ``score'' of a block $b$ given a set of protocol messages $M$ as t
 
 \begin{defn}[Score of a block]
 \begin{align}
-\text{Score}(b, M) = \sum_{\substack{v \in V \\ m \in L(v,M) \\ b \downarrow E(m)}} W(v)
+\text{Score}(b, M) = \sum_{\substack{v \in \mathcal{V} : \\ m \in L(v,M) \\ b \downarrow E(m)}} W(v)
 \end{align}
 \end{defn}
 
@@ -361,7 +361,7 @@ We now have the language required to define the estimator for the blockchain con
 \caption{The Greedy Heaviest-Observed Sub-tree Fork-choice rule, $\mathcal{E}$}
 \end{algorithm}
 
-We assume that ``hash'' has the property that out of any set of blocks, only one has the lowest hash. Using the hashes of blocks to eliminate ``ties'' means that the estimator for the blockchain consensus never outputs an exception. Previously the binary estimator return $\emptyset$ when $0$ and $1$ had the same score. This means that a message $m$ is valid if $E(m) = \mathcal{E}(J(m))$, and just as in the binary consensus we insist that all the blocks are valid. \footnote{Following the process decribed in the footnote about excluding invalid messages from the binary consensus.}
+We assume that ``hash'' has the property that out of any set of blocks, only one has the lowest hash. Using the hashes of blocks to eliminate ``ties'' means that the estimator for the blockchain consensus never outputs an exception. Previously the binary estimator returned $\emptyset$ when $0$ and $1$ had the same score. This means that a message $m$ is valid if $E(m) = \mathcal{E}(J(m))$, and just as in the binary consensus we insist that all the blocks are valid. \footnote{Following the process described in the footnote about excluding invalid messages from the binary consensus.}
 
 ``Equivocation'', ``Byzantine faulty'', ``fault weight'', ``protocol states'', and ``protocol executions'' are defined here in \emph{precisely} the same way as in the binary consensus. We therefore do not give the definitions again.
 
@@ -402,11 +402,11 @@ v_i \xrightarrow[\text{$M$}]{\text{$\equiv, e$}} v_j \iff E(L(v_j, J(L(v_i, M)))
 $$
 \end{defn}
 
-And we say that a validator $v_i$ ``can see $v_j$ disagreeing with estimate $e$ in a set of protocol messages $M$'' if:
+And we say that a validator $v_i$ ``can eventually see $v_j$ disagreeing with estimate $e$ in a set of protocol messages $M$'' if:
 \begin{itemize}
 \item $v_i$ has exactly one latest message in $M$, $L(v_i, M)$
 \item $v_j$ has exactly one latest message in the justification of $v_i$'s latest message, $J(L(v_i, M))$ (which we denote as $L(v_j, J(L(v_i, M))))$
-\item $v_j$ has a ``new latest message for $v_i$'' $m \in M$ : $m \succ L(v_j, J(L(v_i, M))))$
+\item $v_j$ has a message $m \in M$ that is undelivered to $v_i$ : $m \succ L(v_j, J(L(v_i, M))))$
 \item And this $m$ disagrees with $e$, $E(m) \not\equiv e$
 \end{itemize}
 
@@ -418,9 +418,9 @@ $$
 
 A set of non-Byzantine nodes in $M$ \emph{who each mutually see each other agreeing with $e$ in $M$ and also mutually can't see each other disagreeing with $e$ in $M$} are called an ``$e$-clique'' in $M$.
 
-Our aim is to show that if there is an $e$-clique in $M$ with total weight $W'$, and $2*W' > \sum_{v\in V} W(v)$, then $e$ is safe for the protocol with states $\Sigma_t$ for $t = 0$. We won't give a rigorous proof, but the idea is simple enough. If nodes in an $e$-clique see each other agreeing on $e$ and can't see each other disagreeing on $e$, then there does not exist any new message from inside the clique that will cause them to assign lower scores to $e$. Further, if the clique has more than half of the validators by weight, then no messages external to the clique can raise the scores these validators assign to a competing estimate to be higher than the score they assign to $e$. Messages from senders who are inside or outside the clique therefore cannot change the estimates of senders inside the clique, and the ideal adversary will necessarily fail.
+Our aim is to show that if there is an $e$-clique in $M$ with total weight $W'$, and $2*W' > \sum_{v\in \mathcal{V}} W(v)$, then $e$ is safe for the protocol with states $\Sigma_t$ for $t = 0$. We won't give a rigorous proof, but the idea is simple enough. If nodes in an $e$-clique see each other agreeing on $e$ and can't see each other disagreeing on $e$, then there does not exist any new message from inside the clique that will cause them to assign lower scores to $e$. Further, if the clique has more than half of the validators by weight, then no messages external to the clique can raise the scores these validators assign to a competing estimate to be higher than the score they assign to $e$. Messages from senders who are inside or outside the clique therefore cannot change the estimates of senders inside the clique, and the ideal adversary will necessarily fail.
 
-We can also show that if $e$-clique in $M$ with total weight $W'$, then $e$ is safe as long as $2*W' - \sum_{v\in V} W(v) > t - F(M)$, but we leave this for a future draft of this work.
+We can also show that if $e$-clique in $M$ with total weight $W'$, then $e$ is safe as long as $2*W' - \sum_{v\in \mathcal{V}} W(v) > t - F(M)$, but we leave this for a future draft of this work.
 
 We present the pseudocode for the ``clique oracle'' that uses this result to detect estimate safety:
 
@@ -430,10 +430,10 @@ We present the pseudocode for the ``clique oracle'' that uses this result to det
 
 
 
-  $N$ = a fully connected network with undirected edges and validator names $V$ as nodes
+  $N$ = a fully connected network with undirected edges and validator names $\mathcal{V}$ as nodes
 
-  \For{each non-Byzantine validator, $v_i \in V$}{
-    \For{each non-Byzantine validator, $v_j \in V$}{
+  \For{each non-Byzantine validator, $v_i \in \mathcal{V}$}{
+    \For{each non-Byzantine validator, $v_j \in \mathcal{V}$}{
       \If{$v_i$ doesn't see $v_j$ agreeing with $e$ in $M$ (not $v_i \xrightarrow[\text{$M$}]{\text{$\equiv, e$}} v_j$)}{
         $N$.remove\_edge($(v_i, v_j)$)
       }
@@ -447,7 +447,7 @@ We present the pseudocode for the ``clique oracle'' that uses this result to det
 
   clique\_weight = $\sum_{v \in N'.nodes} W(v)$
 
-  total\_weight = $\sum_{v \in V} W(v)$
+  total\_weight = $\sum_{v \in \mathcal{V}} W(v)$
 
   \If{2*clique\_weight $\leq$ total\_weight}{
     \Return{False}
@@ -492,20 +492,20 @@ Block structures are modified so that the justifications also include a weights 
 \begin{equation*}
 \begin{split}
   &\text{Genesis Block} = \{\emptyset\} \times \{\emptyset\} \times (\{\emptyset\} \times \{W_{genesis}\})\\
-    &\mathcal{M}_0 = \{\text{Genesis Block}\} \times V \times (\{\text{Genesis Block}\} \times \mathcal{W})\\
-    &\mathcal{M}_n = \bigcup_{i=0}^{n-1} \mathcal{M}_i \times V \times (\mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i) \times \mathcal{W}))\\
+    &\mathcal{M}_0 = \{\text{Genesis Block}\} \times \mathcal{V} \times (\{\text{Genesis Block}\} \times \mathcal{W})\\
+    &\mathcal{M}_n = \bigcup_{i=0}^{n-1} \mathcal{M}_i \times \mathcal{V} \times (\mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i) \times \mathcal{W}))\\
     &\mathcal{M} = \{\text{Genesis Block}\} \cup \lim_{n \to \infty} \bigcup_{i=0}^{n} \mathcal{M}_i
 \end{split}
 \end{equation*}
 \end{defn}
 
-We use $\mathcal{W}$ to represent the set of all weights mappings $W:V \to \mathbb{R}_+$
+We use $\mathcal{W}$ to represent the set of all weights mappings $W:\mathcal{V} \to \mathbb{R}_+$
 
 We redefine a block's ``score'' to use the weights in the parent block. The score, remember, is used to by the GHOST fork choice rule to choose between children of some block. Those children (naturally) have the same parent, and therefore will have scores determined by the latest messages from the same validators.
 
 \begin{defn}[Score of a block, for Casper the Friendly Ghost with validator rotation]
 \begin{align}
-\text{Score}(b, M) = \sum_{\substack{v \in V \\ m \in L(v,M) \\ b \downarrow E(m)}} J(E(b)).W(v)
+\text{Score}(b, M) = \sum_{\substack{v \in \mathcal{V} \\ m \in L(v,M) \\ b \downarrow E(m)}} J(E(b)).W(v)
 \end{align}
 \end{defn}
 
