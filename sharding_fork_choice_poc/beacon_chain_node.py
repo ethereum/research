@@ -1,6 +1,6 @@
 import os
 from binascii import hexlify
-from Crypto.Hash import keccak
+from Crypto.Hash import SHA256
 import random
 
 def to_hex(s):
@@ -10,13 +10,13 @@ memo = {}
 
 def sha3(x):
     if x not in memo:
-        memo[x] = keccak.new(digest_bits=256, data=x).digest()
+        memo[x] = SHA256.new(data=x).digest()
     return memo[x]
 
 def hash_to_int(h):
     o = 0
     for c in h:
-        o = (o << 8) + c
+        o = (o << 8) + ord(c)
     return o
 
 NOTARIES = 40
