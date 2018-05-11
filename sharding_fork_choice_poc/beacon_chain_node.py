@@ -24,8 +24,8 @@ BASE_TS_DIFF = 1
 SKIP_TS_DIFF = 6
 SAMPLE = 9
 MIN_SAMPLE = 5
-POWDIFF = 30 * NOTARIES
-SHARDS = 4
+POWDIFF = 50 * NOTARIES
+SHARDS = 12
 
 def checkpow(work, nonce):
     # Discrete log PoW, lolz
