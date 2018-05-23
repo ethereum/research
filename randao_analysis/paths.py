@@ -7,7 +7,7 @@ SKIP = 6
 # The score of a node in the search graph, for A* search
 def score_node(n):
     time, height = n
-    return time - height * (LATENCY + 0.0000001)
+    return time - height * (LATENCY * 5.0 + 0.0000001)
 
 # `alpha`: percentage of the network controlled by the actor
 # `max_height`: stop at this height
@@ -120,7 +120,7 @@ def test():
     # Assume attacker has (0.40, 0.38, 0.36, 0.34, 0.32, 0.30, 0.28); check race probs for handicap 1-8
     print("Basic tests\n")
     for alpha in (0.40, 0.38, 0.36, 0.34, 0.32, 0.30, 0.28):
-        race_results = [race(alpha, 1-alpha, 100) for j in range(100)]
+        race_results = [race(alpha, 1-alpha, 1000) for j in range(100)]
         probs = []
         for i in range(1, 9):
             probs.append(len([x for x in race_results if x >= i]) / 100)
@@ -130,7 +130,7 @@ def test():
     # if either side has share p, they effectively "really" have share p**3
     print("\nRequiring 2/2 notarization\n")
     for alpha in (0.45, 0.44, 0.43, 0.42, 0.41, 0.40, 0.39):
-        race_results = [race(alpha ** 3, (1-alpha) ** 3, 100) for j in range(100)]
+        race_results = [race(alpha ** 3, (1-alpha) ** 3, 1000) for j in range(100)]
         probs = []
         for i in range(1, 9):
             probs.append(len([x for x in race_results if x >= i]) / 100)
