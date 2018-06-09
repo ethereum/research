@@ -1,16 +1,18 @@
 from networksim import NetworkSimulator
-from node import Node, NOTARIES, MainChainBlock, main_genesis
+from pos_node import Node, NOTARIES, Block, genesis
 from distributions import normal_distribution
 
 net = NetworkSimulator(latency=12)
-notaries = [Node(i, net, ts=max(normal_distribution(50, 50)(), 0)) for i in range(NOTARIES)]
+notaries = [Node(i, net, ts=max(normal_distribution(200, 200)(), 0) * 0.1, sleepy=i%4==0) for i in range(NOTARIES)]
 net.agents = notaries
 net.generate_peers()
-for i in range(4000):
+for i in range(100000):
     net.tick()
 for n in notaries:
+    print("Local timestamp: %.1f, timequeue len %d" % (n.ts, len(n.timequeue)))
     print("Main chain head: %d" % n.blocks[n.main_chain[-1]].number)
-    print("Total main chain blocks received: %d" % (len([b for b in n.blocks.values() if isinstance(b, MainChainBlock)]) - 1))
+    print("Total main chain blocks received: %d" % (len([b for b in n.blocks.values() if isinstance(b, Block)]) - 1))
+    print("Notarized main chain blocks received: %d" % (len([b for b in n.blocks.values() if isinstance(b, Block) and n.is_notarized(b)]) - 1))
 
 import matplotlib.pyplot as plt
 import networkx as nx
@@ -18,15 +20,22 @@ import random
 
 G=nx.Graph()
 
-#positions = {main_genesis.hash: 0, beacon_genesis.hash: 0}
+#positions = {genesis.hash: 0, beacon_genesis.hash: 0}
 #queue = [
 
 for b in n.blocks.values():
+    for en in notaries:
+        if isinstance(b, Block) and b.hash in en.processed and b.hash not in en.blocks:
+            assert (not en.have_ancestry(b.hash)) or b.ts > en.ts
     if b.number > 0:
-        if isinstance(b, MainChainBlock):
-            G.add_edge(b.hash, b.parent_hash, color='b')
+        if isinstance(b, Block):
+            if n.is_notarized(b):
+                G.add_edge(b.hash, b.parent_hash, color='b')
+            else:
+                G.add_edge(b.hash, b.parent_hash, color='#dddddd')
 
-cache = {main_genesis.hash: 0}
+
+cache = {genesis.hash: 0}
 
 def mkoffset(b):
     if b.hash not in cache:
