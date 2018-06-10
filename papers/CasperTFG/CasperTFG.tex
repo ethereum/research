@@ -145,6 +145,14 @@ The definitions of the estimator and of validity appear later. For now, we denot
 
 $\mathcal{M}_0$ is the ``base case'', the set of messages with ``null justifications''. $\mathcal{M}_n$ is the set of messages at ``height'' $n$, which have messages of height $n-1$ (and/or lower) in their justification. Note that messages $\mathcal{M}_0$ have height $0$. $\mathcal{P}$ denotes the ``power set'' function, which maps a set to the set of all of its subsets, so $\mathcal{P}(\bigcup_{i=0}^{n-1} \mathcal{M}_i)$ denotes all sets of protocol messages at height $n-1$ or lower.
 
+We define $E$, a ``helper function'' that picks out the ``estimate'' given in a protocol message:
+
+$$
+E(m) = e \iff m = (e, \_, \_)
+$$
+
+Similarly, we define $V$ as a function that picks out the ``sender'', and $J$ as a function that picks out the ``justification''.
+
 The estimator is a function that maps sets of protocol messages to $0$ or $1$, or a null value denoted by $\emptyset$:
 
 \begin{equation*}
@@ -154,15 +162,6 @@ The estimator is a function that maps sets of protocol messages to $0$ or $1$, o
 \end{equation*}
 
 With the property that $\mathcal{E}(\emptyset) = \emptyset$. A protocol message $m$ is then said to be ``valid'' if either $\mathcal{E}(J(m)) = \emptyset$ or $E(m) = \mathcal{E}(J(m))$. From now on, we assume that $\mathcal{M}$ only contains valid messages.\footnote{All protocol messages at height $0$ are valid because they have null justifications and $\mathcal{E}(\emptyset) = \emptyset$. Then we can find the valid protocol messages at height $1$ by applying the estimator to their justifications (which are sets of [valid] messages at height 0) for each message, only keeping valid messages. Similarly, we can find the valid protocol messages at height $n$ by applying the estimator to the justification of these messages (which are sets of valid messages at height $h < n$). We are thereby able to collect all valid protocol messages and restrict $\mathcal{M}.$}
-
-
-But before we can define the estimator, we need a few more basic definitions. We define $E$, a ``helper function'' that picks out the ``estimate'' given in a protocol message:
-
-$$
-E(m) = e \iff m = (e, \_, \_)
-$$
-
-Similarly, we define $V$ as a function that picks out the ``sender'', and $J$ as a function that picks out the ``justification''.
 
 We say that message $m_1$ is ``a dependency'' of message $m_2$ and we write $m_1 \prec m_2$ if $m_1$ is in the justification of $m_2$, or if $m_1$ is in the justification of one of the messages in $m_2$'s justification, or if it is in the justification of a message in the justification of a message in the justification of $m_2$...
 
