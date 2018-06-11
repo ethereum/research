@@ -1,8 +1,10 @@
-def serialize(val, typ):
+def serialize(val, typ=None):
+    if typ is None and hasattr(val, 'fields'):
+        typ = type(val)
     if typ in ('hash32', 'address'):
         assert len(val) == 20 if typ == 'address' else 32
         return val
-    elif typ[:3] == 'int':
+    elif isinstance(typ, str) and typ[:3] == 'int':
         length = int(typ[3:])
         assert length % 8 == 0
         return val.to_bytes(length // 8, 'big')
@@ -21,7 +23,7 @@ def _deserialize(data, start, typ):
         length = 20 if typ == 'address' else 32
         assert len(data) + start >= length
         return data[start: start+length], start+length
-    elif typ[:3] == 'int':
+    elif isinstance(typ, str) and typ[:3] == 'int':
         length = int(typ[3:])
         assert length % 8 == 0
         assert len(data) + start >= length // 8
@@ -32,7 +34,7 @@ def _deserialize(data, start, typ):
         return data[start+4: start+4+length], start+4+length
     elif isinstance(typ, list):
         assert len(typ) == 1
-        length = int.from_bytes(data[start:start+4])
+        length = int.from_bytes(data[start:start+4], 'big')
         pos, o = start + 4, []
         while pos < start + 4 + length:
             result, pos = _deserialize(data, pos, typ[0])
@@ -40,10 +42,12 @@ def _deserialize(data, start, typ):
         assert pos == start + 4 + length
         return o, pos
     elif isinstance(typ, type):
+        length = int.from_bytes(data[start:start+4], 'big')
         values = {}
-        pos = start
+        pos = start + 4
         for k in sorted(typ.fields.keys()):
             values[k], pos = _deserialize(data, pos, typ.fields[k])
+        assert pos == start + 4 + length
         return typ(**values), pos
 
 def deserialize(data, typ):

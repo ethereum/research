@@ -74,33 +74,41 @@ def get_shuffling(seed, validator_count, sample=None):
     return o
 
 class ValidatorRecord():
+    fields = {'pubkey': 'int256', 'return_shard': 'int16',
+               'return_address': 'address', 'randao_commitment': 'hash32',
+               'balance': 'int64', 'switch_dynasty': 'int64'}
+    defaults = {}
+
     def __init__(self, **kwargs):
-        self.fields = {'pubkey': 'int256', 'return_shard': 'int16',
-                       'return_address': 'address', 'randao_commitment': 'hash32',
-                       'balance': 'int64', 'switch_dynasty': 'int64'}
-        defaults = {}
         for k in self.fields.keys():
-            setattr(self, k, kwargs.get(k, defaults[k]))
+            assert k in kwargs or k in self.defaults
+            setattr(self, k, kwargs.get(k, self.defaults.get(k)))
 
 class CheckpointRecord():
+
+    fields = {'checkpoint_hash': 'hash32', 'bitmask': 'bytes'}
+    defaults = {}
+
     def __init__(self, **kwargs):
-        self.fields = {'checkpoint_hash': 'hash32', 'bitmask': 'bytes'}
-        defaults = {}
         for k in self.fields.keys():
-            setattr(self, k, kwargs.get(k, defaults[k]))
+            assert k in kwargs or k in self.defaults
+            setattr(self, k, kwargs.get(k, self.defaults.get(k)))
 
 
 class ActiveState():
-    def __init__(self, **kwargs):
-        self.fields = {'height': 'int64', 'randao': 'hash32',
+
+    fields = {'height': 'int64', 'randao': 'hash32',
             'validator_ffg_voted': 'bytes', 'rewarded': ['int24'],
             'penalized': ['int24'], 'checkpoints': [CheckpointRecord],
             'total_skip_count': 'int64'}
-        defaults = {'height': 0, 'randao': b'\x00'*32,
-            'validator_ffg_voted': b'', 'rewarded': [],
-            'penalized': [], 'checkpoints': [], 'total_skip_count': 0}
+    defaults = {'height': 0, 'randao': b'\x00'*32,
+        'validator_ffg_voted': b'', 'rewarded': [],
+        'penalized': [], 'checkpoints': [], 'total_skip_count': 0}
+
+    def __init__(self, **kwargs):
         for k in self.fields.keys():
-            setattr(self, k, kwargs.get(k, defaults[k]))
+            assert k in kwargs or k in self.defaults
+            setattr(self, k, kwargs.get(k, self.defaults.get(k)))
                                         
 class CrystallizedState():
     def __init__(self, **kwargs):
@@ -121,7 +129,8 @@ class CrystallizedState():
                        'current_checkpoint': b'\x00'*32,
                        'total_deposits': 0}
         for k in self.fields.keys():
-            setattr(self, k, kwargs.get(k, defaults[k]))
+            assert k in kwargs or k in self.defaults
+            setattr(self, k, kwargs.get(k, self.defaults.get(k)))
                  
 
 def compute_state_transition(parent_state, block, ):

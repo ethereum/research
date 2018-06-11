@@ -4,7 +4,7 @@ from bls import G1, G2, hash_to_G2, compress_G1, compress_G2, \
 
 from simpleserialize import serialize, deserialize
 
-from full_pos import ActiveState
+from full_pos import ActiveState, CheckpointRecord
 
 for x in (1, 5, 124, 735, 127409812145, 90768492698215092512159, 0):
     print('Testing with privkey %d' % x)
@@ -42,7 +42,21 @@ assert serialize(b'cow', 'bytes') == b'\x00\x00\x00\x03cow'
 assert deserialize(b'\x00\x00\x00\x03cow', 'bytes') == b'cow'
 
 print('Testing advanced serialization')
+
+def eq(x, y):
+    if hasattr(x, 'fields') and hasattr(y, 'fields'):
+        for f in x.fields:
+            if not eq(getattr(x, f), getattr(y, f)):
+                print('Unequal:', x, y, f, getattr(x, f), getattr(y, f))
+                return False
+            return True
+    else:
+        return x == y
+
 s = ActiveState()
-ds = deserialize(serialize(s))
-for x in s.fields:
-    assert getattr(s, x) == getattr(ds, x)
+ds = deserialize(serialize(s, type(s)), type(s))
+assert eq(s, ds)
+s = ActiveState(checkpoints=[CheckpointRecord(checkpoint_hash=b'\x55'*32, bitmask=b'31337dawg')],
+                height=555, randao=b'\x88'*32, rewarded=[5,7,9,579], penalized=[3]*333)
+ds = deserialize(serialize(s, type(s)), type(s))
+assert eq(s, ds)
