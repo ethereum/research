@@ -83,25 +83,3 @@ def aggregate_pubs(pubs):
     for p in pubs:
         o = add(o, decompress_G1(p))
     return compress_G1(o)
-
-for x in (1, 5, 124, 735, 127409812145, 90768492698215092512159, 0):
-    print('Testing with privkey %d' % x)
-    p1 = multiply(G1, x)
-    p2 = multiply(G2, x)
-    msg = str(x).encode('utf-8')
-    msghash = hash_to_G2(msg)
-    assert normalize(decompress_G1(compress_G1(p1))) == normalize(p1)
-    assert normalize(decompress_G2(compress_G2(p2))) == normalize(p2)
-    assert normalize(decompress_G2(compress_G2(msghash))) == normalize(msghash)
-    sig = sign(msg, x)
-    pub = privtopub(x)
-    assert verify(msg, pub, sig)
-
-print('Testing signature aggregation')
-msg = b'cow'
-keys = [1, 5, 124, 735, 127409812145, 90768492698215092512159, 0]
-sigs = [sign(msg, k) for k in keys]
-pubs = [privtopub(k) for k in keys]
-aggsig = aggregate_sigs(sigs)
-aggpub = aggregate_pubs(pubs)
-assert verify(msg, aggpub, aggsig)
