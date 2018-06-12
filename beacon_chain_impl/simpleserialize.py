@@ -52,3 +52,13 @@ def _deserialize(data, start, typ):
 
 def deserialize(data, typ):
     return _deserialize(data, 0, typ)[0]
+
+def eq(x, y):
+    if hasattr(x, 'fields') and hasattr(y, 'fields'):
+        for f in x.fields:
+            if not eq(getattr(x, f), getattr(y, f)):
+                print('Unequal:', x, y, f, getattr(x, f), getattr(y, f))
+                return False
+            return True
+    else:
+        return x == y
