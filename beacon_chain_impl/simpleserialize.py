@@ -66,10 +66,21 @@ def eq(x, y):
 def deepcopy(x):
     if hasattr(x, 'fields'):
         vals = {}
-        for f, val in x.fields.items():
-            vals[f] = deepcopy(getattr(val, f))
+        for f in x.fields.keys():
+            vals[f] = deepcopy(getattr(x, f))
         return x.__class__(**vals)
     elif isinstance(x, list):
-        return [deepcopy(x) for x in list]
+        return [deepcopy(y) for y in x]
+    else:
+        return x
+
+def to_dict(x):
+    if hasattr(x, 'fields'):
+        vals = {}
+        for f in x.fields.keys():
+            vals[f] = to_dict(getattr(x, f))
+        return vals
+    elif isinstance(x, list):
+        return [to_dict(y) for y in x]
     else:
         return x
