@@ -107,9 +107,20 @@ def get_shuffling(seed, validator_count, sample=None):
     return o[:maxvalue]
 
 class ValidatorRecord():
-    fields = {'pubkey': 'int256', 'return_shard': 'int16',
-               'return_address': 'address', 'randao_commitment': 'hash32',
-               'balance': 'int64', 'switch_dynasty': 'int64'}
+    fields = {
+        # The validator's public key
+        'pubkey': 'int256',
+        # What shard the validator's balance will be sent to after withdrawal
+        'return_shard': 'int16',
+        # And what address
+        'return_address': 'address',
+        # The validator's current RANDAO beacon commitment
+        'randao_commitment': 'hash32',
+        # Current balance
+        'balance': 'int64',
+        # Dynasty where the validator can (be inducted | be removed | withdraw)
+        'switch_dynasty': 'int64'
+    }
     defaults = {}
 
     def __init__(self, **kwargs):
@@ -119,7 +130,14 @@ class ValidatorRecord():
 
 class CheckpointRecord():
 
-    fields = {'shard_id': 'int16', 'checkpoint_hash': 'hash32', 'voter_bitmask': 'bytes'}
+    fields = {
+        # What shard is the crosslink being made for
+        'shard_id': 'int16',
+        # Hash of the block
+        'checkpoint_hash': 'hash32',
+        # Which of the eligible voters are voting for it (as a bitmask)
+        'voter_bitmask': 'bytes'
+    }
     defaults = {}
 
     def __init__(self, **kwargs):
@@ -130,10 +148,20 @@ class CheckpointRecord():
 
 class ActiveState():
 
-    fields = {'height': 'int64', 'randao': 'hash32',
-            'ffg_voter_bitmask': 'bytes', 'balance_deltas': ['int32'],
-            'checkpoints': [CheckpointRecord],
-            'total_skip_count': 'int64'}
+    fields = {
+        # Block height
+        'height': 'int64',
+        # Global RANDAO beacon state
+        'randao': 'hash32',
+        # Which validators have made FFG votes this epoch (as a bitmask)
+        'ffg_voter_bitmask': 'bytes',
+        # Deltas to validator balances (to be processed at end of epoch)
+        'balance_deltas': ['int32'],
+        # Storing data about crosslinks-in-progress attempted in this epoch
+        'checkpoints': [CheckpointRecord],
+        # Total number of skips (used to determine minimum timestamp)
+        'total_skip_count': 'int64'
+    }
     defaults = {'height': 0, 'randao': b'\x00'*32,
         'ffg_voter_bitmask': b'', 'balance_deltas': [],
         'checkpoints': [], 'total_skip_count': 0}
@@ -144,7 +172,12 @@ class ActiveState():
             setattr(self, k, kwargs.get(k, self.defaults.get(k)))
 
 class CrosslinkRecord():
-    fields = {'epoch': 'int64', 'hash': 'hash32'}
+    fields = {
+        # What epoch the crosslink was submitted in
+        'epoch': 'int64',
+        # The block hash
+        'hash': 'hash32'
+    }
     defaults = {'epoch': 0, 'hash': b'\x00'*32}
 
     def __init__(self, **kwargs):
@@ -153,18 +186,33 @@ class CrosslinkRecord():
             setattr(self, k, kwargs.get(k, self.defaults.get(k)))
                                         
 class CrystallizedState():
-    fields = {'active_validators': [ValidatorRecord],
-               'queued_validators': [ValidatorRecord],
-               'exited_validators': [ValidatorRecord],
-               'current_shuffling': ['int24'],
-               'current_epoch': 'int64',
-               'last_justified_epoch': 'int64',
-               'last_finalized_epoch': 'int64',
-               'dynasty': 'int64',
-               'next_shard': 'int16',
-               'current_checkpoint': 'hash32',
-               'crosslink_records': [CrosslinkRecord],
-               'total_deposits': 'int256'}
+    fields = {
+        # List of active validators
+        'active_validators': [ValidatorRecord],
+        # List of joined but not yet inducted validators
+        'queued_validators': [ValidatorRecord],
+        # List of removed validators pending withdrawal
+        'exited_validators': [ValidatorRecord],
+        # The permutation of validators used to determine who cross-links
+        # what shard in this epoch
+        'current_shuffling': ['int24'],
+        # The current epoch
+        'current_epoch': 'int64',
+        # The last justified epoch
+        'last_justified_epoch': 'int64',
+        # The last finalized epoch
+        'last_finalized_epoch': 'int64',
+        # The current dynasty
+        'dynasty': 'int64',
+        # The next shard that assignment for cross-linking will start from
+        'next_shard': 'int16',
+        # The current FFG checkpoint
+        'current_checkpoint': 'hash32',
+        # Records about the most recent crosslink for each shard
+        'crosslink_records': [CrosslinkRecord],
+        # Total balance of deposits
+        'total_deposits': 'int256'
+    }
     defaults = {'active_validators': [],
                'queued_validators': [],
                'exited_validators': [],
