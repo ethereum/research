@@ -248,6 +248,29 @@ def get_shard_attesters(crystallized_state, shard_id):
     vc = len(crystallized_state.active_validators)
     return crystallized_state.current_shuffling[(vc * shard_id) // SHARD_COUNT: (vc * (shard_id + 1)) // SHARD_COUNT]
 
+# Get rewards and vote data
+def process_ffg_deposits(crystallized_state, ffg_voter_bitmask):
+    total_validators = len(crystallized_state.active_validators)
+    finality_distance = crystallized_state.current_epoch - crystallized_state.last_finalized_epoch
+    online_reward = 6 if finality_distance <= 2 else 0
+    offline_penalty = 3 * finality_distance
+    total_vote_count = 0
+    total_vote_deposits = 0
+    deltas = [0] * total_validators
+    for i in range(total_validators):
+        if ffg_voter_bitmask[i // 8] & (128 >> (i % 8)):
+            total_vote_deposits += crystallized_state.active_validators[i].balance
+            deltas[i] += online_reward
+            total_vote_count += 1
+        else:
+            deltas[i] -= offline_penalty
+    print('Total voted: %d of %d validators (%.2f%%), %d of %d deposits (%.2f%%)' %
+          (total_vote_count, total_validators, total_vote_count * 100 / total_validators,
+           total_vote_deposits, crystallized_state.total_deposits, total_vote_deposits * 100 / crystallized_state.total_deposits))
+    print('FFG online reward: %d, offline penalty: %d' % (online_reward, offline_penalty))
+    print('Total deposit change from FFG: %d' % sum(deltas))
+    return deltas, total_vote_count, total_vote_deposits
+
 def compute_state_transition(parent_state, parent_block, block, verify_sig=True):
     crystallized_state, active_state = parent_state
     # Initialize a new epoch if needed
@@ -257,31 +280,11 @@ def compute_state_transition(parent_state, parent_block, block, verify_sig=True)
         new_validator_records = deepcopy(crystallized_state.active_validators)
         # Who voted in the last epoch
         ffg_voter_bitmask = bytearray(active_state.ffg_voter_bitmask)
-        # Total deposit size
-        total_deposits = crystallized_state.total_deposits
-        # Old total deposit size
-        td = total_deposits
-        # Number of epochs since last finality
-        finality_distance = crystallized_state.current_epoch - crystallized_state.last_finalized_epoch
-        online_reward = 6 if finality_distance <= 2 else 0
-        offline_penalty = 3 * finality_distance
-        total_vote_count = 0
-        total_vote_deposits = 0
-        total_validators = len(crystallized_state.active_validators)
-        for i in range(total_validators):
-            if ffg_voter_bitmask[i // 8] & (128 >> (i % 8)):
-                total_vote_deposits += new_validator_records[i].balance
-                new_validator_records[i].balance += online_reward
-                total_vote_count += 1
-            else:
-                new_validator_records[i].balance -= offline_penalty
-        print('Total voted: %d of %d validators (%.2f%%), %d of %d deposits (%.2f%%)' %
-              (total_vote_count, total_validators, total_vote_count * 100 / total_validators,
-               total_vote_deposits, total_deposits, total_vote_deposits * 100 / total_deposits))
-        print('FFG online reward: %d, offline penalty: %d' % (online_reward, offline_penalty))
-        total_deposits += total_vote_count * online_reward - \
-            (total_validators - total_vote_count) * offline_penalty
-        print('Total deposit change from FFG: %d' % (total_deposits - td))
+        # Balance changes, and total vote counts for FFG
+        deltas, total_vote_count, total_vote_deposits = process_ffg_deposits(crystallized_state, ffg_voter_bitmask)
+        for i, v in enumerate(new_validator_records):
+            v.balance += deltas[i]
+        total_deposits = crystallized_state.total_deposits + sum(deltas)
         td = total_deposits
         # Find the most popular crosslink in each shard
         main_crosslink = {}
@@ -295,12 +298,11 @@ def compute_state_transition(parent_state, parent_block, block, verify_sig=True)
                 main_crosslink[c.shard_id] = (c.checkpoint_hash, vote_count, mask)
         # Adjust crosslinks
         new_crosslink_records = deepcopy(crystallized_state.crosslink_records)
+        print('Processing crosslinks')
         for shard in range(SHARD_COUNT):
-            print('Processing crosslink data for shard %d' % shard)
             indices = get_shard_attesters(crystallized_state, shard)
             h, votes, mask = main_crosslink.get(shard, (b'', 0, bytearray((len(indices)+7)//8)))
             crosslink_distance = crystallized_state.current_epoch - crystallized_state.crosslink_records[shard].epoch
-            print('Last crosslink from this shard was from epoch %d' % crystallized_state.crosslink_records[shard].epoch)
             online_reward = 3 if crosslink_distance <= 2 else 0
             offline_penalty = crosslink_distance * 2
             for i, index in enumerate(indices):
@@ -309,12 +311,13 @@ def compute_state_transition(parent_state, parent_block, block, verify_sig=True)
                 else:
                     new_validator_records[index].balance -= offline_penalty
             total_deposits += votes * online_reward - (len(indices) - votes) * offline_penalty
-            print('Total voters: %d of %d (%.2f%%)' % (votes, len(indices), votes * 100 / len(indices)))
-            print('Crosslink online reward: %d, offline penalty: %d' % (online_reward, offline_penalty))
+            print('Shard %d: most recent crosslink %d, reward: (%d, %d), votes: %d of %d (%.2f%%)'
+                  % (shard, crystallized_state.crosslink_records[shard].epoch, online_reward, -offline_penalty,
+                     votes, len(indices), votes * 100 / len(indices)))
             # New checkpoint last crosslinked record
             if votes * 3 >= len(indices) * 2:
                 new_crosslink_records[shard] = CrosslinkRecord(hash=h, epoch=crystallized_state.current_epoch)
-                print('Finalized checkpoint: %s' % hex(int.from_bytes(h, 'big')))
+                print('New crosslink %s' % hex(int.from_bytes(h, 'big')))
         print('Total deposit change from crosslinks: %d' % (total_deposits - td))
         td = total_deposits
         # Process other balance deltas
