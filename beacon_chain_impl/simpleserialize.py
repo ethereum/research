@@ -62,3 +62,14 @@ def eq(x, y):
             return True
     else:
         return x == y
+
+def deepcopy(x):
+    if hasattr(x, 'fields'):
+        vals = {}
+        for f, val in x.fields.items():
+            vals[f] = deepcopy(getattr(val, f))
+        return x.__class__(**vals)
+    elif isinstance(x, list):
+        return [deepcopy(x) for x in list]
+    else:
+        return x
