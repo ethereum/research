@@ -17,6 +17,7 @@ def serialize(val, typ=None):
     elif isinstance(typ, type):
         sub = b''.join([serialize(getattr(val, k), typ.fields[k]) for k in sorted(typ.fields.keys())])
         return len(sub).to_bytes(4, 'big') + sub
+    raise Exception("Cannot serialize", val, typ)
 
 def _deserialize(data, start, typ):
     if typ in ('hash32', 'address'):
@@ -49,6 +50,7 @@ def _deserialize(data, start, typ):
             values[k], pos = _deserialize(data, pos, typ.fields[k])
         assert pos == start + 4 + length
         return typ(**values), pos
+    raise Exception("Cannot deserialize", typ)
 
 def deserialize(data, typ):
     return _deserialize(data, 0, typ)[0]

@@ -1,4 +1,7 @@
-from hashlib import blake2s
+try:
+    from hashlib import blake2s
+except:
+    from pyblake2 import blake2s
 blake = lambda x: blake2s(x).digest()
 from py_ecc.optimized_bn128 import G1, G2, add, multiply, FQ, FQ2, pairing, \
     normalize, field_modulus, b, b2, is_on_curve, curve_order

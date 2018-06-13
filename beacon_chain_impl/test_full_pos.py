@@ -1,6 +1,6 @@
 from full_pos import blake, mk_genesis_state_and_block, compute_state_transition, \
     get_attesters_and_signer, Block, get_checkpoint_aggvote_msg, AggregateVote, \
-    SHARD_COUNT, ATTESTER_COUNT
+    SHARD_COUNT, ATTESTER_COUNT, get_shard_attesters
 import random
 import bls
 from simpleserialize import serialize, deserialize, eq, deepcopy
@@ -34,8 +34,8 @@ def mock_make_child(parent_state, parent, skips, attester_share=0.8, checkpoint_
     # Randomly pick indices to include for checkpoints
     shard_aggregate_votes = []
     for shard, crosslinker_share in checkpoint_shards:
-        print('Making crosslink in shard %d')
-        indices = crystallized_state.current_shuffling[(validator_count * shard) // 100: (validator_count * (shard + 1)) // 100]
+        print('Making crosslink in shard %d' % shard)
+        indices = get_shard_attesters(crystallized_state, shard)
         print('Indices: %r' % indices)
         bitfield = [1 if random.random() < crosslinker_share else 0 for i in indices]
         bitmask = bytearray((len(bitfield)+7) // 8)
@@ -82,8 +82,10 @@ print('Block size:', len(serialize(block)))
 block2, c2, a2 = mock_make_child((c, a), block, 0, 0.8, [])
 assert compute_state_transition((c, a), block, block2)
 print('Verified a block!')
-block3, c3, a3 = mock_make_child((c2, a2), block2, 0, 0.8, [(0, 0.7)])
+block3, c3, a3 = mock_make_child((c2, a2), block2, 0, 0.8, [(0, 0.75)])
 print('Verified a block with a committee!')
 while a3.height % SHARD_COUNT > 0:
-    block3, c3, a3 = mock_make_child((c3, a3), block3, 0, 0.8, [(a3.height, 0.7)])
+    block3, c3, a3 = mock_make_child((c3, a3), block3, 0, 0.8, [(a3.height, 0.6 + 0.02 * a3.height)])
     print('Height: %d' % a3.height)
+print('FFG bitmask:', bin(int.from_bytes(a3.ffg_voter_bitmask, 'big')))
+block4, c4, a4 = mock_make_child((c3, a3), block3, 1, 0.55, [])
