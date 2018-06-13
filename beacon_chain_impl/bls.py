@@ -3,8 +3,8 @@ try:
 except:
     from pyblake2 import blake2s
 blake = lambda x: blake2s(x).digest()
-from py_ecc.optimized_bn128 import G1, G2, add, multiply, FQ, FQ2, pairing, \
-    normalize, field_modulus, b, b2, is_on_curve, curve_order
+from py_ecc.optimized_bn128 import G1, G2, neg, add, multiply, FQ, FQ2, FQ12, pairing, \
+    normalize, field_modulus, b, b2, is_on_curve, curve_order, final_exponentiate
 
 def compress_G1(pt):
     x, y = normalize(pt)
@@ -34,7 +34,11 @@ def sqrt_fq2(x):
         y *= hex_root
     return y
 
+cache = {}
+
 def hash_to_G2(m):
+    if m in cache:
+        return cache[m]
     k2 = m
     while 1:
         k1 = blake(k2)
@@ -46,7 +50,9 @@ def hash_to_G2(m):
         if xcb ** ((field_modulus ** 2 - 1) // 2) == FQ2([1,0]):
             break
     y = sqrt_fq2(xcb)
-    return multiply((x, y, FQ2([1,0])), 2*field_modulus-curve_order)
+    o = multiply((x, y, FQ2([1,0])), 2*field_modulus-curve_order)
+    cache[m] = o
+    return o
 
 def compress_G2(pt):
     assert is_on_curve(pt, b2)
@@ -73,7 +79,8 @@ def privtopub(k):
     return compress_G1(multiply(G1, k))
 
 def verify(m, pub, sig):
-    return pairing(decompress_G2(sig), G1) == pairing(hash_to_G2(m), decompress_G1(pub))
+    return final_exponentiate(pairing(decompress_G2(sig), G1, False) * \
+                              pairing(hash_to_G2(m), neg(decompress_G1(pub)), False)) == FQ12.one()
 
 def aggregate_sigs(sigs):
     o = FQ2([1,0]), FQ2([1,0]), FQ2([0,0])

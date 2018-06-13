@@ -4,8 +4,9 @@ from full_pos import blake, mk_genesis_state_and_block, compute_state_transition
 import random
 import bls
 from simpleserialize import serialize, deserialize, eq, deepcopy
+import time
 
-privkeys = [int.from_bytes(blake(str(i).encode('utf-8'))[:4], 'big') for i in range(500)]
+privkeys = [int.from_bytes(blake(str(i).encode('utf-8'))[:4], 'big') for i in range(1000)]
 print('Generated privkeys')
 keymap = {}
 for i,k in enumerate(privkeys):
@@ -80,7 +81,9 @@ print('Crystallized state length:', len(serialize(c)))
 print('Active state length:', len(serialize(a)))
 print('Block size:', len(serialize(block)))
 block2, c2, a2 = mock_make_child((c, a), block, 0, 0.8, [])
+t = time.time()
 assert compute_state_transition((c, a), block, block2)
+print("Normal block (basic attestation only) processed in %.4f sec" % (time.time() - t))
 print('Verified a block!')
 block3, c3, a3 = mock_make_child((c2, a2), block2, 0, 0.8, [(0, 0.75)])
 print('Verified a block with a committee!')
@@ -89,3 +92,6 @@ while a3.height % SHARD_COUNT > 0:
     print('Height: %d' % a3.height)
 print('FFG bitmask:', bin(int.from_bytes(a3.ffg_voter_bitmask, 'big')))
 block4, c4, a4 = mock_make_child((c3, a3), block3, 1, 0.55, [])
+t = time.time()
+assert compute_state_transition((c3, a3), block3, block4)
+print("Epoch transition processed in %.4f sec" % (time.time() - t))
