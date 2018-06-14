@@ -1,5 +1,5 @@
 from full_pos import blake, mk_genesis_state_and_block, compute_state_transition, \
-    get_attesters_and_signer, Block, get_checkpoint_aggvote_msg, AggregateVote, \
+    get_attesters_and_signer, Block, get_crosslink_aggvote_msg, AggregateVote, \
     SHARD_COUNT, ATTESTER_COUNT, get_shard_attesters
 import random
 import bls
@@ -14,9 +14,9 @@ for i,k in enumerate(privkeys):
     if i%50 == 0:
         print("Generated %d keys" % i)
 
-def mock_make_child(parent_state, parent, skips, attester_share=0.8, checkpoint_shards=[]):
+def mock_make_child(parent_state, parent, skips, attester_share=0.8, crosslink_shards=[]):
     crystallized_state, active_state = parent_state
-    parent_attestation_hash = parent.hash
+    parent_attestation = serialize(parent)
     validator_count = len(crystallized_state.active_validators)
     indices, main_signer = get_attesters_and_signer(crystallized_state, active_state, skips)
     print('Selected indices: %r' % indices)
@@ -24,7 +24,7 @@ def mock_make_child(parent_state, parent, skips, attester_share=0.8, checkpoint_
     # Randomly pick indices to include
     bitfield = [1 if random.random() < attester_share else 0 for i in indices]
     # Attestations
-    sigs = [bls.sign(parent_attestation_hash, keymap[crystallized_state.active_validators[indices[i]].pubkey])
+    sigs = [bls.sign(parent_attestation, keymap[crystallized_state.active_validators[indices[i]].pubkey])
             for i in range(len(indices)) if bitfield[i]]
     attestation_aggregate_sig = bls.aggregate_sigs(sigs)
     print('Aggregated sig')
@@ -32,9 +32,9 @@ def mock_make_child(parent_state, parent, skips, attester_share=0.8, checkpoint_
     for i, b in enumerate(bitfield):
         attestation_bitmask[i//8] ^= (128 >> (i % 8)) * b
     print('Aggregate bitmask:', bin(int.from_bytes(attestation_bitmask, 'big')))
-    # Randomly pick indices to include for checkpoints
+    # Randomly pick indices to include for crosslinks
     shard_aggregate_votes = []
-    for shard, crosslinker_share in checkpoint_shards:
+    for shard, crosslinker_share in crosslink_shards:
         print('Making crosslink in shard %d' % shard)
         indices = get_shard_attesters(crystallized_state, shard)
         print('Indices: %r' % indices)
@@ -43,18 +43,18 @@ def mock_make_child(parent_state, parent, skips, attester_share=0.8, checkpoint_
         for i, b in enumerate(bitfield):
             bitmask[i//8] ^= (128 >> (i % 8)) * b
         print('Bitmask:', bin(int.from_bytes(bitmask, 'big')))
-        checkpoint = blake(bytes([shard]))
-        checkpoint_attestation_hash = get_checkpoint_aggvote_msg(shard, checkpoint, crystallized_state)
-        sigs = [bls.sign(checkpoint_attestation_hash, keymap[crystallized_state.active_validators[indices[i]].pubkey])
+        shard_block_hash = blake(bytes([shard]))
+        crosslink_attestation_hash = get_crosslink_aggvote_msg(shard, shard_block_hash, crystallized_state)
+        sigs = [bls.sign(crosslink_attestation_hash, keymap[crystallized_state.active_validators[indices[i]].pubkey])
                 for i in range(len(indices)) if bitfield[i]]
         v = AggregateVote(shard_id=shard,
-                          checkpoint_hash=checkpoint,
+                          shard_block_hash=shard_block_hash,
                           signer_bitmask=bitmask,
                           aggregate_sig=list(bls.aggregate_sigs(sigs)))
         shard_aggregate_votes.append(v)
-    print('Added %d shard aggregate votes' % len(checkpoint_shards))
+    print('Added %d shard aggregate votes' % len(crosslink_shards))
     # State calculations
-    o = Block(parent_hash=parent.hash,
+    o = Block(parent_hash=blake(parent_attestation),
               skip_count=skips,
               randao_reveal=blake(str(random.random()).encode('utf-8')),
               attestation_bitmask=attestation_bitmask,

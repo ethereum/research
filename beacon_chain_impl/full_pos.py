@@ -16,13 +16,13 @@ DEFAULT_BALANCE = 20000
 class AggregateVote():
     fields = {
         'shard_id': 'int16',
-        'checkpoint_hash': 'hash32',
+        'shard_block_hash': 'hash32',
         'signer_bitmask': 'bytes',
         'aggregate_sig': ['int256']
     }
     defaults = {
         'shard_id': 0,
-        'checkpoint_hash': b'\x00'*32,
+        'shard_block_hash': b'\x00'*32,
         'signer_bitmask': b'',
         'aggregate_sig': [0,0],
     }
@@ -83,10 +83,6 @@ class Block():
         self.sig = zig
         return o
 
-    @property
-    def hash(self):
-        return blake(serialize(self))
-
 def get_shuffling(seed, validator_count, sample=None):
     assert validator_count <= 16777216
     rand_max = 16777216 - 16777216 % validator_count
@@ -128,13 +124,13 @@ class ValidatorRecord():
             assert k in kwargs or k in self.defaults
             setattr(self, k, kwargs.get(k, self.defaults.get(k)))
 
-class CheckpointRecord():
+class PartialCrosslinkRecord():
 
     fields = {
         # What shard is the crosslink being made for
         'shard_id': 'int16',
         # Hash of the block
-        'checkpoint_hash': 'hash32',
+        'shard_block_hash': 'hash32',
         # Which of the eligible voters are voting for it (as a bitmask)
         'voter_bitmask': 'bytes'
     }
@@ -156,15 +152,15 @@ class ActiveState():
         # Which validators have made FFG votes this epoch (as a bitmask)
         'ffg_voter_bitmask': 'bytes',
         # Deltas to validator balances (to be processed at end of epoch)
-        'balance_deltas': ['int32'],
+        'balance_deltas': ['int48'],
         # Storing data about crosslinks-in-progress attempted in this epoch
-        'checkpoints': [CheckpointRecord],
+        'partial_crosslinks': [PartialCrosslinkRecord],
         # Total number of skips (used to determine minimum timestamp)
         'total_skip_count': 'int64'
     }
     defaults = {'height': 0, 'randao': b'\x00'*32,
         'ffg_voter_bitmask': b'', 'balance_deltas': [],
-        'checkpoints': [], 'total_skip_count': 0}
+        'partial_crosslinks': [], 'total_skip_count': 0}
 
     def __init__(self, **kwargs):
         for k in self.fields.keys():
@@ -231,9 +227,9 @@ class CrystallizedState():
             assert k in kwargs or k in self.defaults
             setattr(self, k, kwargs.get(k, self.defaults.get(k)))
 
-def get_checkpoint_aggvote_msg(shard_id, checkpoint_hash, crystallized_state):
+def get_crosslink_aggvote_msg(shard_id, shard_block_hash, crystallized_state):
     return shard_id.to_bytes(2, 'big') + \
-        checkpoint_hash + \
+        shard_block_hash + \
         crystallized_state.current_checkpoint + \
         crystallized_state.current_epoch.to_bytes(8, 'big') + \
         crystallized_state.last_justified_epoch.to_bytes(8, 'big')
@@ -290,7 +286,7 @@ def process_crosslinks(crystallized_state, crosslinks):
             for j in range(8):
                 vote_count += (byte >> j) % 2
         if vote_count > main_crosslink.get(c.shard_id, (b'', 0, b''))[1]:
-            main_crosslink[c.shard_id] = (c.checkpoint_hash, vote_count, mask)
+            main_crosslink[c.shard_id] = (c.shard_block_hash, vote_count, mask)
     # Adjust crosslinks
     new_crosslink_records = [x for x in crystallized_state.crosslink_records]
     deltas = [0] * len(crystallized_state.active_validators)
@@ -312,7 +308,7 @@ def process_crosslinks(crystallized_state, crosslinks):
         print('Shard %d: most recent crosslink %d, reward: (%d, %d), votes: %d of %d (%.2f%%)'
               % (shard, crystallized_state.crosslink_records[shard].epoch, online_reward, -offline_penalty,
                  votes, len(indices), votes * 100 / len(indices)))
-        # New checkpoint last crosslinked record
+        # New crosslink
         if votes * 3 >= len(indices) * 2:
             new_crosslink_records[shard] = CrosslinkRecord(hash=h, epoch=crystallized_state.current_epoch)
             print('New crosslink %s' % hex(int.from_bytes(h, 'big')))
@@ -322,12 +318,76 @@ def process_crosslinks(crystallized_state, crosslinks):
 def process_balance_deltas(crystallized_state, balance_deltas):
     deltas = [0] * len(crystallized_state.active_validators)
     for i in balance_deltas:
-        if i % 256 <= 128:
-            deltas[i >> 8] += i % 256
+        if i % 16777216 < 8388608:
+            deltas[i >> 24] += i & 16777215
         else:
-            deltas[i >> 8] += (i % 256) - 256
+            deltas[i >> 24] += (i & 16777215) - 16777216
     print('Total deposit change from deltas: %d' % sum(deltas))
     return deltas
+
+def get_incremented_validator_sets(crystallized_state, new_active_validators):
+    new_active_validators = [v for v in new_active_validators]
+    new_exited_validators = [v for v in crystallized_state.exited_validators]
+    i = 0
+    while i < len(new_active_validators):
+        if new_active_validators[i].balance <= DEFAULT_BALANCE // 2:
+            new_exited_validators.append(new_active_validators.pop(i))
+        elif new_active_validators[i].switch_dynasty == crystallized_state.dynasty + 1:
+            new_exited_validators.append(new_active_validators.pop(i))
+        else:
+            i += 1
+    induct = min(len(crystallized_state.queued_validators), len(crystallized_state.active_validators) // 30 + 1)
+    for i in range(induct):
+        if crystallized_state.queued_validators[i].switch_dynasty > crystallized_state.dynasty + 1:
+            induct = i
+            break
+        new_active_validators.append(crystallized_state.queued_validators[i])
+    new_queued_validators = crystallized_state.queued_validators[induct:]
+    return new_queued_validators, new_active_validators, new_exited_validators
+
+def process_attestations(validator_set, attestation_indices, attestation_bitmask, msg, aggregate_sig):
+    # Verify the attestations of the parent
+    pubs = []
+    balance_deltas = []
+    assert len(attestation_bitmask) == (len(attestation_indices) + 7) // 8
+    for i, index in enumerate(attestation_indices):
+        if attestation_bitmask[i//8] & (128>>(i%8)):
+            pubs.append(validator_set[index].pubkey)
+            balance_deltas.append((index << 24) + 1)
+    assert len(balance_deltas) <= 128
+    assert verify(msg, aggregate_pubs(pubs), aggregate_sig)
+    print('Verified aggregate sig')
+    return balance_deltas
+
+
+def update_ffg_and_crosslink_progress(crystallized_state, crosslinks, ffg_voter_bitmask, votes):
+    # Verify the attestations of crosslink hashes
+    crosslink_votes = {vote.shard_block_hash + vote.shard_id.to_bytes(2, 'big'):
+                        vote.voter_bitmask for vote in crosslinks} 
+    new_ffg_bitmask = bytearray(ffg_voter_bitmask)
+    total_voters = 0
+    for vote in votes:
+        attestation = get_crosslink_aggvote_msg(vote.shard_id, vote.shard_block_hash, crystallized_state)
+        indices = get_shard_attesters(crystallized_state, vote.shard_id)
+        votekey = vote.shard_block_hash + vote.shard_id.to_bytes(2, 'big')
+        if votekey not in crosslink_votes:
+            crosslink_votes[votekey] = bytearray((len(indices) + 7) // 8)
+        bitmask = crosslink_votes[votekey]
+        pubs = []
+        for i, index in enumerate(indices):
+            if vote.signer_bitmask[i//8] & (128>>(i%8)):
+                pubs.append(crystallized_state.active_validators[index].pubkey)
+                if new_ffg_bitmask[index//8] & (128>>(index%8)) == 0:
+                    new_ffg_bitmask[index//8] ^= 128>>(index%8)
+                    bitmask[i//8] ^= 128>>(i%8)
+                    total_voters += 1
+        assert verify(attestation, aggregate_pubs(pubs), vote.aggregate_sig)
+        crosslink_votes[votekey] = bitmask
+        print('Verified aggregate vote')
+    new_crosslinks = [PartialCrosslinkRecord(shard_id=int.from_bytes(h[32:], 'big'),
+                      shard_block_hash=h[:32], voter_bitmask=crosslink_votes[h])
+                      for h in sorted(crosslink_votes.keys())]
+    return new_crosslinks, new_ffg_bitmask, total_voters
 
 def compute_state_transition(parent_state, parent_block, block, verify_sig=True):
     crystallized_state, active_state = parent_state
@@ -342,7 +402,7 @@ def compute_state_transition(parent_state, parent_block, block, verify_sig=True)
         deltas1, total_vote_count, total_vote_deposits, justify, finalize = \
             process_ffg_deposits(crystallized_state, ffg_voter_bitmask)
         # Balance changes, and total vote counts for crosslinks
-        deltas2, new_crosslink_records = process_crosslinks(crystallized_state, active_state.checkpoints)
+        deltas2, new_crosslink_records = process_crosslinks(crystallized_state, active_state.partial_crosslinks)
         # Process other balance deltas
         deltas3 = process_balance_deltas(crystallized_state, active_state.balance_deltas)
         for i, v in enumerate(new_validator_records):
@@ -351,27 +411,12 @@ def compute_state_transition(parent_state, parent_block, block, verify_sig=True)
         print('New total deposits: %d' % total_deposits)
 
         if finalize:
-            new_active_validators = [v for v in crystallized_state.active_validators]
-            new_exited_validators = [v for v in crystallized_state.exited_validators]
-            i = 0
-            while i < len(new_active_validators):
-                if new_validator_records[i].balance <= DEFAULT_BALANCE // 2:
-                    new_exited_validators.append(new_validator_records.pop(i))
-                elif new_validator_records[i].switch_dynasty == crystallized_state.dynasty + 1:
-                    new_exited_validators.append(new_validator_records.pop(i))
-                else:
-                    i += 1
-            induct = min(len(crystallized_state.queued_validators), len(crystallized_state.active_validators) // 30 + 1)
-            for i in range(induct):
-                if crystallized_state.queued_validators[i].switch_dynasty > crystallized_state.dynasty + 1:
-                    induct = i
-                    break
-                new_active_validators.append(crystallized_state.queued_validators[i])
-            new_queued_validators = crystallized_state.queued_validators[induct:]
+            new_queued_validators, new_active_validators, new_exited_validators = \
+                get_incremented_validator_sets(crystallized_state, new_validator_records)
         else:
-            new_queued_validators = crystallized_state.queued_validators
-            new_active_validators = crystallized_state.active_validators
-            new_exited_validators = crystallized_state.exited_validators
+            new_queued_validators, new_active_validators, new_exited_validators = \
+                crystallized_state.queued_validators, crystallized_state.active_validators, crystallized_state.exited_validators
+
         crystallized_state = CrystallizedState(
             queued_validators=new_queued_validators,
             active_validators=new_active_validators,
@@ -390,63 +435,41 @@ def compute_state_transition(parent_state, parent_block, block, verify_sig=True)
                                    randao=active_state.randao,
                                    ffg_voter_bitmask=bytearray((len(crystallized_state.active_validators) + 7) // 8),
                                    balance_deltas=[],
-                                   checkpoints=[],
+                                   partial_crosslinks=[],
                                    total_skip_count=active_state.total_skip_count)
     # Process the block-by-block stuff
 
-    # Verify the attestations of the parent
+    # Determine who the attesters and the main signer are
     attestation_indices, main_signer = \
         get_attesters_and_signer(crystallized_state, active_state, block.skip_count)
-    pubs = []
-    balance_deltas = []
-    assert len(block.attestation_bitmask) == (len(attestation_indices) + 7) // 8
-    for i, index in enumerate(attestation_indices):
-        if block.attestation_bitmask[i//8] & (128>>(i%8)):
-            pubs.append(crystallized_state.active_validators[index].pubkey)
-            balance_deltas.append((index << 8) + 1)
-    assert len(balance_deltas) <= 128
-    balance_deltas.append((main_signer << 8) + len(balance_deltas))
-    assert verify(parent_block.hash, aggregate_pubs(pubs), block.attestation_aggregate_sig)
-    print('Verified aggregate sig')
 
-    # Verify the attestations of checkpoint hashes
-    checkpoint_votes = {vote.checkpoint_hash + vote.shard_id.to_bytes(2, 'big'):
-                        vote.voter_bitmask for vote in active_state.checkpoints} 
-    new_ffg_bitmask = bytearray(active_state.ffg_voter_bitmask)
-    for vote in block.shard_aggregate_votes:
-        attestation = get_checkpoint_aggvote_msg(vote.shard_id, vote.checkpoint_hash, crystallized_state)
-        indices = get_shard_attesters(crystallized_state, vote.shard_id)
-        votekey = vote.checkpoint_hash + vote.shard_id.to_bytes(2, 'big')
-        if votekey not in checkpoint_votes:
-            checkpoint_votes[votekey] = bytearray((len(indices) + 7) // 8)
-        bitmask = checkpoint_votes[votekey]
-        pubs = []
-        voters = 0
-        for i, index in enumerate(indices):
-            if vote.signer_bitmask[i//8] & (128>>(i%8)):
-                pubs.append(crystallized_state.active_validators[index].pubkey)
-                if new_ffg_bitmask[index//8] & (128>>(index%8)) == 0:
-                    new_ffg_bitmask[index//8] ^= 128>>(index%8)
-                    bitmask[i//8] ^= 128>>(i%8)
-                    voters += 1
-        assert verify(attestation, aggregate_pubs(pubs), vote.aggregate_sig)
-        balance_deltas.append((main_signer << 8) + (voters * 16 // len(indices)))
-        checkpoint_votes[votekey] = bitmask
-        print('Verified aggregate vote')
+    # Verify attestations
+    balance_deltas = process_attestations(crystallized_state.active_validators,
+                                          attestation_indices,
+                                          block.attestation_bitmask,
+                                          serialize(parent_block),
+                                          block.attestation_aggregate_sig)
+    # Reward main signer
+    balance_deltas.append((main_signer << 24) + len(balance_deltas))
+
+    # Verify main signature
+    if verify_sig:
+        assert block.verify(crystallized_state.active_validators[main_signer].pubkey)
+        print('Verified main sig')
+
+    # Update crosslink records
+    new_crosslink_records, new_ffg_bitmask, voters = \
+        update_ffg_and_crosslink_progress(crystallized_state, active_state.partial_crosslinks,
+                                          active_state.ffg_voter_bitmask, block.shard_aggregate_votes)
+    balance_deltas.append((main_signer << 24) + voters)
     
     o =  ActiveState(height=active_state.height + 1,
                      randao=(int.from_bytes(active_state.randao, 'big') ^ 
                              int.from_bytes(block.randao_reveal, 'big')).to_bytes(32, 'big'),
                      total_skip_count=active_state.total_skip_count + block.skip_count,
-                     checkpoints=[CheckpointRecord(shard_id=int.from_bytes(h[32:], 'big'),
-                                  checkpoint_hash=h[:32], voter_bitmask=checkpoint_votes[h])
-                                  for h in sorted(checkpoint_votes.keys())],
+                     partial_crosslinks=new_crosslink_records,
                      ffg_voter_bitmask=new_ffg_bitmask,
                      balance_deltas=active_state.balance_deltas + balance_deltas)
-
-    if verify_sig:
-        assert block.verify(crystallized_state.active_validators[main_signer].pubkey)
-        print('Verified main sig')
                        
     return crystallized_state, o
 
@@ -475,7 +498,7 @@ def mk_genesis_state_and_block(pubkeys):
         randao=b'\x45'*32,
         ffg_voter_bitmask=bytearray((len(c.active_validators) + 7) // 8),
         balance_deltas=[],
-        checkpoints=[],
+        partial_crosslinks=[],
         total_skip_count=0)
     b = Block(parent_hash=b'\x00'*32,
         skip_count=0,
