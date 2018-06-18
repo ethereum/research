@@ -458,7 +458,7 @@ We present the pseudocode for the ``clique oracle'' that uses this result to det
 
     fault\_tolerance = 2*clique\_weight - total\_weight
 
-    \eIf{fault\_tolerance + initial\_fault\_weight $>$ $t$}
+    \eIf{fault\_tolerance - initial\_fault\_weight $>$ $t$}
     {
       \Return{True}
     }{
