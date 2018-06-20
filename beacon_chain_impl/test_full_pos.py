@@ -6,7 +6,7 @@ import bls
 from simpleserialize import serialize, deserialize, eq, deepcopy
 import time
 
-privkeys = [int.from_bytes(blake(str(i).encode('utf-8'))[:4], 'big') for i in range(1000)]
+privkeys = [int.from_bytes(blake(str(i).encode('utf-8'))[:4], 'big') for i in range(100000)]
 print('Generated privkeys')
 keymap = {}
 for i,k in enumerate(privkeys):
