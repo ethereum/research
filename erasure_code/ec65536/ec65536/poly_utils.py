@@ -23,7 +23,8 @@ for i in range(two_to_the_degree_m1):
     gexptable.append(v)
     v = galoistpl(v)
 
-gexptable += gexptable + gexptable
+gexptable += gexptable + gexptable + [0] * two_to_the_degree * 4
+glogtable[0] = two_to_the_degree_m1 * 3
 
 # Add two values in the Galois field
 def galois_add(x, y):
@@ -34,11 +35,11 @@ galois_sub = galois_add
 
 # Multiply two values in the Galois field
 def galois_mul(x, y):
-    return 0 if x*y == 0 else gexptable[glogtable[x] + glogtable[y]]
+    return gexptable[glogtable[x] + glogtable[y]]
 
 # Divide two values in the Galois field
 def galois_div(x, y):
-    return 0 if x == 0 else gexptable[(glogtable[x] - glogtable[y]) % two_to_the_degree_m1]
+    return gexptable[glogtable[x] - glogtable[y] + two_to_the_degree_m1]
 
 # Evaluate a polynomial at a point
 def eval_poly_at(p, x):
@@ -100,9 +101,42 @@ def lagrange_interp(pieces, xs):
                 b[j] ^= gexptable[glogtable[nums[i][j]] + log_yslice]
     return b
 
+def add_polys(a, b):
+    return [(a[i] if i < len(a) else 0) ^ (b[i] if i < len(b) else 0)
+            for i in range(max(len(a), len(b)))]
 
-a = 124
-b = 8932
-c = 12415
+def mul_by_const(a, c):
+    logc = glogtable[c]
+    return [gexptable[glogtable[x] + logc] for x in a]
 
-assert galois_mul(galois_add(a, b), c) == galois_add(galois_mul(a, c), galois_mul(b, c))
+def mul_polys(a, b):
+    o = [0] * (len(a) + len(b) - 1)
+    for i, aval in enumerate(a):
+        for j, bval in enumerate(b):
+            o[i+j] ^= gexptable[glogtable[a[i]] + glogtable[b[j]]]
+    return o
+
+def div_polys(a, b):
+    assert len(a) >= len(b)
+    a = [x for x in a]
+    o = []
+    apos = len(a) - 1
+    bpos = len(b) - 1
+    diff = apos - bpos
+    while diff >= 0:
+        quot = gexptable[glogtable[a[apos]] - glogtable[b[bpos]] + two_to_the_degree_m1]
+        o.insert(0, quot)
+        for i in range(bpos, -1, -1):
+            a[diff+i] ^= gexptable[glogtable[b[i]] + glogtable[quot]]
+        apos -= 1
+        diff -= 1
+    return o
+
+def compose_polys(a, b):
+    o = []
+    p = [1]
+    for c in a:
+        o = add_polys(o, mul_by_const(p, c))
+        p = mul_polys(p, b)
+    return o
+
