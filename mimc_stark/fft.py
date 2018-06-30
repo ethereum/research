@@ -32,9 +32,3 @@ def mul_polys(a, b, modulus, root_of_unity):
     x2 = fft(b, modulus, root_of_unity)
     return fft([(v1*v2)%modulus for v1,v2 in zip(x1,x2)],
                modulus, root_of_unity, inv=True)
-
-def div_polys(a, b, modulus, root_of_unity):
-    x1 = fft(a, modulus, root_of_unity)
-    x2 = fft(b, modulus, root_of_unity)
-    return fft([(v1*pow(v2,modulus-2,modulus))%modulus for v1,v2 in zip(x1,x2)],
-               modulus, root_of_unity, inv=True)

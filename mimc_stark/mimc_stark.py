@@ -1,7 +1,7 @@
 from merkle_tree import merkelize, mk_branch, verify_branch, blake
 from compression import compress_fri, decompress_fri, compress_branches, decompress_branches, bin_length
 from ecpoly import PrimeField
-from fft import fft, mul_polys, div_polys
+from fft import fft, mul_polys
 import time
 
 modulus = 2**256 - 2**32 * 351 + 1
@@ -82,10 +82,6 @@ def prove_low_degree(poly, root_of_unity, values, maxdeg_plus_1):
     branches = []
     for y in ys:
         branches.append([mk_branch(m2, y)] + [mk_branch(m, y + (len(xs) // 4) * j) for j in range(4)])
-
-    #for j in range(4):
-    #    assert values[ys[0] + len(xs) // 4 * j] == eval_as_bivariate(poly, xs[ys[0] + len(xs) // 4 * j], xs[ys[0] * 4])
-    #assert column[ys[0]] == eval_as_bivariate(poly, special_x, xs[ys[0] * 4])
 
     # This component of the proof
     o = [m2[1], branches]
@@ -178,13 +174,14 @@ def mimc(inp, logsteps, logprecision):
     steps = 2**logsteps
     precision = 2**logprecision
     # Get (steps)th root of unity
-    root = pow(7, (modulus-1)//precision, modulus)
-    xs = get_power_cycle(root)
+    subroot = pow(7, (modulus-1)//steps, modulus)
+    xs = get_power_cycle(subroot)
     for i in range(steps-1):
         inp = (inp**3 + xs[i]) % modulus
     print("MIMC computed in %.4f sec" % (time.time() - start_time))
     return inp
 
+# Convert a polynomial P(x) into a polynomial Q(x) = P(fac * x)
 def multiply_base(poly, fac):
     o = []
     r = 1
@@ -193,6 +190,12 @@ def multiply_base(poly, fac):
         r = r * fac % modulus
     return o
 
+# Divides a polynomial by x^n-1
+def divide_by_xnm1(poly, n):
+    if len(poly) <= n:
+        return []
+    return f.add_polys(poly[n:], divide_by_xnm1(poly[n:], n))
+
 # Generate a STARK for a MIMC calculation
 def mk_mimc_proof(inp, logsteps, logprecision):
     start_time = time.time()
@@ -200,18 +203,21 @@ def mk_mimc_proof(inp, logsteps, logprecision):
     steps = 2**logsteps
     precision = 2**logprecision
 
-    # Get (steps)th root of unity
+    # Root of unity such that x^precision=1
     root = pow(7, (modulus-1)//precision, modulus)
-    # Powers of the root of unity, our computational trace will be
-    # along the sequence of roots of unity
-    xs = get_power_cycle(root)
 
+    # Root of unity such that x^skips=1
     skips = precision // steps
     subroot = pow(root, skips)
+
+    # Powers of the root of unity, our computational trace will be
+    # along the sequence of roots of unity
+    xs = get_power_cycle(subroot)
+
     # Generate the computational trace
     values = [inp]
     for i in range(steps-1):
-        values.append((values[-1]**3 + xs[i*skips]) % modulus)
+        values.append((values[-1]**3 + xs[i]) % modulus)
     print('Done generating computational trace')
 
     # Interpolate the computational trace into a polynomial
@@ -229,18 +235,11 @@ def mk_mimc_proof(inp, logsteps, logprecision):
     c_of_values = f.sub_polys(f.sub_polys(term1, term2), [0, 1])
     print('Computed C(P) polynomial')
 
-    #for i in range(steps-1):
-    #    assert f.eval_poly_at(c_of_values, xs[i*skips]) == 0
-    #print('C(P(x)) check passed')
-
-    # Compute the Z(x) polynomial that is 0 along the trace
-    z = fft([0] * (steps-1) + [1],
-            modulus, subroot, inv=True)
-    # z2 = f.zpoly(xs[:skips*(steps-1):skips])
-    print('Computed Z polynomial')
-
     # Compute D(x) = C(P(x)) / Z(x)
-    d = f.div_polys(c_of_values, z)
+    # Z(x) = (x^steps - 1) / (x - x_atlast_step)
+    d = divide_by_xnm1(f.mul_polys(c_of_values,
+                                   [modulus-xs[steps-1], 1]),
+                       steps)
     # assert f.mul_polys(d, z) == c_of_values
     print('Computed D polynomial')
 
@@ -257,7 +256,7 @@ def mk_mimc_proof(inp, logsteps, logprecision):
     # Do some spot checks of the Merkle tree at pseudo-random coordinates
     branches = []
     samples = spot_check_security_factor // (logprecision - logsteps)
-    positions = get_indices(blake(p_mtree[1] + d_mtree[1]), len(xs) - skips, samples)
+    positions = get_indices(blake(p_mtree[1] + d_mtree[1]), precision - skips, samples)
     for pos in positions:
         branches.append(mk_branch(p_mtree, pos))
         branches.append(mk_branch(p_mtree, pos + skips))
@@ -278,7 +277,7 @@ def mk_mimc_proof(inp, logsteps, logprecision):
     return o
 
 # Verifies a STARK
-def verify_mimc_proof(inp, logsteps, logprecision, output, zvalues, proof):
+def verify_mimc_proof(inp, logsteps, logprecision, output, proof):
     p_root, d_root, branches, p_proof, d_proof = proof
     start_time = time.time()
 
@@ -295,7 +294,7 @@ def verify_mimc_proof(inp, logsteps, logprecision, output, zvalues, proof):
 
     # Performs the spot checks
     samples = spot_check_security_factor // (logprecision - logsteps)
-    positions = get_indices(blake(p_root + d_root), len(xs) - skips, samples)
+    positions = get_indices(blake(p_root + d_root), precision - skips, samples)
     for i, pos in enumerate(positions):
 
         # Check C(P(x)) = Z(x) * D(x)
@@ -303,7 +302,9 @@ def verify_mimc_proof(inp, logsteps, logprecision, output, zvalues, proof):
         p_of_x = verify_branch(p_root, pos, branches[i*3])
         p_of_rx = verify_branch(p_root, pos+skips, branches[i*3 + 1])
         d_of_x = verify_branch(d_root, pos, branches[i*3 + 2])
-        assert (p_of_rx - p_of_x ** 3 - x - zvalues[pos] * d_of_x) % modulus == 0
+        zvalue = f.div(pow(x, steps, modulus) - 1,
+                       x - pow(root_of_unity, (steps - 1) * skips, modulus))
+        assert (p_of_rx - p_of_x ** 3 - x - zvalue * d_of_x) % modulus == 0
 
     print('Verified %d consistency checks' % (spot_check_security_factor // (logprecision - logsteps)))
     print('Verified STARK in %.4f sec' % (time.time() - start_time))
@@ -321,9 +322,5 @@ L3 = bin_length(compress_fri(proof[4]))
 print("Approx proof length: %d (branches), %d (FRI proof 1), %d (FRI proof 2), %d (total)" % (L1, L2, L3, L1 + L2 + L3))
 root_of_unity = pow(7, (modulus-1)//2**LOGPRECISION, modulus)
 subroot = pow(7, (modulus-1)//2**LOGSTEPS, modulus)
-xs = get_power_cycle(root_of_unity)
 skips = 2**(LOGPRECISION - LOGSTEPS)
-zpoly = fft([0] * (2**LOGSTEPS-1) + [1],
-        modulus, subroot, inv=True)
-zpoly_vals = fft(zpoly, modulus, root_of_unity)
-assert verify_mimc_proof(3, LOGSTEPS, LOGPRECISION, mimc(3, LOGSTEPS, LOGPRECISION), zpoly_vals, proof)
+assert verify_mimc_proof(3, LOGSTEPS, LOGPRECISION, mimc(3, LOGSTEPS, LOGPRECISION), proof)

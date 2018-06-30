@@ -7,7 +7,7 @@ def compress_fri(prf):
             o.append(x)
 
     for root, yproofs in prf[:-1]:
-        print('Adding proof item, pos %d' % len(o))
+        # print('Adding proof item, pos %d' % len(o))
         add_obj(b'----')
         add_obj(root)
         for yproof in yproofs:
@@ -17,7 +17,7 @@ def compress_fri(prf):
                 add_obj(b'++++')
             add_obj(b'====')
 
-    print('Adding final proof, pos %d' % len(o))
+    # print('Adding final proof, pos %d' % len(o))
     add_obj(b'////')
     for x in prf[-1]:
         add_obj(x)
@@ -30,7 +30,7 @@ def decompress_fri(proof):
     o = []
     pos = 0
     while proof[pos] != b'////':
-        print("Processing proof item", pos)
+        # print("Processing proof item", pos)
         assert get_obj(pos) == b'----'
         root = get_obj(pos + 1)
         pos += 2
@@ -47,7 +47,7 @@ def decompress_fri(proof):
             yproofs.append(yproof)
             pos += 1
         o.append([root, yproofs])
-    print('Processing final proof, pos %d' % pos)
+    # print('Processing final proof, pos %d' % pos)
     pos += 1
     o.append([get_obj(x) for x in range(pos, len(proof))])
     return o
