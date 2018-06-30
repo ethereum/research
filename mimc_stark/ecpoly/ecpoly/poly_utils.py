@@ -24,6 +24,8 @@ class PrimeField():
         return lm % self.modulus
 
     def div(self, x, y):
+        if x == 0 and y == 0:
+            return 1
         return self.mul(x, self.inv(y))
 
     # Evaluate a polynomial at a point

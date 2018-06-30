@@ -185,6 +185,14 @@ def mimc(inp, logsteps, logprecision):
     print("MIMC computed in %.4f sec" % (time.time() - start_time))
     return inp
 
+def multiply_base(poly, fac):
+    o = []
+    r = 1
+    for p in poly:
+        o.append(p * r % modulus)
+        r = r * fac % modulus
+    return o
+
 # Generate a STARK for a MIMC calculation
 def mk_mimc_proof(inp, logsteps, logprecision):
     start_time = time.time()
@@ -216,7 +224,7 @@ def mk_mimc_proof(inp, logsteps, logprecision):
 
     # Create the composed polynomial such that
     # C(P(x), P(rx)) = P(rx) - P(x)**3 - x
-    term1 = f.compose_polys(values_polynomial, [0, subroot])
+    term1 = multiply_base(values_polynomial, subroot)
     term2 = fft([pow(x, 3, modulus) for x in fft(values_polynomial, modulus, root)], modulus, root, inv=True)[:len(values_polynomial) * 3 - 2]
     c_of_values = f.sub_polys(f.sub_polys(term1, term2), [0, 1])
     print('Computed C(P) polynomial')
@@ -302,8 +310,8 @@ def verify_mimc_proof(inp, logsteps, logprecision, output, zvalues, proof):
     return True
 
 INPUT = 3
-LOGSTEPS = 15
-LOGPRECISION = 18
+LOGSTEPS = 13
+LOGPRECISION = 16
 
 # Full STARK test
 proof = mk_mimc_proof(INPUT, LOGSTEPS, LOGPRECISION)
