@@ -1,6 +1,15 @@
+def _simple_ft(vals, modulus, roots_of_unity):
+    L = len(roots_of_unity)
+    o = [0 for _ in range(L)]
+    for i in range(L):
+        for j in range(L):
+            o[i] += vals[j] * roots_of_unity[(i*j)%L]
+    return [x % modulus for x in o]
+
 def _fft(vals, modulus, roots_of_unity):
     if len(vals) == 1:
         return vals
+        # return _simple_ft(vals, modulus, roots_of_unity)
     L = _fft(vals[::2], modulus, roots_of_unity[::2])
     R = _fft(vals[1::2], modulus, roots_of_unity[::2])
     o = [0 for i in vals]
@@ -8,7 +17,6 @@ def _fft(vals, modulus, roots_of_unity):
         y_times_root = y*roots_of_unity[i]
         o[i] = (x+y_times_root) % modulus 
         o[i+len(L)] = (x-y_times_root) % modulus 
-    # print(vals, root_of_unity, o)
     return o
 
 def fft(vals, modulus, root_of_unity, inv=False):
@@ -22,10 +30,11 @@ def fft(vals, modulus, root_of_unity, inv=False):
     if inv:
         # Inverse FFT
         invlen = pow(len(vals), modulus-2, modulus)
-        return [(x*invlen) % modulus for x in _fft(vals, modulus, rootz[::-1])]
+        return [(x*invlen) % modulus for x in
+                _fft(vals, modulus, rootz[:0:-1])]
     else:
         # Regular FFT
-        return _fft(vals, modulus, rootz)
+        return _fft(vals, modulus, rootz[:-1])
 
 def mul_polys(a, b, modulus, root_of_unity):
     x1 = fft(a, modulus, root_of_unity)

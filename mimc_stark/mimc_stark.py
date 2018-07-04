@@ -1,8 +1,9 @@
 from merkle_tree import merkelize, mk_branch, verify_branch, blake
 from compression import compress_fri, decompress_fri, compress_branches, decompress_branches, bin_length
 from ecpoly import PrimeField
-from fft import fft, mul_polys
+from better_lagrange import lagrange_interp_4
 import time
+from fft import fft
 
 modulus = 2**256 - 2**32 * 351 + 1
 f = PrimeField(modulus)
@@ -13,18 +14,6 @@ quartic_roots_of_unity = [1,
                           pow(7, (modulus-1)*3//4, modulus)]
 
 spot_check_security_factor = 240
-
-# Treat a polynomial as a bivariate polynomial g(x, y) and
-# evaluate it as such. Invariant: eval_as_bivariate(p, x, x**4) = eval(p, x)
-def eval_as_bivariate(p, x, y):
-    o = 0
-    ypow = 1
-    xpows = [pow(x, i, modulus) for i in range(4)]
-    for i in range(0, len(p), 4):
-        for j in range(4):
-            o += xpows[j] * ypow * p[i+j]
-        ypow = (ypow * y) % modulus
-    return o % modulus
 
 # Get the set of powers of R, until but not including when the powers
 # loop back to 1
@@ -68,9 +57,10 @@ def prove_low_degree(poly, root_of_unity, values, maxdeg_plus_1):
     # directly, as this is more efficient
     column = []
     for i in range(len(xs)//4):
-        x_poly = f.lagrange_interp(
+        x_poly = lagrange_interp_4(
             [values[i+len(values)*j//4] for j in range(4)],
-            [xs[i+len(xs)*j//4] for j in range(4)]
+            [xs[i+len(xs)*j//4] for j in range(4)],
+            modulus
         )
         column.append(f.eval_poly_at(x_poly, special_x))
     m2 = merkelize(column)
@@ -119,12 +109,12 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1):
 
 
         # Verify for each selected y coordinate that the four points from the polynomial
-        # and the one point from the column that are on that y coordinate are on a
+        # and the one point from the column that are on that y coordinate are on the same
         # deg < 4 polynomial
         for i, y in enumerate(ys):
-            # The five x coordinates we are checking
+            # The x coordinates from the polynomial
             x1 = pow(root_of_unity, y, modulus)
-            eckses = [special_x] + [(quartic_roots_of_unity[j] * x1) % modulus for j in range(4)]
+            xcoords = [(quartic_roots_of_unity[j] * x1) % modulus for j in range(4)]
 
             # The values from the polynomial
             row = [verify_branch(merkle_root, y + (roudeg // 4) * j, prf) for j, prf in zip(range(4), branches[i][1:])]
@@ -133,8 +123,8 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1):
             values = [verify_branch(root2, y, branches[i][0])] + row
 
             # Lagrange interpolate and check deg is < 4
-            p = f.lagrange_interp(values, eckses)
-            assert p[4] == 0
+            p = lagrange_interp_4(row, xcoords, modulus)
+            assert f.eval_poly_at(p, special_x) == verify_branch(root2, y, branches[i][0])
 
         # Update constants to check the next proof
         merkle_root = root2
@@ -175,9 +165,11 @@ def mimc(inp, logsteps, logprecision):
     precision = 2**logprecision
     # Get (steps)th root of unity
     subroot = pow(7, (modulus-1)//steps, modulus)
-    xs = get_power_cycle(subroot)
+    # We use powers of 9 mod 2^256 as the ith round constant for the moment
+    k = 1
     for i in range(steps-1):
-        inp = (inp**3 + xs[i]) % modulus
+        inp = (inp**3 + (k ^ 1)) % modulus
+        k = (k * 9) & ((1 << 256) - 1)
     print("MIMC computed in %.4f sec" % (time.time() - start_time))
     return inp
 
@@ -215,27 +207,30 @@ def mk_mimc_proof(inp, logsteps, logprecision):
     xs = get_power_cycle(subroot)
 
     # Generate the computational trace
+    constants = []
     values = [inp]
+    k = 1
     for i in range(steps-1):
-        values.append((values[-1]**3 + xs[i]) % modulus)
+        values.append((values[-1]**3 + (k ^ 1)) % modulus)
+        constants.append(k ^ 1)
+        k = (k * 9) & ((1 << 256) - 1)
+    constants.append(0)
     print('Done generating computational trace')
 
     # Interpolate the computational trace into a polynomial
-    # values_polynomial = f.lagrange_interp(values, [pow(subroot, i, modulus) for i in range(steps)])
     values_polynomial = fft(values, modulus, subroot, inv=True)
-    print('Computed polynomial')
-
-    #for x, v in zip(xs, values):
-    #    assert f.eval_poly_at(values_polynomial, x) == v
+    constants_polynomial = fft(constants, modulus, subroot, inv=True)
+    print('Converted computational steps and constants into a polynomial')
 
     # Create the composed polynomial such that
-    # C(P(x), P(rx)) = P(rx) - P(x)**3 - x
+    # C(P(x), P(rx), K(x)) = P(rx) - P(x)**3 - K(x)
     term1 = multiply_base(values_polynomial, subroot)
-    term2 = fft([pow(x, 3, modulus) for x in fft(values_polynomial, modulus, root)], modulus, root, inv=True)[:len(values_polynomial) * 3 - 2]
-    c_of_values = f.sub_polys(f.sub_polys(term1, term2), [0, 1])
-    print('Computed C(P) polynomial')
+    p_evaluations = fft(values_polynomial, modulus, root)
+    term2 = fft([pow(x, 3, modulus) for x in p_evaluations], modulus, root, inv=True)[:len(values_polynomial) * 3 - 2]
+    c_of_values = f.sub_polys(f.sub_polys(term1, term2), constants_polynomial)
+    print('Computed C(P, K) polynomial')
 
-    # Compute D(x) = C(P(x)) / Z(x)
+    # Compute D(x) = C(P(x), P(rx), K(x)) / Z(x)
     # Z(x) = (x^steps - 1) / (x - x_atlast_step)
     d = divide_by_xnm1(f.mul_polys(c_of_values,
                                    [modulus-xs[steps-1], 1]),
@@ -243,42 +238,55 @@ def mk_mimc_proof(inp, logsteps, logprecision):
     # assert f.mul_polys(d, z) == c_of_values
     print('Computed D polynomial')
 
-    # Evaluate P and D across the entire subgroup
-    p_evaluations = fft(values_polynomial, modulus, root)
+    # Evaluate D and K across the entire subgroup
     d_evaluations = fft(d, modulus, root)
-    print('Evaluated P and D')
+    k_evaluations = fft(constants_polynomial, modulus, root)
+    print('Evaluated P, D and K')
 
     # Compute their Merkle roots
     p_mtree = merkelize(p_evaluations)
     d_mtree = merkelize(d_evaluations)
+    k_mtree = merkelize(k_evaluations)
     print('Computed hash root')
+
+    # Based on the hashes of P and D, we select a random linear combination
+    # of P * x^steps and D, and prove the low-degreeness of that, instead of proving
+    # the low-degreeness of P and D separately
+    k = int.from_bytes(blake(p_mtree[1] + d_mtree[1]), 'big')
+
+    lincomb = f.add_polys(d, f.mul_by_const([0] * steps + values_polynomial, k))
+    l_evaluations = fft(lincomb, modulus, root)
+    l_mtree = merkelize(l_evaluations)
+
+    print('Computed random linear combination')
 
     # Do some spot checks of the Merkle tree at pseudo-random coordinates
     branches = []
     samples = spot_check_security_factor // (logprecision - logsteps)
-    positions = get_indices(blake(p_mtree[1] + d_mtree[1]), precision - skips, samples)
+    positions = get_indices(l_mtree[1], precision - skips, samples)
     for pos in positions:
         branches.append(mk_branch(p_mtree, pos))
         branches.append(mk_branch(p_mtree, pos + skips))
         branches.append(mk_branch(d_mtree, pos))
+        branches.append(mk_branch(k_mtree, pos))
+        branches.append(mk_branch(l_mtree, pos))
     print('Computed %d spot checks' % samples)
 
-    while len(d) < steps * 2:
-        d += [0]
 
     # Return the Merkle roots of P and D, the spot check Merkle proofs,
     # and low-degree proofs of P and D
     o = [p_mtree[1],
          d_mtree[1],
+         k_mtree[1],
+         l_mtree[1],
          branches,
-         prove_low_degree(values_polynomial, root, p_evaluations, steps),
-         prove_low_degree(d, root, d_evaluations, steps * 2)]
+         prove_low_degree(lincomb, root, l_evaluations, steps * 2)]
     print("STARK computed in %.4f sec" % (time.time() - start_time))
     return o
 
 # Verifies a STARK
 def verify_mimc_proof(inp, logsteps, logprecision, output, proof):
-    p_root, d_root, branches, p_proof, d_proof = proof
+    p_root, d_root, k_root, l_root, branches, fri_proof = proof
     start_time = time.time()
 
     steps = 2**logsteps
@@ -289,37 +297,42 @@ def verify_mimc_proof(inp, logsteps, logprecision, output, proof):
     skips = precision // steps
 
     # Verifies the low-degree proofs
-    assert verify_low_degree_proof(p_root, root_of_unity, p_proof, steps)
-    assert verify_low_degree_proof(d_root, root_of_unity, d_proof, steps * 2)
+    assert verify_low_degree_proof(l_root, root_of_unity, fri_proof, steps * 2)
 
     # Performs the spot checks
+    k = int.from_bytes(blake(p_root + d_root), 'big')
     samples = spot_check_security_factor // (logprecision - logsteps)
-    positions = get_indices(blake(p_root + d_root), precision - skips, samples)
+    positions = get_indices(l_root, precision - skips, samples)
     for i, pos in enumerate(positions):
 
         # Check C(P(x)) = Z(x) * D(x)
         x = pow(root_of_unity, pos, modulus)
-        p_of_x = verify_branch(p_root, pos, branches[i*3])
-        p_of_rx = verify_branch(p_root, pos+skips, branches[i*3 + 1])
-        d_of_x = verify_branch(d_root, pos, branches[i*3 + 2])
+        p_of_x = verify_branch(p_root, pos, branches[i*5])
+        p_of_rx = verify_branch(p_root, pos+skips, branches[i*5 + 1])
+        d_of_x = verify_branch(d_root, pos, branches[i*5 + 2])
+        k_of_x = verify_branch(k_root, pos, branches[i*5 + 3])
+        l_of_x = verify_branch(l_root, pos, branches[i*5 + 4])
         zvalue = f.div(pow(x, steps, modulus) - 1,
                        x - pow(root_of_unity, (steps - 1) * skips, modulus))
-        assert (p_of_rx - p_of_x ** 3 - x - zvalue * d_of_x) % modulus == 0
+        assert (p_of_rx - p_of_x ** 3 - k_of_x - zvalue * d_of_x) % modulus == 0
+        assert (l_of_x - d_of_x - k * p_of_x * pow(x, steps, modulus)) % modulus == 0
 
     print('Verified %d consistency checks' % (spot_check_security_factor // (logprecision - logsteps)))
     print('Verified STARK in %.4f sec' % (time.time() - start_time))
+    print('Note: this does not include verifying the Merkle root of the constants tree')
+    print('This can be done by every client once as a precomputation')
     return True
 
 INPUT = 3
-LOGSTEPS = 13
-LOGPRECISION = 16
+LOGSTEPS = 17
+LOGPRECISION = 20
 
 # Full STARK test
 proof = mk_mimc_proof(INPUT, LOGSTEPS, LOGPRECISION)
-L1 = bin_length(compress_branches(proof[2]))
-L2 = bin_length(compress_fri(proof[3]))
-L3 = bin_length(compress_fri(proof[4]))
-print("Approx proof length: %d (branches), %d (FRI proof 1), %d (FRI proof 2), %d (total)" % (L1, L2, L3, L1 + L2 + L3))
+p_root, d_root, k_root, l_root, branches, fri_proof = proof
+L1 = bin_length(compress_branches(branches))
+L2 = bin_length(compress_fri(fri_proof))
+print("Approx proof length: %d (branches), %d (FRI proof), %d (total)" % (L1, L2, L1 + L2))
 root_of_unity = pow(7, (modulus-1)//2**LOGPRECISION, modulus)
 subroot = pow(7, (modulus-1)//2**LOGSTEPS, modulus)
 skips = 2**(LOGPRECISION - LOGSTEPS)
