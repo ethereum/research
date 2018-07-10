@@ -2,7 +2,7 @@ def compress_fri(prf):
     o = []
     def add_obj(x):
         if x in o:
-            o.append(o.index(x).to_bytes(3, 'big'))
+            o.append(o.index(x).to_bytes(2, 'big'))
         else:
             o.append(x)
 
@@ -26,7 +26,7 @@ def compress_fri(prf):
 
 def decompress_fri(proof):
     def get_obj(pos):
-        return proof[int.from_bytes(proof[pos], 'big')] if len(proof[pos]) == 3 else proof[pos]
+        return proof[int.from_bytes(proof[pos], 'big')] if len(proof[pos]) == 2 else proof[pos]
     o = []
     pos = 0
     while proof[pos] != b'////':
@@ -56,7 +56,7 @@ def compress_branches(branches):
     o = []
     def add_obj(x):
         if x in o:
-            o.append(o.index(x).to_bytes(3, 'big'))
+            o.append(o.index(x).to_bytes(2, 'big'))
         else:
             o.append(x)
 
@@ -69,7 +69,7 @@ def compress_branches(branches):
 
 def decompress_branches(proof):
     def get_obj(pos):
-        return proof[int.from_bytes(proof[pos], 'big')] if len(proof[pos]) == 3 else proof[pos]
+        return proof[int.from_bytes(proof[pos], 'big')] if len(proof[pos]) == 2 else proof[pos]
     o = []
     pos = 0
     while pos < len(proof):

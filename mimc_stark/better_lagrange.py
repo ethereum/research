@@ -13,7 +13,7 @@ def eval_poly_at(poly, x, modulus):
     o, p = 0, 1
     for coeff in poly:
         o += coeff * p
-        p *= x
+        p = (p * x % modulus)
     return o % modulus
 
 def lagrange_interp_4(pieces, xs, modulus):
@@ -35,3 +35,13 @@ def lagrange_interp_4(pieces, xs, modulus):
     inv_y2 = pieces[2] * invall * e01 * e3 % modulus
     inv_y3 = pieces[3] * invall * e01 * e2 % modulus
     return [(eq0[i] * inv_y0 + eq1[i] * inv_y1 + eq2[i] * inv_y2 + eq3[i] * inv_y3) % modulus for i in range(4)]
+
+def lagrange_interp_2(pieces, xs, modulus):
+    eq0 = [-xs[1] % modulus, 1]
+    eq1 = [-xs[0] % modulus, 1]
+    e0 = eval_poly_at(eq0, xs[0], modulus)
+    e1 = eval_poly_at(eq1, xs[1], modulus)
+    invall = inv(e0 * e1, modulus)
+    inv_y0 = pieces[0] * invall * e1
+    inv_y1 = pieces[1] * invall * e0
+    return [(eq0[i] * inv_y0 + eq1[i] * inv_y1) % modulus for i in range(2)]

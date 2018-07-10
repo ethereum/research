@@ -30,8 +30,4 @@ def verify_branch(root, index, proof):
     assert v == root
     return int.from_bytes(proof[0], 'big')
 
-t = merkelize(range(128))
-b = mk_branch(t, 59)
-assert verify_branch(t[1], 59, b) == 59
-print('Merkle tree works')
 
