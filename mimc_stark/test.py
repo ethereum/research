@@ -12,25 +12,36 @@ def test_merkletree():
     
 def test_fri():
     # Pure FRI tests
-    poly = list(range(512))
-    root_of_unity = pow(7, (modulus-1)//1024, modulus)
+    poly = list(range(4096))
+    root_of_unity = pow(7, (modulus-1)//16384, modulus)
     evaluations = fft(poly, modulus, root_of_unity)
-    proof = prove_low_degree(poly, root_of_unity, evaluations, 512, modulus)
+    proof = prove_low_degree(evaluations, root_of_unity, 4096, modulus)
     print("Approx proof length: %d" % bin_length(compress_fri(proof)))
-    assert verify_low_degree_proof(merkelize(evaluations)[1], root_of_unity, proof, 512, modulus)
+    assert verify_low_degree_proof(merkelize(evaluations)[1], root_of_unity, proof, 4096, modulus)
+    
+    try:
+        fakedata = [x if pow(3, i, 4096) > 400 else 39 for x, i in enumerate(evaluations)]
+        proof2 = prove_low_degree(fakedata, root_of_unity, 4096, modulus)
+        assert verify_low_degree_proof(merkelize(fakedata)[1], root_of_unity, proof, 4096, modulus)
+        raise Exception("Fake data passed FRI")
+    except:
+        pass
+    try:
+        assert verify_low_degree_proof(merkelize(evaluations)[1], root_of_unity, proof, 2048, modulus)
+        raise Exception("Fake data passed FRI")
+    except:
+        pass
 
 def test_stark():
     INPUT = 3
     LOGSTEPS = 13
-    LOGPRECISION = 16
-    
     # Full STARK test
-    proof = mk_mimc_proof(INPUT, LOGSTEPS, LOGPRECISION)
+    proof = mk_mimc_proof(INPUT, LOGSTEPS)
     p_root, d_root, k_root, b_root, l_root, branches, fri_proof = proof
     L1 = bin_length(compress_branches(branches))
     L2 = bin_length(compress_fri(fri_proof))
     print("Approx proof length: %d (branches), %d (FRI proof), %d (total)" % (L1, L2, L1 + L2))
-    root_of_unity = pow(7, (modulus-1)//2**LOGPRECISION, modulus)
-    subroot = pow(7, (modulus-1)//2**LOGSTEPS, modulus)
-    skips = 2**(LOGPRECISION - LOGSTEPS)
-    assert verify_mimc_proof(3, LOGSTEPS, LOGPRECISION, mimc(3, LOGSTEPS, LOGPRECISION), proof)
+    assert verify_mimc_proof(3, LOGSTEPS, mimc(3, LOGSTEPS), proof)
+
+if __name__ == '__main__':
+    test_stark()

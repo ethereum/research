@@ -1,3 +1,5 @@
+# Creates an object that includes convenience operations for numbers
+# and polynomials in some prime field
 class PrimeField():
     def __init__(self, modulus):
         assert pow(2, modulus, modulus) == 2
@@ -12,9 +14,13 @@ class PrimeField():
     def mul(self, x, y):
         return (x*y) % self.modulus
 
+    def exp(self, x, p):
+        return pow(x, p, self.modulus)
+
+    # Modular inverse using the extended Euclidean algorithm
     def inv(self, a):
         if a == 0:
-            return 0
+            raise Exception("Cannot invert 0")
         lm, hm = 1, 0
         low, high = a % self.modulus, self.modulus
         while low > 1:
@@ -24,14 +30,10 @@ class PrimeField():
         return lm % self.modulus
 
     def div(self, x, y):
-        if x == 0 and y == 0:
-            return 1
         return self.mul(x, self.inv(y))
 
     # Evaluate a polynomial at a point
     def eval_poly_at(self, p, x):
-        if x == 0:
-            return p[0]
         y = 0
         power_of_x = 1
         for i, p_coeff in enumerate(p):
@@ -39,7 +41,7 @@ class PrimeField():
             power_of_x = (power_of_x * x) % self.modulus
         return y % self.modulus
 
-    # Build a polynomial that returns 0 at all xs
+    # Build a polynomial that returns 0 at all specified xs
     def zpoly(self, xs):
         root = [1]
         for x in xs:
@@ -56,35 +58,62 @@ class PrimeField():
     #    y coordinate at that point and 0 at all other points provided.
     # 3. Add these polynomials together.
     
-    def lagrange_interp(self, pieces, xs):
+    def lagrange_interp(self, xs, ys):
         # Generate master numerator polynomial, eg. (x - x1) * (x - x2) * ... * (x - xn)
         root = self.zpoly(xs)
-        #print(root)
-        assert len(root) == len(pieces) + 1
+        assert len(root) == len(ys) + 1
         # print(root)
         # Generate per-value numerator polynomials, eg. for x=x2,
         # (x - x1) * (x - x3) * ... * (x - xn), by dividing the master
         # polynomial back by each x coordinate
-        nums = []
-        for x in xs:
-            output = [0] * (len(root) - 2) + [1]
-            for j in range(len(root) - 2, 0, -1):
-                output[j-1] = root[j] + output[j] * x
-            assert len(output) == len(pieces)
-            nums.append(output)
-        #print(nums)
+        nums = [self.div_polys(root, [-x, 1]) for x in xs]
         # Generate denominators by evaluating numerator polys at each x
         denoms = [self.eval_poly_at(nums[i], xs[i]) for i in range(len(xs))]
         # Generate output polynomial, which is the sum of the per-value numerator
         # polynomials rescaled to have the right y values
-        b = [0 for p in pieces]
+        b = [0 for y in ys]
         for i in range(len(xs)):
-            yslice = self.div(pieces[i], denoms[i])
-            for j in range(len(pieces)):
-                if nums[i][j] and pieces[i]:
+            yslice = self.div(ys[i], denoms[i])
+            for j in range(len(ys)):
+                if nums[i][j] and ys[i]:
                     b[j] += nums[i][j] * yslice
         return [x % self.modulus for x in b]
+
+    # Optimized version of the above restricted to deg-4 polynomials
+    def lagrange_interp_4(self, xs, ys):
+        x01, x02, x03, x12, x13, x23 = \
+            xs[0] * xs[1], xs[0] * xs[2], xs[0] * xs[3], xs[1] * xs[2], xs[1] * xs[3], xs[2] * xs[3]
+        m = self.modulus
+        eq0 = [-x12 * xs[3] % m, (x12 + x13 + x23), -xs[1]-xs[2]-xs[3], 1]
+        eq1 = [-x02 * xs[3] % m, (x02 + x03 + x23), -xs[0]-xs[2]-xs[3], 1]
+        eq2 = [-x01 * xs[3] % m, (x01 + x03 + x13), -xs[0]-xs[1]-xs[3], 1]
+        eq3 = [-x01 * xs[2] % m, (x01 + x02 + x12), -xs[0]-xs[1]-xs[2], 1]
+        e0 = self.eval_poly_at(eq0, xs[0])
+        e1 = self.eval_poly_at(eq1, xs[1])
+        e2 = self.eval_poly_at(eq2, xs[2])
+        e3 = self.eval_poly_at(eq3, xs[3])
+        e01 = e0 * e1
+        e23 = e2 * e3
+        invall = self.inv(e01 * e23)
+        inv_y0 = ys[0] * invall * e1 * e23 % m
+        inv_y1 = ys[1] * invall * e0 * e23 % m
+        inv_y2 = ys[2] * invall * e01 * e3 % m
+        inv_y3 = ys[3] * invall * e01 * e2 % m
+        return [(eq0[i] * inv_y0 + eq1[i] * inv_y1 + eq2[i] * inv_y2 + eq3[i] * inv_y3) % m for i in range(4)]
     
+    # Optimized version of the above restricted to deg-2 polynomials
+    def lagrange_interp_2(self, xs, ys):
+        m = self.modulus
+        eq0 = [-xs[1] % m, 1]
+        eq1 = [-xs[0] % m, 1]
+        e0 = self.eval_poly_at(eq0, xs[0])
+        e1 = self.eval_poly_at(eq1, xs[1])
+        invall = self.inv(e0 * e1)
+        inv_y0 = ys[0] * invall * e1
+        inv_y1 = ys[1] * invall * e0
+        return [(eq0[i] * inv_y0 + eq1[i] * inv_y1) % m for i in range(2)]
+        
+    # Arithmetic for polynomials
     def add_polys(self, a, b):
         return [((a[i] if i < len(a) else 0) + (b[i] if i < len(b) else 0))
                 % self.modulus for i in range(max(len(a), len(b)))]
@@ -118,7 +147,14 @@ class PrimeField():
             apos -= 1
             diff -= 1
         return [x % self.modulus for x in o]
+
+    # Divides a polynomial by x^n-1
+    def divide_by_xnm1(self, poly, n):
+        if len(poly) <= n:
+            return []
+        return self.add_polys(poly[n:], self.divide_by_xnm1(poly[n:], n))
     
+    # Returns P(x) = A(B(x))
     def compose_polys(self, a, b):
         o = []
         p = [1]
@@ -126,4 +162,13 @@ class PrimeField():
             o = self.add_polys(o, self.mul_by_const(p, c))
             p = self.mul_polys(p, b)
         return o
-    
+
+    # Convert a polynomial P(x) into a polynomial Q(x) = P(fac * x)
+    # Equivalent to compose_polys(poly, [0, fac])
+    def multiply_base(self, poly, fac):
+        o = []
+        r = 1
+        for p in poly:
+            o.append(p * r % self.modulus)
+            r = r * fac % self.modulus
+        return o
