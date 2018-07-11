@@ -20,3 +20,6 @@ def get_pseudorandom_indices(seed, modulus, count, exclude_multiples_of=0):
         real_modulus = modulus * (exclude_multiples_of - 1) // exclude_multiples_of
         o = [int.from_bytes(data[i: i+4], 'big') % real_modulus for i in range(0, count * 4, 4)]
         return [x+1+x//(exclude_multiples_of-1) for x in o]
+
+def is_a_power_of_2(x):
+    return True if x==1 else False if x%2 else is_a_power_of_2(x//2)

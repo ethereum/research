@@ -30,7 +30,6 @@ def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus, exclude_mult
 
     # Select a pseudo-random x coordinate
     special_x = int.from_bytes(m[1], 'big') % modulus
-    special_x = root_of_unity + 5
 
     # Calculate the "column" at that x coordinate
     # (see https://vitalik.ca/general/2017/11/22/starks_part_2.html)
@@ -90,7 +89,6 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, mo
 
         # Calculate the pseudo-random x coordinate
         special_x = int.from_bytes(merkle_root, 'big') % modulus
-        special_x = root_of_unity + 5
 
         # Calculate the pseudo-randomly sampled y indices
         ys = get_pseudorandom_indices(root2, roudeg // 4, 40,

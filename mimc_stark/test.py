@@ -40,12 +40,12 @@ def test_stark():
     import random
     #constants = [random.randrange(modulus) for i in range(64)]
     constants = [(i**7) ^ 42 for i in range(64)]
-    proof = mk_mimc_proof(INPUT, LOGSTEPS, constants)
+    proof = mk_mimc_proof(INPUT, 2**LOGSTEPS, constants)
     p_root, d_root, b_root, l_root, branches, fri_proof = proof
     L1 = bin_length(compress_branches(branches))
     L2 = bin_length(compress_fri(fri_proof))
     print("Approx proof length: %d (branches), %d (FRI proof), %d (total)" % (L1, L2, L1 + L2))
-    assert verify_mimc_proof(3, LOGSTEPS, constants, mimc(3, LOGSTEPS, constants), proof)
+    assert verify_mimc_proof(3, 2**LOGSTEPS, constants, mimc(3, 2**LOGSTEPS, constants), proof)
 
 if __name__ == '__main__':
     test_stark()

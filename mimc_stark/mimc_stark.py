@@ -4,7 +4,7 @@ from poly_utils import PrimeField
 import time
 from fft import fft
 from fri import prove_low_degree, verify_low_degree_proof
-from utils import get_power_cycle, get_pseudorandom_indices
+from utils import get_power_cycle, get_pseudorandom_indices, is_a_power_of_2
 
 modulus = 2**256 - 2**32 * 351 + 1
 f = PrimeField(modulus)
@@ -13,20 +13,22 @@ nonresidue = 7
 spot_check_security_factor = 80
 extension_factor = 8
 
-# Compute a MIMC permutation for 2**logsteps steps
-def mimc(inp, logsteps, round_constants):
+# Compute a MIMC permutation for some number of steps
+def mimc(inp, steps, round_constants):
     start_time = time.time()
-    steps = 2**logsteps
     for i in range(steps-1):
         inp = (inp**3 + round_constants[i % len(round_constants)]) % modulus
     print("MIMC computed in %.4f sec" % (time.time() - start_time))
     return inp
 
 # Generate a STARK for a MIMC calculation
-def mk_mimc_proof(inp, logsteps, round_constants):
+def mk_mimc_proof(inp, steps, round_constants):
     start_time = time.time()
-    assert logsteps <= 29
-    steps = 2**logsteps
+    # Some constraints to make our job easier
+    assert steps <= 2**32 // extension_factor
+    assert is_a_power_of_2(steps) and is_a_power_of_2(len(round_constants))
+    assert len(round_constants) < steps
+
     precision = steps * extension_factor
 
     # Root of unity such that x^precision=1
@@ -140,11 +142,13 @@ def mk_mimc_proof(inp, logsteps, round_constants):
     return o
 
 # Verifies a STARK
-def verify_mimc_proof(inp, logsteps, round_constants, output, proof):
+def verify_mimc_proof(inp, steps, round_constants, output, proof):
     p_root, d_root, b_root, l_root, branches, fri_proof = proof
     start_time = time.time()
+    assert steps <= 2**32 // extension_factor
+    assert is_a_power_of_2(steps) and is_a_power_of_2(len(round_constants))
+    assert len(round_constants) < steps
 
-    steps = 2**logsteps
     precision = steps * extension_factor
 
     # Get (steps)th root of unity
