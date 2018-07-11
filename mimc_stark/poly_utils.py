@@ -29,6 +29,17 @@ class PrimeField():
             lm, low, hm, high = nm, new, lm, low
         return lm % self.modulus
 
+    def multi_inv(self, values):
+        partials = [1]
+        for i in range(len(values)):
+            partials.append(self.mul(partials[-1], values[i]))
+        inv = self.inv(partials[-1])
+        outputs = [0] * len(values)
+        for i in range(len(values), 0, -1):
+            outputs[i-1] = self.mul(partials[i-1], inv)
+            inv = self.mul(inv, values[i-1])
+        return outputs
+
     def div(self, x, y):
         return self.mul(x, self.inv(y))
 

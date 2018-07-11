@@ -13,19 +13,16 @@ nonresidue = 7
 spot_check_security_factor = 240
 
 # Compute a MIMC permutation for 2**logsteps steps
-def mimc(inp, logsteps):
+def mimc(inp, logsteps, round_constants):
     start_time = time.time()
     steps = 2**logsteps
-    # We use powers of 9 mod 2^256 XORed with 1 as the ith round constant for the moment
-    k = 1
     for i in range(steps-1):
-        inp = (inp**3 + (k ^ 1)) % modulus
-        k = (k * 9) & ((1 << 256) - 1)
+        inp = (inp**3 + round_constants[i % len(round_constants)]) % modulus
     print("MIMC computed in %.4f sec" % (time.time() - start_time))
     return inp
 
 # Generate a STARK for a MIMC calculation
-def mk_mimc_proof(inp, logsteps):
+def mk_mimc_proof(inp, logsteps, round_constants):
     start_time = time.time()
     assert logsteps <= 29
     logprecision = logsteps + 3
@@ -45,28 +42,30 @@ def mk_mimc_proof(inp, logsteps):
     last_step_position = xs[steps-1]
 
     # Generate the computational trace
-    constants = []
     values = [inp]
-    k = 1
     for i in range(steps-1):
-        values.append((values[-1]**3 + (k ^ 1)) % modulus)
-        constants.append(k ^ 1)
-        k = (k * 9) & ((1 << 256) - 1)
-    constants.append(0)
+        values.append((values[-1]**3 + round_constants[i % len(round_constants)]) % modulus)
     output = values[-1]
     print('Done generating computational trace')
 
     # Interpolate the computational trace into a polynomial
     values_polynomial = fft(values, modulus, subroot, inv=True)
-    constants_polynomial = fft(constants, modulus, subroot, inv=True)
-    print('Converted computational steps and constants into a polynomial')
+    p_evaluations = fft(values_polynomial, modulus, root_of_unity)
+    print('Converted computational steps into a polynomial and low-degree extended it')
+
+    skips2 = steps // len(round_constants)
+    constants_mini_polynomial = fft(round_constants, modulus, f.exp(subroot, skips2), inv=True)
+    constants_polynomial = [0 if i % skips2 else constants_mini_polynomial[i//skips2] for i in range(steps)]
+    constants_mini_extension = fft(constants_mini_polynomial, modulus, f.exp(root_of_unity, skips2))
+    print('Converted round constants into a polynomial and low-degree extended it')
 
     # Create the composed polynomial such that
     # C(P(x), P(rx), K(x)) = P(rx) - P(x)**3 - K(x)
     term1 = f.multiply_base(values_polynomial, subroot)
-    p_evaluations = fft(values_polynomial, modulus, root_of_unity)
     term2 = fft([f.exp(x, 3) for x in p_evaluations], modulus, root_of_unity, inv=True)[:len(values_polynomial) * 3 - 2]
     c_of_values = f.sub_polys(f.sub_polys(term1, term2), constants_polynomial)
+    c_of_p_evaluations = [(p_evaluations[(i+8)%precision] - f.exp(p_evaluations[i], 3) -
+                          constants_mini_extension[i % len(constants_mini_extension)]) % modulus for i in range(precision)]
     print('Computed C(P, K) polynomial')
 
     # Compute D(x) = C(P(x), P(rx), K(x)) / Z(x)
@@ -90,16 +89,14 @@ def mk_mimc_proof(inp, logsteps):
     #     f.eval_poly_at(values_polynomial, 7045)
     print('Computed B polynomial')
 
-    # Evaluate B, D and K across the entire subgroup
+    # Evaluate B and D across the entire subgroup
     d_evaluations = fft(d, modulus, root_of_unity)
-    k_evaluations = fft(constants_polynomial, modulus, root_of_unity)
     b_evaluations = fft(b, modulus, root_of_unity)
-    print('Evaluated low-degree extension of B, D and K')
+    print('Evaluated low-degree extension of B and D')
 
     # Compute their Merkle roots
     p_mtree = merkelize(p_evaluations)
     d_mtree = merkelize(d_evaluations)
-    k_mtree = merkelize(k_evaluations)
     b_mtree = merkelize(b_evaluations)
     print('Computed hash root')
 
@@ -133,7 +130,6 @@ def mk_mimc_proof(inp, logsteps):
         branches.append(mk_branch(p_mtree, pos))
         branches.append(mk_branch(p_mtree, pos + skips))
         branches.append(mk_branch(d_mtree, pos))
-        branches.append(mk_branch(k_mtree, pos))
         branches.append(mk_branch(b_mtree, pos))
         branches.append(mk_branch(l_mtree, pos))
     print('Computed %d spot checks' % samples)
@@ -142,7 +138,6 @@ def mk_mimc_proof(inp, logsteps):
     # and low-degree proofs of P and D
     o = [p_mtree[1],
          d_mtree[1],
-         k_mtree[1],
          b_mtree[1],
          l_mtree[1],
          branches,
@@ -151,8 +146,8 @@ def mk_mimc_proof(inp, logsteps):
     return o
 
 # Verifies a STARK
-def verify_mimc_proof(inp, logsteps, output, proof):
-    p_root, d_root, k_root, b_root, l_root, branches, fri_proof = proof
+def verify_mimc_proof(inp, logsteps, round_constants, output, proof):
+    p_root, d_root, b_root, l_root, branches, fri_proof = proof
     start_time = time.time()
 
     logprecision = logsteps + 3
@@ -162,6 +157,10 @@ def verify_mimc_proof(inp, logsteps, output, proof):
     # Get (steps)th root of unity
     root_of_unity = f.exp(7, (modulus-1)//precision)
     skips = precision // steps
+
+    # Gets the polynomial representing the round constants
+    skips2 = steps // len(round_constants)
+    constants_mini_polynomial = fft(round_constants, modulus, f.exp(root_of_unity, 8 * skips2), inv=True)
 
     # Verifies the low-degree proofs
     assert verify_low_degree_proof(l_root, root_of_unity, fri_proof, steps * 2, modulus)
@@ -177,14 +176,15 @@ def verify_mimc_proof(inp, logsteps, output, proof):
     for i, pos in enumerate(positions):
         x = f.exp(root_of_unity, pos)
         x_to_the_steps = f.exp(x, steps)
-        p_of_x = verify_branch(p_root, pos, branches[i*6])
-        p_of_rx = verify_branch(p_root, pos+skips, branches[i*6 + 1])
-        d_of_x = verify_branch(d_root, pos, branches[i*6 + 2])
-        k_of_x = verify_branch(k_root, pos, branches[i*6 + 3])
-        b_of_x = verify_branch(b_root, pos, branches[i*6 + 4])
-        l_of_x = verify_branch(l_root, pos, branches[i*6 + 5])
+        p_of_x = verify_branch(p_root, pos, branches[i*5])
+        p_of_rx = verify_branch(p_root, pos+skips, branches[i*5 + 1])
+        d_of_x = verify_branch(d_root, pos, branches[i*5 + 2])
+        b_of_x = verify_branch(b_root, pos, branches[i*5 + 3])
+        l_of_x = verify_branch(l_root, pos, branches[i*5 + 4])
+
         zvalue = f.div(f.exp(x, steps) - 1,
                        x - last_step_position)
+        k_of_x = f.eval_poly_at(constants_mini_polynomial, f.exp(x, skips2))
 
         # Check transition constraints C(P(x)) = Z(x) * D(x)
         assert (p_of_rx - p_of_x ** 3 - k_of_x - zvalue * d_of_x) % modulus == 0
@@ -202,6 +202,4 @@ def verify_mimc_proof(inp, logsteps, output, proof):
 
     print('Verified %d consistency checks' % (spot_check_security_factor // (logprecision - logsteps)))
     print('Verified STARK in %.4f sec' % (time.time() - start_time))
-    print('Note: this does not include verifying the Merkle root of the constants tree')
-    print('This can be done by every client once as a precomputation')
     return True
