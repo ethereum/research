@@ -10,13 +10,13 @@ from poly_utils import PrimeField
 # We use maxdeg+1 instead of maxdeg because it's more mathematically
 # convenient in this case.
 
-def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus):
+def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus, exclude_multiples_of=0):
     f = PrimeField(modulus)
     print('Proving %d values are degree <= %d' % (len(values), maxdeg_plus_1))
 
     # If the degree we are checking for is less than or equal to 32,
     # use the polynomial directly as a proof
-    if maxdeg_plus_1 <= 32:
+    if maxdeg_plus_1 <= 16:
         print('Produced FRI proof')
         return [[x.to_bytes(32, 'big') for x in values]]
 
@@ -30,6 +30,7 @@ def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus):
 
     # Select a pseudo-random x coordinate
     special_x = int.from_bytes(m[1], 'big') % modulus
+    special_x = root_of_unity + 5
 
     # Calculate the "column" at that x coordinate
     # (see https://vitalik.ca/general/2017/11/22/starks_part_2.html)
@@ -45,7 +46,7 @@ def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus):
     m2 = merkelize(column)
 
     # Pseudo-randomly select y indices to sample
-    ys = get_pseudorandom_indices(m2[1], len(column), 40)
+    ys = get_pseudorandom_indices(m2[1], len(column), 40, exclude_multiples_of=exclude_multiples_of)
 
     # Compute the Merkle branches for the values in the polynomial and the column
     branches = []
@@ -63,10 +64,10 @@ def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus):
 
     # Recurse...
     return [o] + prove_low_degree(column, f.exp(root_of_unity, 4),
-                                  maxdeg_plus_1 // 4, modulus)
+                                  maxdeg_plus_1 // 4, modulus, exclude_multiples_of=exclude_multiples_of)
 
 # Verify an FRI proof
-def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, modulus):
+def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, modulus, exclude_multiples_of=0):
     f = PrimeField(modulus)
 
     # Calculate which root of unity we're working with
@@ -89,10 +90,11 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, mo
 
         # Calculate the pseudo-random x coordinate
         special_x = int.from_bytes(merkle_root, 'big') % modulus
+        special_x = root_of_unity + 5
 
         # Calculate the pseudo-randomly sampled y indices
-        ys = get_pseudorandom_indices(root2, roudeg // 4, 40)
-
+        ys = get_pseudorandom_indices(root2, roudeg // 4, 40,
+                                      exclude_multiples_of=exclude_multiples_of)
 
         # Verify for each selected y coordinate that the four points from the
         # polynomial and the one point from the column that are on that y 
@@ -122,16 +124,23 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, mo
     # Verify the direct components of the proof
     data = [int.from_bytes(x, 'big') for x in proof[-1]]
     print('Verifying degree <= %d' % maxdeg_plus_1)
-    assert maxdeg_plus_1 <= 32
+    assert maxdeg_plus_1 <= 16
 
     # Check the Merkle root matches up
     mtree = merkelize(data)
     assert mtree[1] == merkle_root
 
     # Check the degree of the data
-    poly = fft(data, modulus, root_of_unity, inv=True)
-    for i in range(maxdeg_plus_1, len(poly)):
-        assert poly[i] == 0
+    powers = get_power_cycle(root_of_unity, modulus)
+    if exclude_multiples_of:
+        pts = [x for x in range(len(data)) if x % exclude_multiples_of]
+    else:
+        pts = range(len(data))
+
+    poly = f.lagrange_interp([powers[x] for x in pts[:maxdeg_plus_1]],
+                             [data[x] for x in pts[:maxdeg_plus_1]])
+    for x in pts[maxdeg_plus_1:]:
+        assert f.eval_poly_at(poly, powers[x]) == data[x]   
 
     print('FRI proof verified')
     return True

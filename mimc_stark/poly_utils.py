@@ -20,7 +20,7 @@ class PrimeField():
     # Modular inverse using the extended Euclidean algorithm
     def inv(self, a):
         if a == 0:
-            raise Exception("Cannot invert 0")
+            return 0
         lm, hm = 1, 0
         low, high = a % self.modulus, self.modulus
         while low > 1:
@@ -32,12 +32,12 @@ class PrimeField():
     def multi_inv(self, values):
         partials = [1]
         for i in range(len(values)):
-            partials.append(self.mul(partials[-1], values[i]))
+            partials.append(self.mul(partials[-1], values[i] or 1))
         inv = self.inv(partials[-1])
         outputs = [0] * len(values)
         for i in range(len(values), 0, -1):
-            outputs[i-1] = self.mul(partials[i-1], inv)
-            inv = self.mul(inv, values[i-1])
+            outputs[i-1] = self.mul(partials[i-1], inv) if values[i-1] else 0
+            inv = self.mul(inv, values[i-1] or 1)
         return outputs
 
     def div(self, x, y):
@@ -80,11 +80,12 @@ class PrimeField():
         nums = [self.div_polys(root, [-x, 1]) for x in xs]
         # Generate denominators by evaluating numerator polys at each x
         denoms = [self.eval_poly_at(nums[i], xs[i]) for i in range(len(xs))]
+        invdenoms = self.multi_inv(denoms)
         # Generate output polynomial, which is the sum of the per-value numerator
         # polynomials rescaled to have the right y values
         b = [0 for y in ys]
         for i in range(len(xs)):
-            yslice = self.div(ys[i], denoms[i])
+            yslice = self.mul(ys[i], invdenoms[i])
             for j in range(len(ys)):
                 if nums[i][j] and ys[i]:
                     b[j] += nums[i][j] * yslice

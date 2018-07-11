@@ -34,10 +34,12 @@ def test_fri():
 
 def test_stark():
     INPUT = 3
-    LOGSTEPS = 13
+    import sys
+    LOGSTEPS = int(sys.argv[1]) if len(sys.argv) > 1 else 13
     # Full STARK test
     import random
-    constants = [random.randrange(modulus) for i in range(64)]
+    #constants = [random.randrange(modulus) for i in range(64)]
+    constants = [(i**7) ^ 42 for i in range(64)]
     proof = mk_mimc_proof(INPUT, LOGSTEPS, constants)
     p_root, d_root, b_root, l_root, branches, fri_proof = proof
     L1 = bin_length(compress_branches(branches))
