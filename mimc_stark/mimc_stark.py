@@ -32,44 +32,46 @@ def mk_mimc_proof(inp, steps, round_constants):
     precision = steps * extension_factor
 
     # Root of unity such that x^precision=1
-    root_of_unity = f.exp(7, (modulus-1)//precision)
+    G2 = f.exp(7, (modulus-1)//precision)
 
-    # Root of unity such that x^skips=1
+    # Root of unity such that x^steps=1
     skips = precision // steps
-    subroot = f.exp(root_of_unity, skips)
+    G1 = f.exp(G2, skips)
 
-    # Powers of the root of unity, our computational trace will be
-    # along the sequence of sub-roots
-    xs = get_power_cycle(root_of_unity, modulus)
+    # Powers of the higher-order root of unity
+    xs = get_power_cycle(G2, modulus)
     last_step_position = xs[(steps-1)*extension_factor]
 
     # Generate the computational trace
-    values = [inp]
+    computational_trace = [inp]
     for i in range(steps-1):
-        values.append((values[-1]**3 + round_constants[i % len(round_constants)]) % modulus)
-    output = values[-1]
+        computational_trace.append(
+            (computational_trace[-1]**3 + round_constants[i % len(round_constants)]) % modulus
+        )
+    output = computational_trace[-1]
     print('Done generating computational trace')
 
-    # Interpolate the computational trace into a polynomial
-    values_polynomial = fft(values, modulus, subroot, inv=True)
-    p_evaluations = fft(values_polynomial, modulus, root_of_unity)
+    # Interpolate the computational trace into a polynomial P, with each step
+    # along a successive power of G1
+    computational_trace_polynomial = fft(computational_trace, modulus, G1, inv=True)
+    p_evaluations = fft(computational_trace_polynomial, modulus, G2)
     print('Converted computational steps into a polynomial and low-degree extended it')
 
     skips2 = steps // len(round_constants)
-    constants_mini_polynomial = fft(round_constants, modulus, f.exp(subroot, skips2), inv=True)
+    constants_mini_polynomial = fft(round_constants, modulus, f.exp(G1, skips2), inv=True)
     constants_polynomial = [0 if i % skips2 else constants_mini_polynomial[i//skips2] for i in range(steps)]
-    constants_mini_extension = fft(constants_mini_polynomial, modulus, f.exp(root_of_unity, skips2))
+    constants_mini_extension = fft(constants_mini_polynomial, modulus, f.exp(G2, skips2))
     print('Converted round constants into a polynomial and low-degree extended it')
 
     # Create the composed polynomial such that
-    # C(P(x), P(rx), K(x)) = P(rx) - P(x)**3 - K(x)
+    # C(P(x), P(g1*x), K(x)) = P(g1*x) - P(x)**3 - K(x)
     c_of_p_evaluations = [(p_evaluations[(i+extension_factor)%precision] -
                               f.exp(p_evaluations[i], 3) -
                               constants_mini_extension[i % len(constants_mini_extension)])
                           % modulus for i in range(precision)]
     print('Computed C(P, K) polynomial')
 
-    # Compute D(x) = C(P(x), P(rx), K(x)) / Z(x)
+    # Compute D(x) = C(P(x), P(g1*x), K(x)) / Z(x)
     # Z(x) = (x^steps - 1) / (x - x_atlast_step)
     z_num_evaluations = [xs[(i * steps) % precision] - 1 for i in range(precision)]
     z_num_inv = f.multi_inv(z_num_evaluations)
@@ -81,10 +83,10 @@ def mk_mimc_proof(inp, steps, round_constants):
     interpolant = f.lagrange_interp_2([1, last_step_position], [inp, output])
     i_evaluations = [f.eval_poly_at(interpolant, x) for x in xs]
 
-    quotient = f.mul_polys([-1, 1], [-last_step_position, 1])
-    inv_q_evaluations = f.multi_inv([f.eval_poly_at(quotient, x) for x in xs])
+    zeropoly2 = f.mul_polys([-1, 1], [-last_step_position, 1])
+    inv_z2_evaluations = f.multi_inv([f.eval_poly_at(zeropoly2, x) for x in xs])
 
-    b_evaluations = [((p - i) * invq) % modulus for p, i, invq in zip(p_evaluations, i_evaluations, inv_q_evaluations)]
+    b_evaluations = [((p - i) * invq) % modulus for p, i, invq in zip(p_evaluations, i_evaluations, inv_z2_evaluations)]
     print('Computed B polynomial')
 
     # Compute their Merkle roots
@@ -103,10 +105,10 @@ def mk_mimc_proof(inp, steps, round_constants):
 
     # Compute the linear combination. We don't even both calculating it in
     # coefficient form; we just compute the evaluations
-    root_of_unity_to_the_steps = f.exp(root_of_unity, steps)
+    G2_to_the_steps = f.exp(G2, steps)
     powers = [1]
     for i in range(1, precision):
-        powers.append(powers[-1] * root_of_unity_to_the_steps % modulus)
+        powers.append(powers[-1] * G2_to_the_steps % modulus)
 
     l_evaluations = [(d_evaluations[i] +
                       p_evaluations[i] * k1 + p_evaluations[i] * k2 * powers[i] +
@@ -137,7 +139,7 @@ def mk_mimc_proof(inp, steps, round_constants):
          b_mtree[1],
          l_mtree[1],
          branches,
-         prove_low_degree(l_evaluations, root_of_unity, steps * 2, modulus, exclude_multiples_of=extension_factor)]
+         prove_low_degree(l_evaluations, G2, steps * 2, modulus, exclude_multiples_of=extension_factor)]
     print("STARK computed in %.4f sec" % (time.time() - start_time))
     return o
 
@@ -152,15 +154,15 @@ def verify_mimc_proof(inp, steps, round_constants, output, proof):
     precision = steps * extension_factor
 
     # Get (steps)th root of unity
-    root_of_unity = f.exp(7, (modulus-1)//precision)
+    G2 = f.exp(7, (modulus-1)//precision)
     skips = precision // steps
 
     # Gets the polynomial representing the round constants
     skips2 = steps // len(round_constants)
-    constants_mini_polynomial = fft(round_constants, modulus, f.exp(root_of_unity, extension_factor * skips2), inv=True)
+    constants_mini_polynomial = fft(round_constants, modulus, f.exp(G2, extension_factor * skips2), inv=True)
 
     # Verifies the low-degree proofs
-    assert verify_low_degree_proof(l_root, root_of_unity, fri_proof, steps * 2, modulus, exclude_multiples_of=extension_factor)
+    assert verify_low_degree_proof(l_root, G2, fri_proof, steps * 2, modulus, exclude_multiples_of=extension_factor)
 
     # Performs the spot checks
     k1 = int.from_bytes(blake(p_root + d_root + b_root + b'\x01'), 'big')
@@ -170,12 +172,12 @@ def verify_mimc_proof(inp, steps, round_constants, output, proof):
     samples = spot_check_security_factor
     positions = get_pseudorandom_indices(l_root, precision, samples,
                                          exclude_multiples_of=extension_factor)
-    last_step_position = f.exp(root_of_unity, (steps - 1) * skips)
+    last_step_position = f.exp(G2, (steps - 1) * skips)
     for i, pos in enumerate(positions):
-        x = f.exp(root_of_unity, pos)
+        x = f.exp(G2, pos)
         x_to_the_steps = f.exp(x, steps)
         p_of_x = verify_branch(p_root, pos, branches[i*5])
-        p_of_rx = verify_branch(p_root, (pos+skips)%precision, branches[i*5 + 1])
+        p_of_g1x = verify_branch(p_root, (pos+skips)%precision, branches[i*5 + 1])
         d_of_x = verify_branch(d_root, pos, branches[i*5 + 2])
         b_of_x = verify_branch(b_root, pos, branches[i*5 + 3])
         l_of_x = verify_branch(l_root, pos, branches[i*5 + 4])
@@ -185,12 +187,12 @@ def verify_mimc_proof(inp, steps, round_constants, output, proof):
         k_of_x = f.eval_poly_at(constants_mini_polynomial, f.exp(x, skips2))
 
         # Check transition constraints C(P(x)) = Z(x) * D(x)
-        assert (p_of_rx - p_of_x ** 3 - k_of_x - zvalue * d_of_x) % modulus == 0
-        interpolant = f.lagrange_interp_2([1, last_step_position], [inp, output])
-        quotient = f.mul_polys([-1, 1], [-last_step_position, 1])
+        assert (p_of_g1x - p_of_x ** 3 - k_of_x - zvalue * d_of_x) % modulus == 0
 
         # Check boundary constraints B(x) * Q(x) + I(x) = P(x)
-        assert (p_of_x - b_of_x * f.eval_poly_at(quotient, x) -
+        interpolant = f.lagrange_interp_2([1, last_step_position], [inp, output])
+        zeropoly2 = f.mul_polys([-1, 1], [-last_step_position, 1])
+        assert (p_of_x - b_of_x * f.eval_poly_at(zeropoly2, x) -
                 f.eval_poly_at(interpolant, x)) % modulus == 0
 
         # Check correctness of the linear combination
