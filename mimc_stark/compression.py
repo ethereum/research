@@ -1,10 +1,12 @@
 def compress_fri(prf):
     o = []
+    oindex = {}
     def add_obj(x):
-        if x in o:
-            o.append(o.index(x).to_bytes(2, 'big'))
+        if x in oindex:
+            o.append(oindex[x].to_bytes(2, 'big'))
         else:
             o.append(x)
+            oindex[x] = len(o)-1
 
     for root, yproofs in prf[:-1]:
         # print('Adding proof item, pos %d' % len(o))
@@ -54,11 +56,13 @@ def decompress_fri(proof):
 
 def compress_branches(branches):
     o = []
+    oindex = {}
     def add_obj(x):
-        if x in o:
-            o.append(o.index(x).to_bytes(2, 'big'))
+        if x in oindex:
+            o.append(oindex[x].to_bytes(2, 'big'))
         else:
             o.append(x)
+            oindex[x] = len(o)-1
 
     for branch in branches:
         for p in branch:

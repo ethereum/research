@@ -1,6 +1,5 @@
 from merkle_tree import merkelize, mk_branch, verify_branch
 from utils import get_power_cycle, get_pseudorandom_indices
-from fft import fft
 from poly_utils import PrimeField
 
 # Generate an FRI proof that the polynomial that has the specified
@@ -33,15 +32,14 @@ def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus, exclude_mult
 
     # Calculate the "column" at that x coordinate
     # (see https://vitalik.ca/general/2017/11/22/starks_part_2.html)
-    # We calculate the column by Lagrange-interpolating the row, and not
+    # We calculate the column by Lagrange-interpolating each row, and not
     # directly from the polynomial, as this is more efficient
-    column = []
-    for i in range(len(xs)//4):
-        x_poly = f.lagrange_interp_4(
-            [xs[i+len(xs)*j//4] for j in range(4)],
-            [values[i+len(values)*j//4] for j in range(4)],
-        )
-        column.append(f.eval_poly_at(x_poly, special_x))
+    quarter_len = len(xs)//4
+    x_polys = f.multi_interp_4(
+        [[xs[i+quarter_len*j] for j in range(4)] for i in range(quarter_len)],
+        [[values[i+quarter_len*j] for j in range(4)] for i in range(quarter_len)]
+    )
+    column = [f.eval_quartic(p, special_x) for p in x_polys]
     m2 = merkelize(column)
 
     # Pseudo-randomly select y indices to sample
@@ -55,11 +53,6 @@ def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus, exclude_mult
 
     # This component of the proof
     o = [m2[1], branches]
-
-    # Interpolate the polynomial for the column
-    # sub_xs = [xs[i] for i in range(0, len(xs), 4)]
-    # ypoly = fft(column[:len(sub_xs)], modulus,
-    #            f.exp(root_of_unity, 4), inv=True)
 
     # Recurse...
     return [o] + prove_low_degree(column, f.exp(root_of_unity, 4),
@@ -94,24 +87,30 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, mo
         ys = get_pseudorandom_indices(root2, roudeg // 4, 40,
                                       exclude_multiples_of=exclude_multiples_of)
 
-        # Verify for each selected y coordinate that the four points from the
-        # polynomial and the one point from the column that are on that y 
-        # coordinate are on the same deg < 4 polynomial
+        # For each y coordinate, get the x coordinates on the row, the values on
+        # the row, and the value at that y from the column
+        xcoords = []
+        rows = []
+        columnvals = []
         for i, y in enumerate(ys):
             # The x coordinates from the polynomial
             x1 = f.exp(root_of_unity, y)
-            xcoords = [(quartic_roots_of_unity[j] * x1) % modulus for j in range(4)]
+            xcoords.append([(quartic_roots_of_unity[j] * x1) % modulus for j in range(4)])
 
-            # The values from the polynomial
+            # The values from the original polynomial
             row = [verify_branch(merkle_root, y + (roudeg // 4) * j, prf)
                    for j, prf in zip(range(4), branches[i][1:])]
+            rows.append(row)
 
-            # Verify proof and recover the column value
-            values = [verify_branch(root2, y, branches[i][0])] + row
+            columnvals.append(verify_branch(root2, y, branches[i][0]))
 
-            # Lagrange interpolate and check deg is < 4
-            p = f.lagrange_interp_4(xcoords, row)
-            assert f.eval_poly_at(p, special_x) == verify_branch(root2, y, branches[i][0])
+        # Verify for each selected y coordinate that the four points from the
+        # polynomial and the one point from the column that are on that y 
+        # coordinate are on the same deg < 4 polynomial
+        polys = f.multi_interp_4(xcoords, rows)
+
+        for p, c in zip(polys, columnvals):
+            assert f.eval_quartic(p, special_x) == c
 
         # Update constants to check the next proof
         merkle_root = root2

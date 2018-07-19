@@ -1,13 +1,15 @@
 def _simple_ft(vals, modulus, roots_of_unity):
     L = len(roots_of_unity)
-    o = [0 for _ in range(L)]
+    o = []
     for i in range(L):
+        last = 0
         for j in range(L):
-            o[i] += vals[j] * roots_of_unity[(i*j)%L]
-    return [x % modulus for x in o]
+            last += vals[j] * roots_of_unity[(i*j)%L]
+        o.append(last % modulus)
+    return o
 
 def _fft(vals, modulus, roots_of_unity):
-    if len(vals) == 1:
+    if len(vals) <= 1:
         return vals
         # return _simple_ft(vals, modulus, roots_of_unity)
     L = _fft(vals[::2], modulus, roots_of_unity[::2])

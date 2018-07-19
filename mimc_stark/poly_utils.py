@@ -126,6 +126,12 @@ class PrimeField():
                     b[j] += nums[i][j] * yslice
         return [x % self.modulus for x in b]
 
+    # Optimized poly evaluation for degree 4
+    def eval_quartic(self, p, x):
+        xsq = x * x % self.modulus
+        xcb = xsq * x
+        return (p[0] + p[1] * x + p[2] * xsq + p[3] * xcb) % self.modulus
+
     # Optimized version of the above restricted to deg-4 polynomials
     def lagrange_interp_4(self, xs, ys):
         x01, x02, x03, x12, x13, x23 = \
@@ -159,3 +165,33 @@ class PrimeField():
         inv_y0 = ys[0] * invall * e1
         inv_y1 = ys[1] * invall * e0
         return [(eq0[i] * inv_y0 + eq1[i] * inv_y1) % m for i in range(2)]
+
+    # Optimized version of the above restricted to deg-4 polynomials
+    def multi_interp_4(self, xsets, ysets):
+        data = []
+        invtargets = []
+        for xs, ys in zip(xsets, ysets):
+            x01, x02, x03, x12, x13, x23 = \
+                xs[0] * xs[1], xs[0] * xs[2], xs[0] * xs[3], xs[1] * xs[2], xs[1] * xs[3], xs[2] * xs[3]
+            m = self.modulus
+            eq0 = [-x12 * xs[3] % m, (x12 + x13 + x23), -xs[1]-xs[2]-xs[3], 1]
+            eq1 = [-x02 * xs[3] % m, (x02 + x03 + x23), -xs[0]-xs[2]-xs[3], 1]
+            eq2 = [-x01 * xs[3] % m, (x01 + x03 + x13), -xs[0]-xs[1]-xs[3], 1]
+            eq3 = [-x01 * xs[2] % m, (x01 + x02 + x12), -xs[0]-xs[1]-xs[2], 1]
+            e0 = self.eval_quartic(eq0, xs[0])
+            e1 = self.eval_quartic(eq1, xs[1])
+            e2 = self.eval_quartic(eq2, xs[2])
+            e3 = self.eval_quartic(eq3, xs[3])
+            data.append([ys, eq0, eq1, eq2, eq3])
+            invtargets.extend([e0, e1, e2, e3])
+        invalls = self.multi_inv(invtargets)
+        o = []
+        for (i, (ys, eq0, eq1, eq2, eq3)) in enumerate(data):
+            invallz = invalls[i*4:i*4+4]
+            inv_y0 = ys[0] * invallz[0] % m
+            inv_y1 = ys[1] * invallz[1] % m
+            inv_y2 = ys[2] * invallz[2] % m
+            inv_y3 = ys[3] * invallz[3] % m
+            o.append([(eq0[i] * inv_y0 + eq1[i] * inv_y1 + eq2[i] * inv_y2 + eq3[i] * inv_y3) % m for i in range(4)])
+        # assert o == [self.lagrange_interp_4(xs, ys) for xs, ys in zip(xsets, ysets)]
+        return o
