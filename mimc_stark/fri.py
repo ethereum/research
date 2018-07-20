@@ -98,11 +98,11 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, mo
             xcoords.append([(quartic_roots_of_unity[j] * x1) % modulus for j in range(4)])
 
             # The values from the original polynomial
-            row = [verify_branch(merkle_root, y + (roudeg // 4) * j, prf)
+            row = [verify_branch(merkle_root, y + (roudeg // 4) * j, prf, output_as_int=True)
                    for j, prf in zip(range(4), branches[i][1:])]
             rows.append(row)
 
-            columnvals.append(verify_branch(root2, y, branches[i][0]))
+            columnvals.append(verify_branch(root2, y, branches[i][0], output_as_int=True))
 
         # Verify for each selected y coordinate that the four points from the
         # polynomial and the one point from the column that are on that y 

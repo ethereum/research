@@ -89,19 +89,20 @@ def mk_mimc_proof(inp, steps, round_constants):
     b_evaluations = [((p - i) * invq) % modulus for p, i, invq in zip(p_evaluations, i_evaluations, inv_z2_evaluations)]
     print('Computed B polynomial')
 
-    # Compute their Merkle roots
-    p_mtree = merkelize(p_evaluations)
-    d_mtree = merkelize(d_evaluations)
-    b_mtree = merkelize(b_evaluations)
+    # Compute their Merkle root
+    mtree = merkelize([pval.to_bytes(32, 'big') +
+                       dval.to_bytes(32, 'big') +
+                       bval.to_bytes(32, 'big') for
+                       pval, dval, bval in zip(p_evaluations, d_evaluations, b_evaluations)])
     print('Computed hash root')
 
     # Based on the hashes of P, D and B, we select a random linear combination
     # of P * x^steps, P, B * x^steps, B and D, and prove the low-degreeness of that,
     # instead of proving the low-degreeness of P, B and D separately
-    k1 = int.from_bytes(blake(p_mtree[1] + d_mtree[1] + b_mtree[1] + b'\x01'), 'big')
-    k2 = int.from_bytes(blake(p_mtree[1] + d_mtree[1] + b_mtree[1] + b'\x02'), 'big')
-    k3 = int.from_bytes(blake(p_mtree[1] + d_mtree[1] + b_mtree[1] + b'\x03'), 'big')
-    k4 = int.from_bytes(blake(p_mtree[1] + d_mtree[1] + b_mtree[1] + b'\x04'), 'big')
+    k1 = int.from_bytes(blake(mtree[1] + b'\x01'), 'big')
+    k2 = int.from_bytes(blake(mtree[1] + b'\x02'), 'big')
+    k3 = int.from_bytes(blake(mtree[1] + b'\x03'), 'big')
+    k4 = int.from_bytes(blake(mtree[1] + b'\x04'), 'big')
 
     # Compute the linear combination. We don't even both calculating it in
     # coefficient form; we just compute the evaluations
@@ -125,18 +126,14 @@ def mk_mimc_proof(inp, steps, round_constants):
     positions = get_pseudorandom_indices(l_mtree[1], precision, samples,
                                          exclude_multiples_of=extension_factor)
     for pos in positions:
-        branches.append(mk_branch(p_mtree, pos))
-        branches.append(mk_branch(p_mtree, (pos + skips) % precision))
-        branches.append(mk_branch(d_mtree, pos))
-        branches.append(mk_branch(b_mtree, pos))
+        branches.append(mk_branch(mtree, pos))
+        branches.append(mk_branch(mtree, (pos + skips) % precision))
         branches.append(mk_branch(l_mtree, pos))
     print('Computed %d spot checks' % samples)
 
     # Return the Merkle roots of P and D, the spot check Merkle proofs,
     # and low-degree proofs of P and D
-    o = [p_mtree[1],
-         d_mtree[1],
-         b_mtree[1],
+    o = [mtree[1],
          l_mtree[1],
          branches,
          prove_low_degree(l_evaluations, G2, steps * 2, modulus, exclude_multiples_of=extension_factor)]
@@ -145,7 +142,7 @@ def mk_mimc_proof(inp, steps, round_constants):
 
 # Verifies a STARK
 def verify_mimc_proof(inp, steps, round_constants, output, proof):
-    p_root, d_root, b_root, l_root, branches, fri_proof = proof
+    m_root, l_root, branches, fri_proof = proof
     start_time = time.time()
     assert steps <= 2**32 // extension_factor
     assert is_a_power_of_2(steps) and is_a_power_of_2(len(round_constants))
@@ -165,10 +162,10 @@ def verify_mimc_proof(inp, steps, round_constants, output, proof):
     assert verify_low_degree_proof(l_root, G2, fri_proof, steps * 2, modulus, exclude_multiples_of=extension_factor)
 
     # Performs the spot checks
-    k1 = int.from_bytes(blake(p_root + d_root + b_root + b'\x01'), 'big')
-    k2 = int.from_bytes(blake(p_root + d_root + b_root + b'\x02'), 'big')
-    k3 = int.from_bytes(blake(p_root + d_root + b_root + b'\x03'), 'big')
-    k4 = int.from_bytes(blake(p_root + d_root + b_root + b'\x04'), 'big')
+    k1 = int.from_bytes(blake(m_root + b'\x01'), 'big')
+    k2 = int.from_bytes(blake(m_root + b'\x02'), 'big')
+    k3 = int.from_bytes(blake(m_root + b'\x03'), 'big')
+    k4 = int.from_bytes(blake(m_root + b'\x04'), 'big')
     samples = spot_check_security_factor
     positions = get_pseudorandom_indices(l_root, precision, samples,
                                          exclude_multiples_of=extension_factor)
@@ -176,11 +173,14 @@ def verify_mimc_proof(inp, steps, round_constants, output, proof):
     for i, pos in enumerate(positions):
         x = f.exp(G2, pos)
         x_to_the_steps = f.exp(x, steps)
-        p_of_x = verify_branch(p_root, pos, branches[i*5])
-        p_of_g1x = verify_branch(p_root, (pos+skips)%precision, branches[i*5 + 1])
-        d_of_x = verify_branch(d_root, pos, branches[i*5 + 2])
-        b_of_x = verify_branch(b_root, pos, branches[i*5 + 3])
-        l_of_x = verify_branch(l_root, pos, branches[i*5 + 4])
+        mbranch1 =  verify_branch(m_root, pos, branches[i*3])
+        mbranch2 =  verify_branch(m_root, (pos+skips)%precision, branches[i*3+1])
+        l_of_x = verify_branch(l_root, pos, branches[i*3 + 2], output_as_int=True)
+
+        p_of_x = int.from_bytes(mbranch1[:32], 'big')
+        p_of_g1x = int.from_bytes(mbranch2[:32], 'big')
+        d_of_x = int.from_bytes(mbranch1[32:64], 'big')
+        b_of_x = int.from_bytes(mbranch1[64:], 'big')
 
         zvalue = f.div(f.exp(x, steps) - 1,
                        x - last_step_position)

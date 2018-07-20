@@ -5,9 +5,9 @@ from merkle_tree import merkelize, mk_branch, verify_branch
 from fri import prove_low_degree, verify_low_degree_proof
 
 def test_merkletree():
-    t = merkelize(range(128))
+    t = merkelize([x.to_bytes(32, 'big') for x in range(128)])
     b = mk_branch(t, 59)
-    assert verify_branch(t[1], 59, b) == 59
+    assert verify_branch(t[1], 59, b, output_as_int=True) == 59
     print('Merkle tree works')
     
 def test_fri():
@@ -41,7 +41,7 @@ def test_stark():
     #constants = [random.randrange(modulus) for i in range(64)]
     constants = [(i**7) ^ 42 for i in range(64)]
     proof = mk_mimc_proof(INPUT, 2**LOGSTEPS, constants)
-    p_root, d_root, b_root, l_root, branches, fri_proof = proof
+    m_root, l_root, branches, fri_proof = proof
     L1 = bin_length(compress_branches(branches))
     L2 = bin_length(compress_fri(fri_proof))
     print("Approx proof length: %d (branches), %d (FRI proof), %d (total)" % (L1, L2, L1 + L2))
