@@ -1,5 +1,5 @@
 from networksim import NetworkSimulator
-from pos_node import Node, NOTARIES, Block, genesis
+from ghost_node import Node, NOTARIES, Block, genesis
 from distributions import normal_distribution
 
 net = NetworkSimulator(latency=12)
