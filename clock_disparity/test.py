@@ -2,8 +2,8 @@ from networksim import NetworkSimulator
 from ghost_node import Node, NOTARIES, Block, genesis
 from distributions import normal_distribution
 
-net = NetworkSimulator(latency=12)
-notaries = [Node(i, net, ts=max(normal_distribution(200, 200)(), 0) * 0.1, sleepy=i%4==0) for i in range(NOTARIES)]
+net = NetworkSimulator(latency=22)
+notaries = [Node(i, net, ts=max(normal_distribution(300, 300)(), 0) * 0.1, sleepy=i%4==0) for i in range(NOTARIES)]
 net.agents = notaries
 net.generate_peers()
 for i in range(100000):
