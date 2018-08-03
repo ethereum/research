@@ -6,7 +6,7 @@ net = NetworkSimulator(latency=150)
 notaries = [Node(i, net, ts=max(normal_distribution(50, 50)(), 0) * 0.1, sleepy=False) for i in range(NOTARIES)]
 net.agents = notaries
 net.generate_peers()
-for i in range(15000):
+for i in range(12000):
     net.tick()
 for n in notaries:
     print("Local timestamp: %.1f, timequeue len %d" % (n.ts, len(n.timequeue)))
@@ -55,10 +55,10 @@ sigs = {k:v for k,v in pos.items() if k not in n.blocks}
 edges = G.edges()
 colors = [G[u][v]['color'] for u,v in edges]
 
-nx.draw_networkx_nodes(G, pos, nodelist=finalized.keys(), node_size=25, node_shape='o',node_color='g')
-nx.draw_networkx_nodes(G, pos, nodelist=justified.keys(), node_size=16, node_shape='o',node_color='y')
-nx.draw_networkx_nodes(G, pos, nodelist=unjustified.keys(), node_size=10, node_shape='o',node_color='0.75')
 nx.draw_networkx_nodes(G, pos, nodelist=sigs.keys(), node_size=5, node_shape='o',node_color='0.75')
+nx.draw_networkx_nodes(G, pos, nodelist=unjustified.keys(), node_size=10, node_shape='o',node_color='0.75')
+nx.draw_networkx_nodes(G, pos, nodelist=justified.keys(), node_size=16, node_shape='o',node_color='y')
+nx.draw_networkx_nodes(G, pos, nodelist=finalized.keys(), node_size=25, node_shape='o',node_color='g')
 
 blockedges = [(u,v) for (u,v) in edges if G[u][v]['color'] == 'b']
 otheredges = [(u,v) for (u,v) in edges if G[u][v]['color'] == '0.75']

@@ -19,9 +19,9 @@ def hash_to_int(h):
         o = (o << 8) + c
     return o
 
-NOTARIES = 60
+NOTARIES = 75
 SLOT_SIZE = 6
-EPOCH_LENGTH = 20
+EPOCH_LENGTH = 25
 
 # Not a full RANDAO; stub for now
 class Block():
@@ -216,16 +216,16 @@ class Node():
                 # considered finalized
 
                 finalize = True
-                for slot2 in range(slot - 1, max(slot - EPOCH_LENGTH, 0) - 1, -1):
+                for slot2 in range(slot - 1, max(slot - EPOCH_LENGTH * 2, 0) - 1, -1):
                     if slot2 < self.blocks[c2].slot:
                         c2 = self.blocks[c2].parent_hash
                     if self.scores_at_height.get(slot2.to_bytes(4, 'big') + c2, 0) < (NOTARIES * 2 // 3):
                         finalize = False
                         # self.log("Not quite finalized: stopped at %d needed %d" % (slot2, max(slot - EPOCH_LENGTH, 0)))
                         break
-                if finalize and c2 not in self.finalized:
-                    self.log("Finalized: %d %s" % (self.blocks[c2].slot, hexlify(c).decode('utf-8')[:8]))
-                    self.finalized[c2] = True
+                    if slot2 < slot - EPOCH_LENGTH - 1 and finalize and c2 not in self.finalized:
+                        self.log("Finalized: %d %s" % (self.blocks[c2].slot, hexlify(c).decode('utf-8')[:8]))
+                        self.finalized[c2] = True
 
             # Find the maximum score of a block on the chain that this sig is weighing on
             if self.blocks[c].slot > anc.slot:
