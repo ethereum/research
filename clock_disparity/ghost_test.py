@@ -2,11 +2,11 @@ from networksim import NetworkSimulator
 from ghost_node import Node, NOTARIES, Block, Sig, genesis, SLOT_SIZE
 from distributions import normal_distribution
 
-net = NetworkSimulator(latency=300)
-notaries = [Node(i, net, ts=max(normal_distribution(60, 60)(), 0) * 0.1, sleepy=i%4==0) for i in range(NOTARIES)]
+net = NetworkSimulator(latency=150)
+notaries = [Node(i, net, ts=max(normal_distribution(50, 50)(), 0) * 0.1, sleepy=False) for i in range(NOTARIES)]
 net.agents = notaries
 net.generate_peers()
-for i in range(10000):
+for i in range(15000):
     net.tick()
 for n in notaries:
     print("Local timestamp: %.1f, timequeue len %d" % (n.ts, len(n.timequeue)))
@@ -64,6 +64,8 @@ blockedges = [(u,v) for (u,v) in edges if G[u][v]['color'] == 'b']
 otheredges = [(u,v) for (u,v) in edges if G[u][v]['color'] == '0.75']
 nx.draw_networkx_edges(G, pos, edgelist=otheredges, width=1, edge_color='0.75')
 nx.draw_networkx_edges(G, pos, edgelist=blockedges, width=2, edge_color='b')
+
+print('Scores:', [n.scores.get(c, 0) for c in n.main_chain])
 
 plt.axis('off')
 # plt.savefig("degree.png", bbox_inches="tight")
