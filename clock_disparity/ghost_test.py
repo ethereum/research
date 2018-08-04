@@ -59,6 +59,7 @@ nx.draw_networkx_nodes(G, pos, nodelist=sigs.keys(), node_size=5, node_shape='o'
 nx.draw_networkx_nodes(G, pos, nodelist=unjustified.keys(), node_size=10, node_shape='o',node_color='0.75')
 nx.draw_networkx_nodes(G, pos, nodelist=justified.keys(), node_size=16, node_shape='o',node_color='y')
 nx.draw_networkx_nodes(G, pos, nodelist=finalized.keys(), node_size=25, node_shape='o',node_color='g')
+# nx.draw_networkx_labels(G, pos, {h: n.scores.get(h, 0) for h in n.blocks.keys()}, font_size=5)
 
 blockedges = [(u,v) for (u,v) in edges if G[u][v]['color'] == 'b']
 otheredges = [(u,v) for (u,v) in edges if G[u][v]['color'] == '0.75']

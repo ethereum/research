@@ -1,0 +1,297 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Virgil's LaTeX Environment macros
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% All of the macros and packages Virgil uses to make LaTeX experiences more pleasant
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\ProvidesPackage{virgil_env}
+
+
+% For debugging during document creation
+%\usepackage{showkeys}	
+
+\usepackage{microtype}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Packages that often need to be turned ON/OFF
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% We need amssymb for the symbol \lessgtr.  However, it likes to conflict with other stuff ):
+\usepackage{amssymb}	% AMS symbols.  Disabled because it likes to conflict with other stuff.
+
+% Decimal point alignment of numeric cells
+\usepackage{dcolumn}
+
+\usepackage{amsmath}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% End Packages that often need to be turned ON/OFF
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Figure out what to do with these later
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%Remove space to the vertical edges:
+%\begin{tabular}{@{}lll@{}}
+
+%\usepackage{calc}
+
+%% Adds pretty caligraphy fonts
+%\usepackage{mathrsfs}
+%\usepackage{amsfonts}
+%\usepackage{euler}
+%\DeclareMathAlphabet{\mathcalligra}{T1}{calligra}{m}{n}
+%\DeclareMathAlphabet{\mathpzcm}{OT1}{pzcm}{mb}{it}
+%\DeclareMathAlphabet{\mathpzc}{OT1}{pzc}{m}{it}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% add ifthen powers
+\usepackage{ifthen}
+
+% add color powers
+\usepackage[usenames,dvipsnames]{color}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Fonts + text options
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{ lmodern }			% I prefer this over times
+%\usepackage{ times }			% default
+
+\usepackage{parskip}			% more skipping options
+
+% Support non-english characters
+%\usepackage[utf8]{inputenc}
+%\usepackage[T1]{fontenc}
+
+%\usepackage[T1]{fontenc}
+
+%\usepackage{baskervald}
+%\usepackage{bookman}   % a nice text font
+
+%\usepackage{fontspec,xunicode}
+%\setmainfont{Baskerville}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Enable Graphics
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{graphicx} 	% Takes the ``[draft]'' option in \document class
+
+\DeclareGraphicsExtensions{.pdf,.eps,.png,.jpg}		% search for .pdf, then .eps, then .pngs, then .jpg
+
+% look in these subdirectories for graphics referenced by \includegraphics
+% each entry must end with a /
+\graphicspath{{figs/}{figures/}{images/}{./}}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Bibliography options
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% natbibspacing availabe at: http://dcwww.camd.dtu.dk/~schiotz/comp/LatexTips/natbibspacing.sty
+%\usepackage{natbib}
+%\usepackage{natbibspacing}
+%\bibliographystyle{plain}
+%\bibliographystyle{unsrt}
+%\bibliographystyle{nature}
+%\bibliographystyle{apa}
+%\bibliographystyle{mslapa}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Math and Symbol packages
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{amsmath, mathtools}		% you always want this
+
+\usepackage{amsthm}		% for theorems
+
+% enables bold greek letters in math mode using the \bm{...} command. Supersedes package `amsbsy'.
+%% Enables blackboard-bold letters
+%\usepackage{bbold}	% for \textbb{}
+%\usepackage{bm}
+%\usepackage{bbm}		% blackboard bold with \mathbbm{}
+\usepackage{bm}
+
+%\usepackage{, wasysym}		% lots of fancy symbols
+\usepackage{commath}
+\usepackage{marvosym}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Better page-formatting options
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{afterpage}		% better-behaved page-formating
+
+%\usepackage{fancyhdr}		% Change header and footer on any page
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Better Math
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{array}			% replacement for eqnarray.  Must be BEFORE \usepackage{arydshln}
+\usepackage{units}			% for \nicefrac{\alpha}{\beta}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Prettier tables 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{booktabs} 	% for much better looking tables
+\usepackage{arydshln}		% For dashed-lines in tables
+
+
+
+
+%%%%% Adds a downward line "closing" what's inside the square-root.
+% New definition of square root:
+% it renames \sqrt as \oldsqrt
+\let\oldsqrt\sqrt
+% it defines the new \sqrt in terms of the old one
+\def\sqrt{\mathpalette\DHLhksqrt}
+\def\DHLhksqrt#1#2{%
+\setbox0=\hbox{$#1\oldsqrt{#2\,}$}\dimen0=\ht0
+\advance\dimen0-0.2\ht0
+\setbox2=\hbox{\vrule height\ht0 depth -\dimen0}%
+{\box0\lower0.4pt\box2}}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% More customizable Figures
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{float}				% necessary for fancy positioning
+
+%\usepackage{wrapfig} 		% wrap text around your figures
+%\usepackage{subfig}			% supercedes subfigure
+
+% provides the capability to rename Figure -> Fig. throughout document
+% supercedes \usepackage{caption}.
+%\usepackage{ccaption}		
+
+%\usepackage{boxedminipage}		% for floating boxes.  Haven't used this much.
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% More customizable Lists
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Better symbols custom enumerative lists, define any symbol you'd like
+%\usepackage{enumitem}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Custom Symbols 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% \xspace at the end of custom macros never fucks up spacing.
+% example of best practice: \newcommand{\apples}{\textsf{AppLeS}\xspace} 
+\usepackage{xspace}
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Text formatting
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% for different styles of underlines
+% \usepackage{ulem} \normalem  % \normalem is to keep \emph{} italics instead of underlined.
+\newcommand{\redwuline}[1]{ {\color{red}{ \uwave{\textcolor{black}{#1}} } } }
+\newcommand{\orangewuline}[1]{ {\color{BurntOrange}{ \uwave{\textcolor{black}{#1}} } } }
+
+% In-line lists.  I've never used this but here's the package for it
+%\usepackage{paralist}
+%\textbf{\itshape Inline lists}, which are sequential in nature, just like enumerated
+%lists, but are \begin{inparaenum}[\itshape a\upshape)]
+%\item formatted within their paragraph;
+%\item usually labelled with letters; and 
+%\item usually have the final item prefixed with `and' or `or',
+%\end{inparaenum} like this example.
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% For prettier citations and hyperlinks
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%\usepackage[pdftex, colorlinks=true,
+%                    bookmarksnumbered=true,
+%                    bookmarksopen=true,
+%                    bookmarksopenlevel=3,
+%                    pdfstartview=FitV,
+%                    linkcolor=blue,
+%                    citecolor=blue,
+%                    urlcolor=black,
+%          ]{hyperref}
+          
+%\usepackage[colorlinks=true,
+%                    bookmarksnumbered=true,
+%                    bookmarksopen=true,
+%                    bookmarksopenlevel=3,
+%                    pdfstartview=FitV,
+%                    linkcolor=blue,
+%                    citecolor=blue,
+%                    urlcolor=black,
+%          ]{hyperref}
+
+
+% if \url isn't defined yet, define it using the `url' package.  Else do nothing
+\ifthenelse{ \isundefined{\url} } { \usepackage{url} }{}
+
+\usepackage{cite}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Special customizations that I like
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Makes the tables prettier
+%\renewcommand{\arraystretch}{1.05}
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SAVETREES - space saving options
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% You'd probably want to put this right before your \documentclass{} in your .tex file
+% options: normaltitle, normalmargins, normalsections, normallists, normalfloats, normalindent, , normalleading, normalbib, normalbibnotes
+% use everything
+%\usepackage[]{savetrees}
+%\usepackage[]{savetrees}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% For multi-line comments
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\usepackage{verbatim}
+\newcommand*{\bcomment}{ \begin{comment} }
+\newcommand*{\ecomment}{ \end{comment} }
+%\newcommand{\bCOMMENT}{ \begin{comment} }
+%\newcommand{\eCOMMENT}{ \end{comment} }
+%\newcommand*{\comment}[1]{}
+%\newcommand{\COMMENT}[1]{}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% Abbreviations you'll always want
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\newcommand*{\TODO}[1]{{\centering {\sffamily \color{red} #1} \vskip10pt }}
+\newcommand*{\todo}[1]{{\sffamily [{\color{red} #1}]}}
+\newcommand*{\question}[1]{{\sffamily [{\color{blue} #1}]}}
+\newcommand*{\new}[1]{ {\color{RoyalPurple} #1} }
+\newcommand*{\fix}[1]{{\sffamily [{\textnormal{\color{red} #1}}]}}
+
+
+%-----------------------------------------------------------------------------
+%  Cross references
+%-----------------------------------------------------------------------------
+% The following code defines how you make references to figures, tables, etc...
+% It is defined in one place only, and can be modified for all references
+% in the document at the same time.
+% Instead of typing each time: "see Fig. \ref{myfig}" you can create a command
+% \figref which will do the job. Then in text you only type \figref{myfig} and LaTeX
+% will do the rest.
+\newcommand{\tblref}[1]{Table~\ref{#1}}
+\newcommand{\figref}[1]{Fig.~\ref{#1}}
+\newcommand{\equref}[1]{(\ref{#1})}
+
+%\newcommand{\Tblref}[1]{Table~\ref{#1}}
+%\newcommand{\Figref}[1]{Figure~\ref{#1}}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+

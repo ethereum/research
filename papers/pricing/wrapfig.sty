@@ -1,0 +1,107 @@
+%
+%      W R A P F I G . S T Y
+%
+%  Copyright (C) 1991,1992 by Donald Arseneau
+%  These macros may be freely transmitted, reproduced, or modified for
+%  non-commercial purposes provided that this notice is left intact.
+%
+%  Environment "wrapfigure" to manually place a figure at the side 
+%  of the page and wrap text around it.
+%
+%  \begin{wrapfigure}[36]{r}{3in} <figure> <\caption> etc. \end{wrapfigure}
+%                     --  -  ---
+%  [number of narrow lines] {left or right} {width of figure}
+%
+% Usage:
+% This is a different type of *non-floating* figure environment for LaTeX.
+% A figure of the specified width appears on the left or right (as specified)
+% of the page. LaTeX will try to wrap text around the figure leaving a gap of 
+% \columsep by producing a number of short lines of text.  LaTeX calculates 
+% the number of short lines needed based on the height of the figure plus 
+% the length \intextsep.  You can override this guess by giving the optional 
+% argument specifying the number of shortened lines (counting each displayed 
+% equation as 3 lines).  Cautions:
+%  o Wrapfigure should not be used inside another environment (e.g., list)
+%  o It does work in two-column format, but that would be silly.
+%  o Since it does not float, it may be out of sequence with floated figures.
+%  o The automatic rules (lines) that may be placed above or below floats
+%    are ignored here.  You must insert the rules manually.
+%
+% Placement:
+% LaTeX will not move a wrapfigure to the best place, so it is up to YOU
+% to position it well.  Any changes to the document can ruin your careful
+% positioning so wrapfigures should be positioned just before printing a
+% final copy. Here are the rules for good placement:
+%  o The environment  should be placed so as to not run over a page boundary.
+%  o Only ordinary text should have to flow past the figure; no section
+%    titles please.  Equations are acceptable if they fit.
+%  o It is convenient to give \begin{wrapfigure} just after a paragraph has
+%    ended.  But if you want to start in the middle of a paragraph, you must
+%    put the environment between two words where there is a natural linebreak 
+%    (like "must" and "put" above).
+%
+\newcount \WF@wrappedlines % used globally
+
+\def\wrapfigure{\@ifnextchar[{\WF@raptfig}{\WF@raptfig[-1]}}
+
+\def\WF@raptfig[#1]#2#3{\relax\ifx\par\@@par\else\typeout
+  {WARNING: wrapfigure used inside another environment.}\fi
+  \ifnum#10>\z@ % 10*num. lines specified (0 if blank)
+    \global\WF@wrappedlines#1\global\advance\WF@wrappedlines\@ne
+  \else % calc num. lines later
+    \global\WF@wrappedlines\z@
+  \fi
+  \ifvmode % Between paragraphs: Start new one.  Text will be indented...
+    \noindent \aftergroup\indent % after the \endgroup of \end{wrapfigure}
+  \else % In paragraph: End this one so it doesn't look ended; start new one.
+    {\unskip\parfillskip\z@skip\par\penalty\interlinepenalty 
+    \parskip\z@skip\noindent}%  text will start with no indentation
+  \fi \hbox to \z@\bgroup %  llap or rlap depending on {l} or {r} parameter.
+  \@tempdimb\hsize \advance\@tempdimb-#3 \advance\@tempdimb-\columnsep
+  \if r#2\relax%  fig on right
+    \@tempdima\z@ % no hanging indentation
+    \kern-#3\kern\hsize % position to the right of the text, past gutter
+    \def\@tempa{\hss}% figure overlaps space to the right
+  \else  % fig on left
+    \@tempdima#3\advance\@tempdima\columnsep % indent past figure
+    \hss % figure overlaps space to the left
+    \def\@tempa{\kern\columnsep}% position to left of the gap
+  \fi
+  \xdef\WF@wrapil{\the\@tempdima \the\@tempdimb}% indentation and length 
+  \setbox\z@\vtop\bgroup \hsize=#3\relax \hrule \@height\z@
+  \@parboxrestore
+  \def\@captype{figure}% set up figure
+}
+
+\def\endwrapfigure{\leftline{}\egroup % ensure \hsize wide
+  \ifnum \WF@wrappedlines=\z@ % measure figure box to count lines
+    \@tempdima\dp\z@ \advance\@tempdima\intextsep 
+    \divide\@tempdima\baselineskip 
+    \global\WF@wrappedlines\@tempdima \global\advance\WF@wrappedlines\tw@
+  \fi \dp\z@\z@ \box\z@ % smash the vtop
+  \@tempa\egroup \aftergroup\WF@startwrapping \global\@ignoretrue}
+
+\def\WF@startwrapping{\everypar{\WF@setwrapping}\WF@setwrapping
+  \def\WF@savedclubp{\the\clubpenalty}\clubpenalty\@M % prevent bad pagebreak
+  \def\WF@restoretol{\tolerance\the\tolerance}\tolerance\@M
+  \def\par{\@@par \clubpenalty\WF@savedclubp  % will wrap more than one
+    \global\advance\WF@wrappedlines-\prevgraf % paragraph if necessary
+    \ifnum\WF@wrappedlines<\tw@ \everypar{}\let\par\@@par\WF@restoretol\fi
+  }}
+% Create \parshape command
+\def\WF@setwrapping{\@tempcnta\@ne \let\@tempb\relax \def\@tempc{}%
+  \@whilenum \@tempcnta<\WF@wrappedlines\do{% repeated indentation, length
+    \edef\@tempc{\@tempc\@tempb}\advance\@tempcnta\@ne
+  }\let\@tempb\WF@wrapil \parshape \WF@wrappedlines \@tempc \z@ \hsize}
+%
+% 1992: change boxing so there is no height.
+% interim version: added \@parboxrestore
+%
+% Send problem reports to asnd@Reg.TRIUMF.CA
+%
+% test integrity:
+% brackets:  round, square, curly, angle:   () [] {} <>
+% backslash, slash, vertical, at, dollar, and: \ / | @ $ &
+% hat, grave, acute (apostrophe), quote, tilde, under:   ^ ` ' " ~ _
+
+

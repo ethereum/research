@@ -19,7 +19,7 @@ def hash_to_int(h):
         o = (o << 8) + c
     return o
 
-NOTARIES = 75
+NOTARIES = 100
 SLOT_SIZE = 6
 EPOCH_LENGTH = 25
 
