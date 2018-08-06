@@ -176,7 +176,7 @@ Taken together, if the consumer's marginal private costs increase faster with qu
 
 then set prices.  Otherwise set quantity.  We use the second derivative because we are specifically talking about the \emph{the rate of change} in marginal costs.
 
-The argument above applies only if costs and benefits are independently distributed. If changes in the cost and benefit curves are correlated, then an additional term must be added into the choice rule, increasing the relative attractiveness of limiting quantity. \new{To see this intuitively, consider the extreme case where uncertainty in cost and benefit is perfectly correlated; in such a scenario, if original estimates of cost and benefit prove incorrect, both curves will move up or down in lockstep, and so the new equilibrium will be directly above or below the original estimated one; hence, a quantity-targeting policy would be perfectly correct and a price-targeting policy would be pessimal.} This analysis covers only two possible policies, but a much greater space of options is available.  One can think of policy space as the space of possible supply curves for a given resource, where a pricing policy represents a horizontal supply curve and a cap-and-trade scheme represents a vertical supply curve. Various forms of diagonal supply curves are also possible, and in most cases some form of (possibly curved) diagonal supply curve is optimal.\footnote{ostrom2002}
+The argument above applies only if costs and benefits are independently distributed. If changes in the cost and benefit curves are correlated, then an additional term must be added into the choice rule, increasing the relative attractiveness of limiting quantity. \new{To see this intuitively, consider the extreme case where uncertainty in cost and benefit is perfectly correlated; in such a scenario, if original estimates of cost and benefit prove incorrect, both curves will move up or down in lockstep, and so the new equilibrium will be directly above or below the original estimated one; hence, a quantity-targeting policy would be perfectly correct and a price-targeting policy would be pessimal.} This analysis covers only two possible policies, but a much greater space of options is available.  One can think of policy space as the space of possible supply curves for a given resource, where a pricing policy represents a horizontal supply curve and a cap-and-trade scheme represents a vertical supply curve. Various forms of diagonal supply curves are also possible, and in most cases some form of (possibly curved) diagonal supply curve is optimal.
 
 Should blockchains have a block size limit, or should they not have a limit but instead charge a fixed fee per resource unit consumed, or would some intermediate policy, one which charges a fee as a function $F(w)$ of the weight included in a block and where $F'(w)$ is increasing and possibly reaches an asymptote, be optimal? To estimate optimal policy under the prices vs. quantities framework, we start off by attempting to estimate the social cost function.
 
@@ -209,7 +209,7 @@ Relationship between block gas limit and uncle rate, Dec 2016 to Sep 2017
 \label{fig:three}
 \end{center}
 
-However, there are superlinear costs at play as well. Clients need to process both the main chain and the blocks that do not become part of the canonical chain; hence, if a level of canonical-chain throughput $x$ causes an uncle rate $p$, then the actual level of computational burden is $\frac{x}{1-p}$, with a denominator that keeps decreasing toward zero as the canonical-chain throughput increases. Additionally, with high uncle rates selfish mining attacks become much easier \todo{cite https://arxiv.org/pdf/1507.06183.pdf}, and the reduction in node count itself leads to pooling, which makes selfish mining more likely. There is thus a qualitative sense in which the social cost of $t = T$ is more than ten times that of $t = T * 0.1$.
+However, there are superlinear costs at play as well. Clients need to process both the main chain and the blocks that do not become part of the canonical chain; hence, if a level of canonical-chain throughput $x$ causes an uncle rate $p$, then the actual level of computational burden is $\frac{x}{1-p}$, with a denominator that keeps decreasing toward zero as the canonical-chain throughput increases. Additionally, with high uncle rates selfish mining attacks become much easier \cite{optimalsm}, and the reduction in node count itself leads to pooling, which makes selfish mining more likely. There is thus a qualitative sense in which the social cost of $t = T$ is more than ten times that of $t = T * 0.1$.
 
 Even if the cost function is superlinear at the extremes, however, it appears to be linear at the lower side of the distribution, and the arguments from the Cornell study suggesting it may even be sublinear. If the block size increases from 10kb to 1000kb, a significant social cost is incurred because IoT devices, smartphones, Raspberry Pis, etc have a much harder time staying connected, but an increase from 1000kb to 1990k does not have such a high cost, because the range of use cases that become unusable within that interval is much lower. Hence, it seems plausible that the social cost curve is U-shaped:
 
@@ -334,48 +334,18 @@ The above weight limit analyses assume that a single scalar can sufficiently qua
 
 We will start off by looking at computation and bandwidth. Computation and bandwidth both contribute to the computational load of a node, and both contribute to ``uncle rate''; hence, both seem to be subject to the same mechanics of linear or sublinear social cost at lower weights and superlinear social cost at higher weights. If the factors creating the superlinear social costs are independent, it may be prudent to have a separate gas limit for computation and block size limit for bandwidth; however, because much of the superlinearity comes from the uncle rate itself, and the impacts of computation and bandwidth on uncle rate seem to be additive, it seems more likely that a single combined limit actually is optimal.
 
-One question worth asking is: can we somehow measure in-protocol the amounts of computation and bandwidth
+One question worth asking is: can we somehow measure in-protocol the social cost of computation and bandwidth, or at least a more limited statistic like the maximum level of computation and bandwidth that the median client can safely handle? Proof of work mining difficulty does very directly give an exchange rate between a blockchain's native cryptocurrency and at least one kind of computation: if a blockchain's block reward is $R$, its mining algorithm is $H$, and its difficulty is $D$, then in general we should expect $cost(H) \approx \frac{R}{D}$.
 
+However, this approach is extremely fragile against advances in technology such as specialized hardware. \cite{hardware1} and \cite{hardware2} suggest a roughly 1000-5000x difference between the mining efficiency of ASIC and GPU hardware for mining Bitcoin at present, and a further disparity exists between GPUs and CPUs. This suggests that, were mining difficulty used as a proxy to determine the computational capacity of clients in order to determine Bitcoin block size limits, a block size limit initially targeted to 1 MB would by now have grown to be many gigabytes. A block weight limit targeted to an optimal value based on the assumption of a 10000x disparity between ASICs and CPUs today may in contrast lead to the limit becoming 100-10000x \emph{below} optimal if the advantage of specialization \emph{decreases} in the future, due to either more use of adaptive semi-specialized hardware such as FPGAs in consumer hardware or specialized hardware being unable to squeeze out larger efficiencies once even general-purpose hardware starts to come close to thermodynamic limits.
 
+The proof-of-work-based cost metric has an additional flaw: $cost(H)$ is only the cost of calculating a computation \emph{once}. The actual social cost also depends heavily on the number of nodes in the network, as each node will need to run the computation, and this is also extremely difficult to measure. This issue can be circumvented by changing the mechanism, instead requiring miners to compute a \emph{non-outsourceable} proof of work \cite{nonoutsourceable} and setting a computation gas limit based on the highest amount of work submitted within some time period, but this does not get around the specialized hardware issues. One can try to incentivize \emph{transaction submitters} to submit these proofs, but that carries the high risk of incentivizing users to use wallets with centralized custody of private keys.
 
-
-\section{Pricing Calculation}
-\label{sect:calculation}
-\todo{Calculation (e.g., arithmetic, comparisons, shuffling memory, hashing, verifying signatures) ...}
-
-Pricing calcuation is the most straight forward.  Each transaction is executed by every full node.  So with $n$ full nodes, the cost of calcuation is $\Omega(n)$.  This is a one-time cost.
-
-For example, between 1990--2005 computer clock speeds increased by $\sim \! 100$x \cite{40years}, but since 2005, growth in clock speeds has slowed down.  One interesting research direction is this: is it possible to somehow measure within the  blockchain protocol how fast clock speeds and seek times are \emph{right now}, and then automatically adjust costs to reflect these values?  For example, Bitcoin's difficulty adjustment is a rough proxy for calcuation speed.  Can Ethereum do something like this?  Failing that, are there general trends that can be used to ballpark predict how fast these improve over time?
-
-
-\todo{add more about calculation here.}
-
-\section{Pricing State I/O}
-\label{sect:io}
-State IO (i.e., reading and writing from the state) is unique because there are at least three ``modes'' of reading and writing to the state:
-
-\begin{itemize}
-\item If the entire is small enough to store in RAM, then reading is simply a memory-read, and writing is a memory-write together with an asynchronous process that copies the state modifications to disk.
-
-\item If the state is too large to be stored in RAM, then reading requires reading from disk ($\sim\!100$ms on an SSD) and writing requires writing to disk. \question{It's unclear to me that these delays are quantifiable economic costs.}
-
-\item If a light client wishes to fully verify a block, any state reads will be authenticated through Merkle proofs; each read or write will require at least $32 * \log(\tt{state\_size})$ bytes of proof data. \todo{cite}
-
-\end{itemize}
-
-Notice that there are now two distinct pricing strategies for state IO. One is to heavily restrict the total size of the state so that it will fit into RAM, and then charge cheaply for reading it (though writing should still be expensive, as it requires a disk write). The other is to let the state grow arbitrarily but charge as though a state read is always a disk read. Either strategy is legitimate.\footnote{However, keeping the state small has the ancillary benefit of light-client friendliness.  Encouraging blocks to be light on IO reduces both the number and burden of the Merkle proofs needed to prove validity.}
-
-Between 1990--2005 hard disk seek times improved by a mer e$\sim \!\! 3$x \cite{ibm2011}, but with the advent of SSDs, reads/writes per second are increasing at an accelerating rate.
-
-
-
-
-
+One can similarly attempt to measure bandwidth with proofs of bandwidth \cite{proof-of-bandwidth}, but this also carries a high risk of incentivizing concentration. Fundamentally, incentive-compatibly measuring the level of capability of a node requires incentivizing them to reveal capability, with higher rewards for higher levels of revealed capability, and this inherently incentivizes specialized and concentrated hardware-driven centralization.
 
 \section{Pricing State Storage}
 \label{sect:storage}
 
-Pricing state storage is a fundamentally different kind of burden from calculation and state-IO for one simple reason: whereas calculation are state-IO are one-time burdens on validators and nodes that are online at that particular time, but state space must be stored by, and thus burdens, all full nodes, forever. And for $m$ full nodes storing $n$ bytes the burden scales as $\Theta(m n)$ \question{true?}. The state is the data that a full node needs requires to validate a yet unknown subsequent block; in Bitcoin this is the ``UTXO set'', a representation of how many coins each user has, and in Ethereum this includes: account balances, contract storage, contract code, auxiliary information such as nonces, and the headers of the previous 256 blocks (as these can be accessed using the \opcode{blockhash} opcode).
+Pricing state storage is a fundamentally different kind of burden from computation, bandwidth and state IO (treated above as being simply another kind of computation) for one simple reason: whereas those costs are one-time burdens on validators and nodes that are online at that particular time, state space must be stored by, and thus burdens, all full nodes, forever.
 
 More formally, accounts in each system can be viewed as a key-value mapping where each account is keyed by an ID number whose value is some balance in the system's base cryptocurrency (BTC/ETH) as well as other auxiliary data. In Bitcoin's case, the auxiliary data is constant (the scriptPubKey, a sliver of code describing the conditions for spending the balance). In Ethereum, contract accounts have their own storage, which is itself a key-value map whose contents may change over time.
 
