@@ -84,18 +84,16 @@
 \begin{abstract}
 \todo{this will be reworked at the end} 
 
-One of the most challenging issues in blockchain protocol design is that of how to limit and price the submission of transactions that get included into the chain. Every transaction clearly confers some private benefit to its sender, but transactions also carry multiple categories of social costs to the network as a whole, including the computing power, storage space and bandwidth required by nodes to process the transaction, as well as the less easily calculable systemic risks that arise from the network becoming more centralized as the transaction load of a blockchain gets bigger and more difficult for smaller nodes to process. This results in a classic example of the ``tragedy of the commons'' problem, where transaction senders do not fully internalize the costs of their transactions, and if transactions are left unlimited and unpriced, massive overconsumption of the blockchain's resources is likely to result.
-
-In such cases, economic theory generally dictates pricing the resources in question, and setting the price to equal the social cost that the act of consuming each resource imposes on the network. However, the heterogenous nature of the resources involved, the large portion of the social cost that exists in the form of intangible and difficult-to-value harms such as centralization risk, and the need to create an automated algorithm that can set prices in a wide range of future scenarios without human intervention all make it very difficult to set restrictions that are optimal. In this paper, we discuss tradeoffs between different approaches and strategies that can improve on the status quo on the margin.
+One of the most challenging issues in blockchain protocol design is how to limit and price the submission of transactions that get included into the chain. Every transaction confers some private benefit to its sender, but transactions also incur social costs to the network as a whole, as every node in the network must process every transaction. This results in a classic example of the ``tragedy of the commons'' problem. In such cases, economic theory generally dictates pricing the resources in question, and setting the price to equal the social cost that the act of consuming each resource imposes on the network. However, the heterogenous nature of the computation, bandwidth and storage resources involved, the large portion of the social cost that exists in the form of intangible and difficult-to-value harms such as centralization risk, and the need to create an automated algorithm that can set prices in a wide range of future scenarios without human intervention all make it very difficult to set restrictions that are optimal. In this paper, we discuss tradeoffs between different approaches and strategies that can improve on the status quo on the margin.
 \end{abstract}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Introduction and Model}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-A blockchain is a decentralized computer network consisting of a large number of computers that all process transactions that are uploaded to the chain. Hence, a transaction that is published to a blockchain confers some private benefit to its sender, but also confers an external social cost to the network's participants. In order to account for this social cost, and prevent abuse of the blockchain as a common pool resource, some economic mechanism for restricting what transactions get included is required. However, there are many types of mechanisms and many sets of parameters to choose from; hence, if we want to figure out what mechanism and parameters really are optimal, we need to more deeply understand how large the social cost of a transaction is and where it comes from.
+A blockchain is a decentralized network consisting of a large number of computers that must all process transactions that transaction senders upload to the chain. Hence, a transaction that is published to a blockchain confers some private benefit to its sender, but also confers an external social cost to the network's participants. In order to account for this social cost, and prevent abuse of the blockchain as a common pool resource, some economic mechanism for restricting what transactions get included is required. However, there are many types of economic mechanisms that can be used to solve resource pricing problems of this type, and understanding which one is optimal requires more deeply understanding the nature and types of social costs in question.
 
-The costs can be broken down in two ways. First, one can categorize by fundamental type of resource expenditure:
+The social costs can be broken down in two ways. First, one can categorize by fundamental type of resource expenditure:
 
 \begin{itemize}
 \item[] \textbf{Bandwidth cost:} the cost of all nodes downloading each submitted transaction, bundling it into a block, and then rebroadcasting the transaction as part of some block.
@@ -104,40 +102,44 @@ The costs can be broken down in two ways. First, one can categorize by fundament
 
 \item[] \textbf{History storage cost:} the cost of storing the transaction for all nodes that store the blockchain's history, for the time for which the history is stored (possibly infinity).
 
-\item[] \textbf{State storage cost:} the marginal cost of the impact of the transaction on the size of the state (eg. contract code, account balances) that every node must store to be able to process further transactions.
+\item[] \textbf{State storage cost:} the marginal cost of the impact of the transaction on the size of the \emph{state} (eg. contract code, account balances) that every node must store to be able to process further transactions.
 \end{itemize}
 
 Note that the first two costs are costs that are paid by the nodes that are online at the exact time when the transaction is included, the third cost is paid by nodes that are online at that time or in the near future, but the fourth cost must be paid by all nodes forever, unless a scheme is introduced that makes all state entries temporary.
 
-Second, one can categorize by different types of first and second-order effects. We can understand these effects as follows. We can describe a blockchain as being a network of $n$ computers, $C_1 ... C_n$, where any transaction that gets included in the blockchain must be processed by all of the nodes that are still online in the network. Some transactions are more complex than others; each transaction has some ``weight'' $w$ that represents the quantity of resources needed to process it.
+Second, one can categorize by different types of first and second-order effects. We can understand these effects as follows. We can consider a blockchain to be a network of $n$ computers, $C_1 ... C_n$, where any transaction that gets included in the blockchain must be processed by all of the nodes that are still online in the network. Some transactions are more complex than others; each transaction has some ``weight'' $W$ that represents the quantity of resources needed to process it.
 
 Each user $U_i$ has some direct resource cost function $R_i(W)$ representing the cost to the user of processing a given amount of weight. This cost can include electricity and bandwidth costs, marginal disk wear and tear, inconvenience from a user's other applications running more slowly, reduced battery life, and so on. For sufficiently high $w$, at some point the costs become unacceptable to any given user, at which point the user will drop offline (we assume $R_i(W)$ is flat above this point). Let $NodeCount(W)$ be the number of users still online at weight $W$. Note that different users could drop offline at different points for either of two reasons: (i) some users have a lower resource cost than others, and (ii) some users value being connected to the blockchain more than others.
 
 There is some utility function $D(k)$ reflecting the social value of the level of decentralization achieved by having the number of online nodes, which can be translated into a function $D(W)$ of the total transaction load. There may also be some cost function $A(W)$ that reflects the increased attackability of the network as more transactions get included. We can summarize all of these costs as a combined cost function $C(W) = \sum_i R_i(W) + (A(W) - A(0)) - (D(W) - D(0))$.
 
-The above suffices as a model of a blockchain for the purpose of this paper; we actually do not need to care about details about proof of work, proof of stake, block structure, etc, except insofar as the details of those consensus algorithms and blockchain design patterns affect $NodeCount$ and $A$, and therefore $C$.
+The above suffices as a model of a blockchain for the purpose of this paper; we do not need to care about details about proof of work, proof of stake, block structure, etc, except insofar as the details of those consensus algorithms and blockchain design patterns affect $NodeCount$ and $A$, and therefore $C$.
 
 \section{Prior Work}
 
 In Bitcoin and Ethereum, resources are priced using a simple ``cap-and-trade'' scheme. A metric is defined for the quantity of resources (called ``weight'' or ``gas'') that a transaction consumes, and there is a protocol-defined maximum total quantity of resources that the transactions contained in a block will consume. Validators have free rein to select transactions as long as the total weight of the block is below that limit. An equilibrium is established where users attach fees to their transactions which go to the validator that includes the transaction in a block, and validators select the transactions paying the highest fee per unit weight. In Bitcoin, for example, the weight limit is a static $4 *10^6$, and weight is defined as follows\cite{weightunits}:
 
+\begin{scriptsize}
 \begin{equation}
 \tt{weight(block) = 4 * len(block.nonsignature\_data) + len(block.signature\_data)}
 \end{equation}
+\end{scriptsize}
 
 Where $len(x)$ returns the number of bytes in $x$. For technical reasons that have to do with attempting to price in history and state storage costs, the bytes in signatures of transactions are priced more cheaply than the non-signature data in transactions. In Ethereum, there is a measure called ``gas'' which incorporates the size of the block as well as the computational cost of verifying transactions and executing smart contract code. For simplicity of exposition, this can be approximated as:
 
+\begin{footnotesize}
 \begin{equation}
 \tt{weight(block) = 68 * len(block) + 3 * num\_computational\_steps\_in\_block}
 \end{equation}
+\end{footnotesize}
 
-The gas function is in reality much more complex (See Appendix \ref{appendix:gasfunction}), but similar in spirit. There is a per-block gas limit, which validators can vote on (every validator can ``upvote'' or ``downvote'' the gas limit by a maximum of $\sim\!0.1\%$), and at the time of this writing most validators are voting for a gas limit of $\sim \! 8$ million.
+The gas function is in reality much more complex, but similar in spirit. There is a per-block gas limit, which validators can vote on (when creating a block, a miner can ``upvote'' or ``downvote'' the gas limit by a maximum of $\sim\!0.1\%$), and at the time of this writing most validators are voting for a gas limit of $\sim \! 8$ million.
 
-A major problem with this approach is that a priori it has been difficult to determine a reasonable weight limit. Many argue that the current limit of $8$ million is far below optimal, and others disagree. The purpose of this paper will be to try to go beyond ``there must be a limit, what should it be?'' and explore a much larger space of policies that attempt to address transaction resource consumption externalities, and try to develop policies that are both closer to optimal at the present time, and more robust to changes in economic circumstances in the future, lessening the need for ``extra-protocol interventions'' such as hard forks.
+A major problem with this approach is that a priori it has been difficult to determine a reasonable weight limit, and the question has often been a source of controversy\cite{blocksizedebate}. The purpose of this paper will be to try to go beyond the one-dimensional design space of ``there must be some limit, what should it be?'' and explore a much larger space of policies that attempt to address transaction resource consumption externalities, and try to develop policies that are both closer to optimal at the present time, and more robust to changes in economic circumstances in the long-term future, reducing the need for ``extra-protocol interventions'' such as hard forks.
 
 \section{Pricing Resources under Uncertainty}
 \label{sect:uncertainty}
-Blockchain resource pricing has many parallels to regulatory responses to environmental pollution.  Particularly, although the validator of a block is compensated for publishing the transactions, the cost of that block being published is borne by \emph{all full nodes}.  This cost being borne by all full nodes is the negative externality that we wish to limit.  Both blockchains and environmental regulators use economic interventions to limit activities with negative externalities, where the negative externalities have both measurable components as well as components with high Knightian uncertainty (i.e., ``unknown unknowns'') \cite{knight1921risk}.  Many results from environmental economics \cite{barder14} are directly applicable to blockchains.
+Blockchain resource pricing has many parallels to regulatory responses to environmental pollution.  Particularly, although the validator of a block is compensated for publishing the transactions, the cost of that block being published is borne by \emph{all full nodes}, much like how pollution produced by one factory must be suffered by everyone living in the village (if not an even larger area).  This cost being borne by all full nodes is the negative externality that we wish to limit.  Both blockchains and environmental regulators use economic interventions to limit activities with negative externalities, where the negative externalities have both measurable components as well as components with high Knightian uncertainty (i.e., ``unknown unknowns'') \cite{knight1921risk}.  Many results from environmental economics \cite{barder14} are directly applicable to blockchains.
 
 Weitzman's 1974 paper ``Prices vs Quantities'' \cite{weitzman1974prices}, outlines the tradeoffs between regulation by price (e.g., carbon taxes) versus regulation by quantity (e.g., issuing a fixed number of permits and letting them trade on the market). One important insight that Weitzman cites is that if the policymaker has perfect information about the social cost function and the demand curve for consuming the resource (a.k.a. the ``benefit function''), the two approaches are equivalent: for any desired price, one can choose an equivalent quantity-based policy by issuing exactly the number of permits equal to the equilibrium quantity that would be purchased at that price. However, when there is uncertainty about the position and shape of the cost-benefit curves, the two approaches have substantial differences.
 
@@ -168,15 +170,15 @@ Figures (a)--(b) show the first scenario in which it's better to set a price.  F
 \label{fig:one}
 \end{center}
 
-Taken together, if the consumer's marginal private costs increase faster with quantity than the marginal social costs, then setting prices is better. But in the other case setting the quantity is better, or equivalently,
+Taken together, if the consumer's marginal private costs increase faster with quantity than the marginal social costs, that is when
 
 \begin{equation}
-\frac{ \fname{cost\_to\_consumer}^{\prime \prime}( \opname{quantity} ) }{ \fname{cost\_to\_others}^{\prime \prime}( \opname{quantity}) }  > 1 \; ,
+\frac{ \fname{private\_benefit}^{\prime \prime}( \opname{quantity} ) }{ \fname{social\_cost}^{\prime \prime}( \opname{quantity}) }  > 1 \; ,
 \end{equation}
 
-then set prices.  Otherwise set quantity.  We use the second derivative because we are specifically talking about the \emph{the rate of change} in marginal costs.
+then seting prices is better, and in other cases setting quantities is better.  Note that we need to use the second derivative because we are specifically talking about the \emph{the rate of change in marginal costs}.
 
-The argument above applies only if costs and benefits are independently distributed. If changes in the cost and benefit curves are correlated, then an additional term must be added into the choice rule, increasing the relative attractiveness of limiting quantity. \new{To see this intuitively, consider the extreme case where uncertainty in cost and benefit is perfectly correlated; in such a scenario, if original estimates of cost and benefit prove incorrect, both curves will move up or down in lockstep, and so the new equilibrium will be directly above or below the original estimated one; hence, a quantity-targeting policy would be perfectly correct and a price-targeting policy would be pessimal.} This analysis covers only two possible policies, but a much greater space of options is available.  One can think of policy space as the space of possible supply curves for a given resource, where a pricing policy represents a horizontal supply curve and a cap-and-trade scheme represents a vertical supply curve. Various forms of diagonal supply curves are also possible, and in most cases some form of (possibly curved) diagonal supply curve is optimal.
+The argument above applies only if costs and benefits are independently distributed. If changes in the cost and benefit curves are correlated, then an additional term must be added into the choice rule, increasing the relative attractiveness of limiting quantity. To see this intuitively, consider the extreme case where uncertainty in cost and benefit is perfectly correlated; in such a scenario, if original estimates of cost and benefit prove incorrect, both curves will move up or down in lockstep, and so the new equilibrium will be directly above or below the original estimated one; hence, a quantity-targeting policy would be perfectly correct and a price-targeting policy would be pessimal. This analysis covers only two possible policies, but a much greater space of options is available.  One can think of policy space as the space of possible supply curves for a given resource, where a pricing policy represents a horizontal supply curve and a cap-and-trade scheme represents a vertical supply curve. Various forms of diagonal supply curves are also possible, and in most cases some form of not strictly horizontal or vertical supply curve is optimal.
 
 Should blockchains have a block size limit, or should they not have a limit but instead charge a fixed fee per resource unit consumed, or would some intermediate policy, one which charges a fee as a function $F(w)$ of the weight included in a block and where $F'(w)$ is increasing and possibly reaches an asymptote, be optimal? To estimate optimal policy under the prices vs. quantities framework, we start off by attempting to estimate the social cost function.
 
@@ -197,7 +199,7 @@ In the case of Ethereum, we can try to look at the correlation between block gas
 
 \begin{center}
 \includegraphics[width=3in]{etherchain_correlation.png} \\
-Relationship between block gas limit and uncle rate
+\footnotesize{Relationship between block gas limit and uncle rate}
 \label{fig:three}
 \end{center}
 
@@ -205,27 +207,25 @@ The nonlinearity in this figure is in part an artefact of the data; during the p
 
 \begin{center}
 \includegraphics[width=3in]{etherchain_correlation_2.png} \\
-Relationship between block gas limit and uncle rate, Dec 2016 to Sep 2017
+\footnotesize{Relationship between block gas limit and uncle rate, Dec 2016 to Sep 2017}
 \label{fig:three}
 \end{center}
 
-However, there are superlinear costs at play as well. Clients need to process both the main chain and the blocks that do not become part of the canonical chain; hence, if a level of canonical-chain throughput $x$ causes an uncle rate $p$, then the actual level of computational burden is $\frac{x}{1-p}$, with a denominator that keeps decreasing toward zero as the canonical-chain throughput increases. Additionally, with high uncle rates selfish mining attacks become much easier \cite{optimalsm}, and the reduction in node count itself leads to pooling, which makes selfish mining more likely. There is thus a qualitative sense in which the social cost of $t = T$ is more than ten times that of $t = T * 0.1$.
+However, there are superlinear costs at play as well. Clients need to process both the main chain and the blocks that do not become part of the canonical chain; hence, if a level of canonical-chain throughput $x$ causes an uncle rate $p$, then the actual level of computational burden is $\frac{x}{1-p}$, with a denominator that keeps decreasing toward zero as the canonical-chain throughput increases. Additionally, with high uncle rates selfish mining attacks become much easier \cite{optimalsm}, and the reduction in node count itself leads to pooling, which makes selfish mining more likely. There is thus a qualitative sense in which the social cost of increasing $W$ to whe point where $t = T$ is more than ten times that of setting $W$ so that $t = T * 0.1$.
 
-Even if the cost function is superlinear at the extremes, however, it appears to be linear at the lower side of the distribution, and the arguments from the Cornell study suggesting it may even be sublinear. If the block size increases from 10kb to 1000kb, a significant social cost is incurred because IoT devices, smartphones, Raspberry Pis, etc have a much harder time staying connected, but an increase from 1000kb to 1990k does not have such a high cost, because the range of use cases that become unusable within that interval is much lower. Hence, it seems plausible that the social cost curve is U-shaped:
+Even if the cost function is superlinear at the extremes, however, it appears to be linear at the lower side of the distribution, and the arguments from the Cornell study suggest it may even be sublinear. If the block size increases from 10kb to 1000kb, a significant social cost is incurred because IoT devices, smartphones, Raspberry Pis, etc have a much harder time staying connected, but an increase from 1000kb to 1990k does not have such a high cost, because the range of use cases that become unusable within that interval is much lower. Hence, it seems plausible that the social cost curve is U-shaped:
 
 \begin{center}
 \includegraphics[width=3in]{total_social_cost.png} \\
-Rendering of a possible total social cost curve for blockchains accepting transactions
+\footnotesize{Rendering of a possible total social cost curve for blockchains accepting transactions}
 \label{fig:three}
 \end{center}
-
-Note that there is a mixture of short run and long run effects at play here. A network can more easily adapt to transaction load increasing by a factor of ten over a year than it can to a similarly sized increase happening suddenly. If a Raspberry Pi can sync with the blockchain 98\% of the time, but suddenly fails to catch up 2\% of the time, then it may not be worth it to have the Raspberry Pi running at all. This suggests that the short-run social cost curve is more sharply upward-sloped than the long-run social cost curve; this is highly relevant when considering adjustable gas limits, "flex caps" and similar proposals.
 
 \subsection{Estimating the Private Benefit Curve}
 
 The private benefit curve, the demand for sending transactions, is much harder to estimate. We will try to make some estimates of a single variable, the elasticity of demand (ie. by what percent demand increases with a 1\% fall in price), by looking at some ``natural experiments'' in the Bitcoin and Ethereum blockchains.
 
-One type of natural experiment is to look at day-by-day transaction fee changes during a situation where the capacity of a blockchain suddenly changes due to some extrinsic factor; Ethereum gas limit changes, and Bitcoin block time instability due to interaction effects between Bitcoin and Bitcoin Cash mining, are the easiest two cases. Charts show a correlation between reduced Bitcoin blockchain capacity due to temporary block time increases and transaction fee levels:
+One type of natural experiment is to look at day-by-day transaction fee changes during a situation where the capacity of a blockchain suddenly changes due to some extrinsic factor; Ethereum gas limit changes, and Bitcoin block time instability due to interaction effects between Bitcoin and Bitcoin Cash mining, are the easiest two cases. Charts show a correlation between reduced Bitcoin blockchain capacity due to temporary block time increases and spikes in transaction fee levels:
 
 \begin{center}
 %\begin{figure}[hbt]
@@ -237,11 +237,11 @@ Bitcoin transaction fees
 %\end{figure}
 \end{center}
 
-An more thorough analysis of similar data\cite{demand-elasticity} gives elasticities of 0.4-0.7 for Bitcoin, and 1-2 for Ethereum.
+A more thorough analysis of similar data\cite{demand-elasticity} gives elasticities of 0.4-0.7 for Bitcoin, and 1-2 for Ethereum.
 
 Additionally, it is important to note that this only measures the short-term demand curve looking at actions taken over a few days to months and does not take into account longer-term adjustments that could happen in the market only after a couple of years; in the real world, for example, it is an established fact that long-run demand elasticity of gasoline is higher than short-run elasticity\cite{env-econ}; and this is likely true with Bitcoin transaction fees and Ethereum gas as well.
 
-So far, this model suggests a benefit curve with (rescaled) slope between -0.4 and -2, and a social cost curve with (rescaled) slope that is difficult to determine, but at current margins in various blockchains may be positive or negative. This suggests that a flat per-weight-unit in-protocol transaction fee, coupled with a hard limit at the point where the marginal social cost starts rapidly increasing, is superior to a pure weight limit-based regime.
+So far, this model suggests a benefit curve with slope between -0.4 and -2 (if rescaled so that the current supply/demand intersection is at $(1, 1)$), and a social cost curve with (rescaled) slope that is difficult to determine, but at current margins in various blockchains is likely to be low and may be positive or negative. This suggests that a flat per-weight-unit in-protocol transaction fee, coupled with a hard limit at the point where the marginal social cost starts rapidly increasing, is superior to a pure weight limit-based regime.
 
 ------------------
 
@@ -257,13 +257,27 @@ We can make a model as follows. Suppose that a k-factor increase in adoption lea
     \item A k-factor increase in the number of users and the number of full nodes.
 \end{itemize}
 
-Let us assume for simplicity that the demand elasticity is 1, and that the decentralization utility of $N$ full nodes is $D(N) = \log(N)$, so a k-factor increase in the number of full nodes simply adds utility $\log(k)$; the k-factor increase in the number of users scales up the social cost curve by a factor of k, and the private benefit curve scales by a factor of $k$. This leads to the result that, denominated in the cryptocurrency in question, adoption leaves the private benefit and social cost curves unchanged, and so there is also no correlation (!!). \footnote{An astute reader might ask whether or not empirical data supports this claim; unfortunately, far less than a single cryptocurrency ``business cycle'' (in the financial market bubble sense) has passed since blockchains started to typically have ``full blocks'', so there is far too little empirical data to make an assessment.}
+Let us assume for simplicity that the demand elasticity is 1, and that the decentralization utility of $N$ full nodes is $D(N) = \log(N)$, so a k-factor increase in the number of full nodes simply adds utility $\log(k)$; the k-factor increase in the number of users scales up the social cost curve by a factor of k, and the private benefit curve scales by a factor of $k$. This leads to the result that, denominated in the cryptocurrency in question, adoption leaves the private benefit and social cost curves unchanged, and so there is also no correlation (!!). \footnote{An astute reader might ask whether or not there is empirical data to support this claim; unfortunately, far less than a single cryptocurrency ``business cycle'' (in the financial market bubble sense) has passed since blockchains started to typically have ``full blocks'', so there is far too little empirical data to make an assessment.}
 
 Reality is of course more complicated than this simple model, but the model does suffice to show that, because of the lucky coincidence of being forced to denominate fees in a cryptocurrency whose price is itself proportional to adoption, there is at least no very strong first-order reason to expect positive correlation between the nominal benefit and cost curves. Hence, the arguments for using fixed fees in addition to gas limits still stand.
 
-Arguably one of the key reasons behind the un-intuitiveness of fixed fees is that for most of the history of blockchain protocols, blockchains operated in a ``non-full blocks'' mode, where there was always space in a block to include more transactions. The fee required to be paid was only a minimal value, set as a software default. When a cryptocurrency experiences a large price rise, this causes fees experienced by users to rise greatly, until eventually the defaults are manually adjusted downwards \cite{coindesk-btc-txn-fee, reddit-rec-miners, vitalik-twitter1}.  Hence, transaction fees were kept artificially stable by what are essentially political factors, whereas no such stabilizing effect existed for cryptocurrency prices.
+Arguably one of the key reasons behind the un-intuitiveness of fixed fees is that for most of the history of blockchain protocols, blockchains operated in a ``non-full blocks'' mode, where there was always space in a block to include more transactions. The fee required to be paid was only a minimal value, set as a software default. When a cryptocurrency experiences a large price rise, this causes fees experienced by users to rise greatly, until eventually the defaults are manually adjusted downwards \cite{coindesk-btc-txn-fee, reddit-rec-miners, vitalik-twitter1}.  Hence, transaction fees were kept artificially stable by what are essentially political constraints, whereas no such stabilizing effect existed for cryptocurrency prices.
 
-However, Bitcoin has recently entered the ``full blocks'' regime, where transactions are in permanent competition with each other to get included, and Ethereum has entered this regime during high-intensity token sales\cite{braveICO}. In this mode, fees become more volatile, and rises in adoption contribute to even more volatility. In Bitcoin, this has led to a $\sim 10x$ increase in fees in less than a year; in Ethereum, fees increase by a similar factor during token sales. Hence, it is now clear that, even under fixed quantity (i.e., fixed block size), fees can still be quite volatile even in the absence of price changes.
+\begin{center}
+\includegraphics[width=3in]{GaspriceInGwei.png} \\
+\scriptsize{Gas prices in gwei. The two marked sudden drops are coordinated attempts by miners and developers to reduce minimum accepted gasprices, first from 50 gwei to 20 gwei, then from 20 gwei to 4 gwei. Similar coordinated fee decreases have taken place in Bitcoin\cite{btcfeesdown10x}.}
+\end{center}
+
+However, Bitcoin has recently entered the ``full blocks'' regime, where transactions are in permanent competition with each other to get included, and Ethereum has entered this regime during high-intensity token sales\cite{braveICO}. In this mode, fees become more volatile, and rises in adoption contribute to even more volatility. In Bitcoin, this has led to a $\sim 10x$ increase in fees in less than a year; in Ethereum, fees increase by a similar factor during token sales. Even on average, in the last year transaction fees have become considerably more volatile than the ETH price:
+
+\begin{center}
+\includegraphics[width=3in]{PriceAndFees.png} \\
+\scriptsize{ETH price (lower) and average gasprice in USD (higher), Oct 2017 (post-Byzantium-hardfork) to July 2018. The mean absolute daily percentage change is 4.2\% for the ETH price in the shown time period, and 16.0\% for the USD-denominated average gasprice, and is standard deviation is used the average gasprice is $\approx 25$ times more volatile due to spikes.}
+
+\footnote{Source: http://etherscan.io/charts; spreadsheet with data and calculations at http://vitalik.ca/files/FeesAndETH.ods}
+\end{center}
+
+In the absence of political pressure on miners to make further gas limit increases, we see no reason for this state of affairs not to continue; and if political pressure \emph{can} be used to increase gas limits when needed, then the same processes could be used to adjust a fixed dee.
 
 \section{Transaction Fees and Auction Theory}
 
@@ -330,7 +344,7 @@ Plans with low Kolmogorov complexity are ideal because they have fewer moving pa
 
 \section{Heterogenous Resources in Computation and Bandwidth}
 
-The above weight limit analyses assume that a single scalar can sufficiently quantify the burden a transaction imposes upon the network. In reality, however, a transaction consumes several heterogeneous resources: calculation (Section \ref{sect:calculation}), state I/O (Section \ref{sect:io}), and state storage (Section \ref{sect:storage}).  Each of these have different properties, and an optimal pricing scheme should likely take these differences into account.
+The above weight limit analyses assume that a single scalar can sufficiently quantify the burden a transaction imposes upon the network. In reality, however, a transaction consumes several heterogeneous resources: calculation and state I/O (here grouped into ``computation''), bandwidth, and state storage.  Each of these have different properties, and an optimal pricing scheme should likely take these differences into account.
 
 We will start off by looking at computation and bandwidth. Computation and bandwidth both contribute to the computational load of a node, and both contribute to ``uncle rate''; hence, both seem to be subject to the same mechanics of linear or sublinear social cost at lower weights and superlinear social cost at higher weights. If the factors creating the superlinear social costs are independent, it may be prudent to have a separate gas limit for computation and block size limit for bandwidth; however, because much of the superlinearity comes from the uncle rate itself, and the impacts of computation and bandwidth on uncle rate seem to be additive, it seems more likely that a single combined limit actually is optimal.
 
@@ -378,23 +392,52 @@ However, both the Bitcoin and Ethereum approaches have four large problems that 
 
 The first problem can possibly be solved by simply making storage more expensive. However, making storage more expensive and doing nothing else would make it prohibitively expensive to use storage for very short periods of time. One could offer a time-based refund, refunding more if a storage slot is cleared earlier rather than later; the only arbitrage-free scheme for this is to define some decreasing nonnegative function $F(t)$ (eg. $F(t) = h * e^{-kt}$) of the current time, and charge $F(t)$ for filling a storage slot at time $t$, and refund $F(t)$ for clearing a storage slot at time $t$.\footnote{If different storage slots can have different $F(t)$ functions, then at any point where $F_1'(t) > F_2'(t)$, there is an arbitrage opportunity where if the holder of $F_1$ (the slower-falling function) no longer needs their storage slot, they can instead assign permission to use it to the holder of the other storage slot, and the holder of the other storage slot can clear it immediately.} However, this approach is very capital-inefficient, requiring large deposits to use storage, and additionally rests on the assumption that the social cost of storage will continue to forever decrease quickly enough that the integral is convergent.
 
-A solution that does not have these problems is to implement a time-based storage maintenance fee (sometimes also called ``rent''). The simplest way to implement this is simple: every account object is charged X coins per block per byte that it consumes in the state. If an account has less coins than the amount needed to pay for $N$ blocks (say, $N = 500$), then anyone can ``poke'' the account and delete it from storage, and claim $k N$ blocks' worth of rent as a bounty where $k \in (0,1]$. Implementing the above is impractical as every block going through every account and decrementing its balance has immense overhead. However, this can be computed quite practically through lazy evaluation:
+A solution that does not have these problems is to implement a time-based storage maintenance fee (sometimes also called ``rent''). The simplest way to implement this is simple: every account object is charged X coins per block per byte that it consumes in the state. If an account has less coins than the amount needed to pay for $pokeThreshold$ blocks (say, $pokeThreshold = 500$), then anyone can ``poke'' the account and delete it from storage, and claim $k * pokeThreshold$ blocks' worth of rent as a bounty where $k \in (0,1]$. Implementing the above is impractical as every block going through every account and decrementing its balance has immense overhead. However, this can be computed quite practically through lazy evaluation:
 
 \begin{itemize}
 \item All accounts store an additional data field, $LastBlockAccessed$
-\item An account's current balance can be computed as $balance - perBlockFee * sizeOf(account) * (curBlock - LastBlockAccessed)$. An account can be poked if this value goes below $perBlockFee * sizeOf(account) * 500$
+\item An account's current balance can be computed as $$balance - perBlockFee * sizeOf(account) * (curBlock - LastBlockAccessed)$$
+\item An account can be poked if this value goes below $perBlockFee * sizeOf(account) * pokeThreshold$
 \item When an account's state is modified, its $balance$ is updated based on the above formula, and $LastBlockAccessed$ is set to the current block number
 \end{itemize}
 
-Suppose that we want the maintenance fee to be able to vary over time. Then, for all block heights $h$ we save in storage $totalFee[h] = \sum_{i=1}^h Fee[i] = totalFee[h-1] + Fee[h]$. We compute the current balance as $balance - sizeOf(account) * (totalFee[curBlock] - totalFee[LastBlockAccessed])$ (note that $totalFee[curBlock] - totalFee[LastBlockAccessed] = \sum_{i=LastBlockAccessed}^{curBlock} Fee[i]$).
+Suppose that we want the maintenance fee to be able to vary over time. Then, for all block heights $h$ we save in storage $totalFee[h] = \sum_{i=1}^h Fee[i] = totalFee[h-1] + Fee[h]$. We compute the current balance as $$balance - sizeOf(account) * (totalFee[curBlock] - totalFee[LastBlockAccessed])$$, where $totalFee[curBlock] - totalFee[LastBlockAccessed]$ can be understood as $\sum_{i=LastBlockAccessed}^{curBlock} Fee[i]$.
 
-However, we will argue in favor of simply setting the maintenance fee to one specific value (eg. $10^{-7}$ ETH per byte per year), and leaving it this way forever. First of all, the social cost of storage use is clearly almost perfectly linear in the short and medium run, but it is also much more linear in the long run. There is no analog to the natural asymptote of bandwidth and computation costs in blockchains where at some point the uncle rate reaches 100\%; even if the storage of the Ethereum blockchain starts increasing by 10 GB per day, then blockchain nodes will be quickly relegated to only running on data centers, but the blockchain will still fundamentally be functional. In fact, if you assume that node storage capacity is distributed among the same distribution as the Cornell study\cite{cornell} shows bandwidth is, and assume the logarithmic utility function for node count, then the social cost is roughly $C(x) = log(x)$, or $C'(x) = \frac{1}{x}$ - very steeply \emph{sublinear}. Second, the developer and user experience considerably improves if developers and users can determine with exactness a minimum ``time to live'' for any given contract far ahead in advance. Variable fees do not have this property; a fixed fee does.
+However, we will argue in favor of simply setting the maintenance fee to one specific value (eg. $10^{-7}$ ETH per byte per year), and leaving it this way forever. First of all, the social cost of storage use is clearly almost perfectly linear in the short and medium run, but it is also much more linear in the long run. There is no analog to the natural asymptote of bandwidth and computation costs in blockchains where at some point the uncle rate reaches 100\%; even if the storage of the Ethereum blockchain starts increasing by 10 GB per day, then blockchain nodes will be quickly relegated to only running on data centers, but the blockchain will still fundamentally be functional. In fact, if you assume that node storage capacity is distributed among the same distribution as the Cornell study\cite{cornell} shows bandwidth is, so $NodeCount(W) = \frac{1}{W}$, and assume the logarithmic utility function for node count, so $D(x) = log(x) = -log(W)$ then the social cost component from node centralization is roughly $C(W) = log(W)$, or $C'(W) = \frac{1}{W}$ - very steeply \emph{sublinear}.
+
+Second, the developer and user experience considerably improves if developers and users can determine with exactness a minimum ``time to live'' for any given contract far ahead in advance. Variable fees do not have this property; a fixed fee does. Third, as cryptocurrency prices are more stable than transaction fees, a fixed fee improves price predictability, in both cryptocurrency and fiat-denominated terms. Fourth, a fixed fee is simple, both intuitively and in the semi-formal sense of having low Kolmogorov complexity.
+
+\section{Storage Pricing and User Experience}
+
+For a simple cryptocurrency, the harm from one particular UTXO or account being deleted because its balance was completely drained paying storage maintenance fees is very simple to understand, and there are no complex interaction effects between different accounts or UTXOs that could result. For a more complex smart contract blockchain, rent does introduce more complexities, as there will be contracts that are very valuable for reasons other than the ETH (or other protocol-level base currency) contained in them, such as their function as software libraries, user-defined assets (ERC20, ERC721, etc) that they hold, active relationships with other smart contracts, etc. Hence, there is larger risk of an application suddenly becoming unusable because someone forgot to pay a maintenance fee. 
+
+Such situations can generally be detected far ahead of time, but if this happens, then there is a second backstop that can be added to mitigate the effect of deletions arising from negligent failure to pay maintenance fees: a \emph{hibernation/waking scheme}. Accounts that run out of funds to pay their maintenance fees do get removed from the state, but they are not \emph{deleted}; rather, they are \emph{hibernated}. For any hibernated contract, anyone can submit Merkle proofs that prove two claims:
+
+\begin{enumerate}
+\item A given hibernated contract exists.
+\item That particular instance of hibernation was not already used to wake the contract.
+\end{enumerate}
+
+Condition (2) is needed to prevent a double-waking attack, where a contract is hibernated once, and then the proof of its hibernation is used to wake the old contract twice:
+
+\begin{center}
+\includegraphics[width=3.5in]{sleepwake.png} \\
+\end{center}
+
+If the contract contains more funds at the time of the older hibernation that it does at the time of the newer hibernation, then such an attack could be used to create funds out of nowhere. The second kind of proof could be done as follows. Define $MinInterval$ as the minimum length of time a storage slot can be used for (eg. 1 week):
+
+\begin{itemize}
+\item Add a condition to the fee payment logic: when a contract is woken, it must be filled with at least $(MinInterval + pokeThreshold) * sizeOf(contract) * feePerBlock$ ether. A contract also cannot withdraw so much that its remaining balance after the withdrawal falls below this threshold.
+\item A proof of non-prior-waking consists of a Merkle branch pointing to the contract's address once every $MinInterval$
+\end{itemize}
+
+Adjusting $MinInterval$ is a tradeoff: smaller values enable launching contracts cheaply for shorter periods of time, but larger values shrink the size of the witness required for waking, as well as shrinking the number of ever-growing historical state roots that need to be stored. For a $MinInterval$ of one week, and a state with $2^{30}$ accounts, waking a ten year old contract would require $32 * log(2<sup>30</sup>) * \frac{10 * 365.242}{7} \approx$ 500,000 bytes; a $minInterval$ of one month reduces this to 115,200 bytes.
 
 \section{Conclusion}
 
-\todo{fill in conclusion here.}
+Economic analysis can be used to significantly improve the incentive alignment of resource usage inside of public blockchains. Simplistic models of one-dimensional weight limits often lead to prices that are highly mismatched relative to social costs, and slightly more complex techniques involving a combination of ``Pigovian taxes'' and cap-and-trade mechanics such as weight limits can improve significantly on the status quo. Storage in particular is a very different resource market from other types of resource markets, and should be treated separately.
 
-\textbf{Future work.} \todo{fill me in.}
+More economic analysis and econometric research can be used to help identify further mechanisms that can be used to better reduce costs while discouraging wasteful use of public blockchain resources.
 
 \textbf{Acknowledgements.} \todo{fill me in.}
 
@@ -406,43 +449,6 @@ However, we will argue in favor of simply setting the maintenance fee to one spe
 \appendix
 \part*{Appendix}
 
-\section{Unused text}
-
-\todo{This is text that was in the paper but has moved here until a home has been found for it. If no home is found will delete.}
-
-
-A more a-priori mathematical model might assume that the bandwidth of full nodes is power-law-distributed; if this is true, then an m-factor increase in the block size would decrease the number of full nodes by a factor of $n$; that is, an m-factor increase in the block size would cause a constant loss of utility, and so the marginal social cost of an additional transaction is proportional to the inverse of the existing load of the chain. We suspect that there are fundamental limits to the capacity of a node because of limits to clock speed and Amdahl's law [cite], though even in the chart above we see the marginal social cost of an additional transaction very slightly decreasing. 
-
-
-Fourth, proof of work blockchains present the possibility of using mining difficult as a (very rough) proxy for price; unfortunately, in a proof of stake blockchain even this is not possible.  One possiblity is requiring some kind of non-outsourceable memory-hard proof-of-work for transaction sending, and using this to estimate the computational resources available to users.  But this is potentially very fragile.
-
-
-These gas costs are calculated based on a formula that assigns a 200 gas cost to each byte saved in storage. An \opcode{sstore} is deemed to consume $\sim\!75$ bytes because it stores a 32 byte key and a 32 byte value, with an additional 11 byte overhead for the intermediate Merkle tree nodes (likely an underestimate). An account is deemed to consume $\sim\!128$ bytes: 3 for a nonce, 8 for a value, 32 for a code hash, 32 for a storage trie root hash, 20 for the account address, 5 for serialization overhead and $\sim\!28$ for state tree overhead (also possibly an underestimate). 
-
-Even ignoring gas arbitrage, there remains a serious incentive incompatibility arising from the fact that, whereas the average price should presumably be more expensive in periods of high congestion, storage price should be stable over the medium term, a goal at odds with the inherent volatility of gas prices in full-blocks conditions. \question{Shouldn't this apply to Calcuation and IO as well?}
-
-\textbf{Calculation and Custom Optimization}
-
-Another discrepancy is that between different types of computation, and specifically the possibility of optimization (both software, through custom implementations, and hardware, through FPGAs and ASICs). Even though Ethereum runs on a general-purpose virtual machine, at least the overhead of the VM is too high to run intensive cryptographic operations within it; for example, implementing cryptographically anonymized voting led to a system where a single transaction took up half an Ethereum block. \cite{fc17ai}
-
-Even ignoring VM overhead, many cryptographic operations are hardware optimized, and due to the seemingly inescapable very high overhead for new forms of cryptography such as zk-SNARKs, homomorphic encryption, and indistinguishability obfuscation, it seems inevitable that hardware optimizations will be done for those too. A blockchain protocol with a general-purpose virtual machine could always simply add special-purpose ``opcodes'' (or ``precompiles'') for such optimized operations, assigning them a weight that reflects their runtime with the hardware optimizations. But we'’d prefer to detect such optimizations automatically, incentivizing validators to voluntarily agree to reduce weights for operations that they can compute efficiently. However, there are a number of serious complications for such a scheme. First, how will the scheme deal with situations where 60\% of validators have an optimization but the remaining 40\% don't? If the scheme attempts to target 90\% support, then what happens if 11\% attackers stall the system by pretending not to have a given optimization? What happens if an attacker creates an operation which is normally slow to execute, but the attacker has a ``trapdoor'' that allows them to execute it quickly (any digital signature scheme can be easily turned into such a scheme), and then pretends this is a special operation for which the attacker has an optimization?
-
-
-\subsubsection{Dapp resurrection}
-
-Accounts that run out of ether to pay rent can get deleted, but anyone can always submit a Merkle proof that a contract previously existed at some address and thereby resurrect it. This resurrection keeps total neutrality of storage pricing, but has two major flaws:
-
-\begin{itemize}
-\item Contracts must account for the possibility that contracts may be \emph{temporarily unavailable} or ``hibernate''. 
-If a contract hibernates with state A, then is resurrected, then hibernates again with state B, then one can form a valid proof to resurrect it with A or with B, and an interactive game would be required to detect the more recent resurrection. Doing this correctly is an unsolved problem, and furthermore any solution would increase the complexity to the protocol and security model.
-
-\item Note that in both the original scheme and these two modified schemes, there remains a problem of calculating exactly what the storage price should be.
-\end{itemize}
-
----
-
-
-\textbf{No costless griefing}. Even when blocks are not full, validators should not be able to permanently consume storage for free.
 
 
 
