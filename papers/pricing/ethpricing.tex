@@ -119,7 +119,7 @@ The above suffices as a model of a blockchain for the purpose of this paper; we 
 
 \section{Prior Work}
 
-In Bitcoin and Ethereum, resources are priced using a simple ``cap-and-trade'' scheme. A metric is defined for the quantity of resources (called ``weight'' or ``gas'') that a transaction consumes, and there is a protocol-defined maximum total quantity of resources that the transactions contained in a block will consume. Validators have free rein to select transactions as long as the total weight of the block is below that limit. An equilibrium is established where users attach fees to their transactions which go to the validator that includes the transaction in a block, and validators select the transactions paying the highest fee per unit weight. In Bitcoin, for example, the weight limit is a static $4 *10^6$, and weight is defined as follows:
+In Bitcoin and Ethereum, resources are priced using a simple ``cap-and-trade'' scheme. A metric is defined for the quantity of resources (called ``weight'' or ``gas'') that a transaction consumes, and there is a protocol-defined maximum total quantity of resources that the transactions contained in a block will consume. Validators have free rein to select transactions as long as the total weight of the block is below that limit. An equilibrium is established where users attach fees to their transactions which go to the validator that includes the transaction in a block, and validators select the transactions paying the highest fee per unit weight. In Bitcoin, for example, the weight limit is a static $4 *10^6$, and weight is defined as follows\cite{weightunits}:
 
 \begin{equation}
 \tt{weight(block) = 4 * len(block.nonsignature\_data) + len(block.signature\_data)}
@@ -180,7 +180,7 @@ The argument above applies only if costs and benefits are independently distribu
 
 Should blockchains have a block size limit, or should they not have a limit but instead charge a fixed fee per resource unit consumed, or would some intermediate policy, one which charges a fee as a function $F(w)$ of the weight included in a block and where $F'(w)$ is increasing and possibly reaches an asymptote, be optimal? To estimate optimal policy under the prices vs. quantities framework, we start off by attempting to estimate the social cost function.
 
-A study from Cornell provided an estimate of the node count as a response to the weight load of the blockchain. The study was conducted at a time when Bitcoin's weight formula was simply one weight unit per byte, with a weight limit of $10^6$. The study found that 90\% of nodes would remain online at $W = 4*10^6$, and 50\% of nodes would stay online at $W = 3.8 * 10^7$.
+A study from Cornell\cite{cornell} provided an estimate of the node count as a response to the weight load of the blockchain. The study was conducted at a time when Bitcoin's weight formula was simply one weight unit per byte, with a weight limit of $10^6$. The study found that 90\% of nodes would remain online at $W = 4*10^6$, and 50\% of nodes would stay online at $W = 3.8 * 10^7$.
 
 %\begin{figure}
 	\includegraphics[width=5.5in]{blocksize_fullnodes.png}
@@ -347,16 +347,14 @@ One can similarly attempt to measure bandwidth with proofs of bandwidth \cite{pr
 
 Pricing state storage is a fundamentally different kind of burden from computation, bandwidth and state IO (treated above as being simply another kind of computation) for one simple reason: whereas those costs are one-time burdens on validators and nodes that are online at that particular time, state space must be stored by, and thus burdens, all full nodes, forever.
 
-More formally, accounts in each system can be viewed as a key-value mapping where each account is keyed by an ID number whose value is some balance in the system's base cryptocurrency (BTC/ETH) as well as other auxiliary data. In Bitcoin's case, the auxiliary data is constant (the scriptPubKey, a sliver of code describing the conditions for spending the balance). In Ethereum, contract accounts have their own storage, which is itself a key-value map whose contents may change over time.
+In Bitcoin, there is no explicit fee for filling storage; transactions are simply charged per byte, and filling storage is charged for indirectly because filling a new storage slot (consuming an average 61 bytes\cite{utxo1}) requires adding about 34 bytes\cite{utxo2} to a transaction (at least for ``regular'' outputs; non-standard outputs can be made for as little as 9 bytes\cite{utxo3}\cite{utxo4}), so there is a maximum amount by which one can increase the size of the UTXO set within a single block. The recent Segregated Witness fork includes a modification where signature data is charged as 1 weight unit per byte and nonsignature data as 4 weight units per byte, up to a maximum of 4 million weight units; this relatively reduces the cost of spending UTXOs and increases the cost of creating new UTXOs \cite{segwitwhy4}.
 
-In Bitcoin, this problem is not dealt with at all, and in fact Bitcoin's purely blocksize-based weight function is actively counterproductive: transactions that create many new UTXOs, and thus bloat the state, are cheap, but transactions that consume UTXOs, and thus clear the state, are more expensive, as each UTXO consumed requires an additional signature which nonnegligibly increases the transaction's weight. The segregated witness proposal mitigates this problem by reducing the cost of bytes in a signature by 4x, but the incentive misalignment remains.
-
-In the case of Ethereum, there are two ways to increase storage size:
+In Ethereum, there is a more complex gas cost schedule for storage-affecting operations, There are two types of operations that can affect the storage size:
 
 \begin{enumerate}
-    \item The first is the \opcode{sstore} opcode, which saves a value in the contract's storage. If \opcode{sstore} overwrites an existing value, it costs 5000 gas, but if it adds a new value to storage, it costs 20,000 gas. If \opcode{sstore} is used to clear an existing value (so it no longer has to be saved in the trie), then it costs the contract 5,000 gas, but a ``refund'' of 15,000 gas is given to the transaction sender.
+    \item The \opcode{sstore} opcode, which saves a value in the contract's storage. If \opcode{sstore} overwrites an existing value, it costs 5000 gas, but if it adds a new value to storage, it costs 20,000 gas. If \opcode{sstore} is used to clear an existing value (so it no longer has to be saved in storage), then it costs the contract 5,000 gas, but a ``refund'' of 15,000 gas is given to the transaction sender.
 
-    \item The second is \emph{account creation}. Accounts can be created\footnote{Accounts can also be deleted through the \opcode{selfdestruct} opcode, which costs the contract 5,000 gas but refunds the transaction sender a 24,000 gas.} in three ways:
+    \item \emph{Account creation}. Accounts can be created\footnote{Accounts can also be deleted through the \opcode{selfdestruct} opcode, which costs the contract 5,000 gas but refunds the transaction sender a 24,000 gas.} in three ways:
 
     \begin{itemize}
         \item creating a contract using the \opcode{create} opcode (32,000 gas, plus 200 per byte of code)
@@ -367,115 +365,30 @@ In the case of Ethereum, there are two ways to increase storage size:
 
 \end{enumerate}
 
+The gas costs were computed by taking as a goal a cost of $\approx 200$ gas per byte in storage, estimating the number of bytes added to storage space by each particular type of storage-filling operation, multiplying the two values, and then adding an additional term to take into account other costs such as computation and contribution to history size.
 
-One simple solution is to increase the costs for permanent storage by making an across-the-board recalculation of storage-filling opcodes and refunds based on a 500--1000 cost per byte. This could be done in combination with a gas limit increase in order to make the change neutral with respect to average transaction capacity. However, even with such a change several challenges remain.
-
-\begin{itemize}
-\item There is insufficient incentive to clear storage. Although there are refunds when using \opcode{sstore} and \opcode{selfdestruct}, they are small refunds.  Increasing the refunds is risky, because it opens the door to arbitrage. For example, under full-block volatile-gas-price conditions, users could fill storage during the weekend when gas prices are low and then get refunds at peak time when gas prices are high.  Furthermore, refunds can only make future transactions cheaper, not give money back.
-
-\item There is no monetary incentive to clear storage now instead of fifty years from now---the size of the refund is the same regardless of when you do it.
-
-\item Even when blocks are not full, validators still have a disincentive against including blocks: the larger and more computationally intensive the blocks are that they create, the longer they will take to propagate through the network, and so the larger the chance they will not be part of the main chain, leading to losses of rewards for the validator.
-
-Etherchain runs linear regressions to compute the average implied cost \cite{etherchaingas} to a validator of adding each unit of gas to zer blocks, and currently it is $\sim \!\!0.013$ ETH per million gas. However, if a gas-intensive transaction is paying primarily for storage rather than computation (e.g., as in contract-creating transactions), the gas represents long-term storage costs and not costs to present-day computation, and so for those transactions this risk does not exist. This incentivizes validators to favor storage-filling transactions, and makes the optimal validator strategy much more complex, possibly favoring the emergence of centralized pools that optimize their blocks through private agreements with application developers.
-
-\item When blocks are not full, validators have the ability to ``grief'' the network by sending transactions to the network that increase the state size at no personal cost.
-
-\end{itemize}
-
-Suppose that for the reasons above we do not implement in-protocol rent, and instead only allow users to purchase storage at a high price (e.g., using the first proposal above to greatly increase the gas cost). Then, there may be users who create contracts with a large number of storage slots, and ``rent them out'' - anyone can ask the contract to rent out a batch of storage slots for some fee, and for some time they will be given permission to read and write to those slots. Provided the ratio between the cost of filling new storage and the cost of editing existing storage is high enough, there will invariably be an incentive to do this, and this may satisfy many of the goals of in-protocol rent markets.
-
-\todo{We need to come down on one side of the rent issue.  Do we support it or not?}
-
-\subsection{Implementing Rent}
-
-
-One popular proposal is ``storage rent''. The idea is simple: every account object is charged X coins per block per byte that it consumes in the state. If an account has less coins than the amount needed to pay for $N$ blocks (say, $N = 500$), then anyone can ``poke'' the account and delete it from storage, and claim $k N$ blocks' worth of rent as a bounty where $k \in (0,1]$. Implementing the above is impractical as every block going through every account and decrementing its balance has immense overhead. However, this is a better way, and we propose the following scheme:
-
-All accounts store an additional data field, last\_block\_accessed. In the case of Ethereum accounts, another data field, storage\_slot\_count, is added to denote the total number of storage slots in each account.
-
-We define an extending sequence $\opname{crf} = (0, x_1, x_2, \ldots )$ where $x_i = x_{i-1} + \fname{rent}(i)$, where function $\fname{rent}$ takes a block index $i$ and returns a nonnegative integer fee for storage during that block, and may be computed by an arbitrary formula. Using this mechanism, {\tt{crf}} stores a ``running sum'' for the total rent fee, and $\opname{crf}[j] - \opname{crf}[i]$ computes the rent per byte to be paid from block $i$ to $j$.
-
-When any account is touched, update via Algorithm \ref{alg:storage_update}.
-
-% asize = account's current size in bytes\;
-% abalance = account's current balance\;
-
-
-\begin{lstlisting}
- \KwData{block\_number, acct, caller\_id, size\_delta, crf}
- \KwResult{Adjust account's total size}
- current\_crf = $\opname{crf}$[block\_number]\;
- {\tt{acct.balance}} $-$= {\tt{acct.size}} * ($\textnormal{current\_crf} - \opname{crf}[{\tt{acct.block\_last\_accessed}}$)\;
- \ 
- \eIf{ {\tt{acct.balance}} $< 500\ * (\textnormal{current\_crf}\ -$ $\opname{crf}[\textnormal{block\_number} - 1])$ }{
- transfer( {\tt{acct.balance}}, caller\_id )\;
- {\tt{acct.self\_destruct()}}\;
- }{
- {\tt{acct.last\_block\_accessed}} = block\_number\;
- {\tt{acct.size}} += size\_delta\;
- }
- \caption{Algorithm to update the storage size.}
-\label{alg:storage_update}
-\end{lstlisting}
-
-
-
-The rent scheme in Algorithm \ref{alg:storage_update} adds a strong incentive to: not consume a large amount of storage as well as minimize storage time (clear early).  We require that storage rent costs are not given to validators.  This is to ensure validators are never incentivized to ``bloat'' the state or even seek storage-filling-heavy transactions.  This rent solution resolves all known incentive incompatibilities in storage pricing (Section \ref{sect:storage}). However, it damages developer experience by:
+However, both the Bitcoin and Ethereum approaches have four large problems that lead to very suboptimal outcomes:
 
 \begin{itemize}
-\item the fundamental guarantee that once something is in the state, it stays in the state, is now gone.  Developers now have to become economists, coming up with pricing schemes to charge for access to these systems so that they can pay for their ongoing rent to ensure the contracts' continued existence. 
-
-\item Applications that interact with applications have to check that not only their application, but also every application that their application depends on, and so on recursively, stays alive.
+\item Storage is far too cheap in an absolute sense. For example, it costs 68 gas to force current users of the Ethereum network to download and process a byte, but 200 gas is enough to force all present and future users to do the same (and store the data forever)
+\item The social cost of storage is far more linear, especially in the short and medium run, than computation, bandwidth and disk IO. If the storage normally increases by 1 MB per day, but in one month it increases by 100 kB per day most days except for the last day when it suddenly increases by 27 MB, the extra volatility in storage growth does not really hurt anyone.
+\item There is insufficient incentive to clear storage. In the extreme case, depending on fee rates 10-60\% of the UTXOs in Bitcoin's state\cite{utxo5} have a value sufficiently low that it costs more money to clear them than is contained in the UTXOs. Most Ethereum contracts that get created do not get destroyed, and many do not have any effective ``storage hygiene''.
+\item There is no incentive to clear storage earlier rather than later. Even if storage clearing refunds exist, at present they are not time-based.
 \end{itemize}
 
+The first problem can possibly be solved by simply making storage more expensive. However, making storage more expensive and doing nothing else would make it prohibitively expensive to use storage for very short periods of time. One could offer a time-based refund, refunding more if a storage slot is cleared earlier rather than later; the only arbitrage-free scheme for this is to define some decreasing nonnegative function $F(t)$ (eg. $F(t) = h * e^{-kt}$) of the current time, and charge $F(t)$ for filling a storage slot at time $t$, and refund $F(t)$ for clearing a storage slot at time $t$.\footnote{If different storage slots can have different $F(t)$ functions, then at any point where $F_1'(t) > F_2'(t)$, there is an arbitrage opportunity where if the holder of $F_1$ (the slower-falling function) no longer needs their storage slot, they can instead assign permission to use it to the holder of the other storage slot, and the holder of the other storage slot can clear it immediately.} However, this approach is very capital-inefficient, requiring large deposits to use storage, and additionally rests on the assumption that the social cost of storage will continue to forever decrease quickly enough that the integral is convergent.
 
-One modification to rent to improve developer experience is exponential ``rent-to-own'' storage pricing.  This scheme can be described as follows. Every time an account increases its size (a newly created account is viewed as increasing its size from zero), it pays a fee of ${\tt{storage\_price}} * (\textnormal{new\_account\_size} - \textnormal{old\_account\_size})$, denominated in the base cryptocurrency. This fee is added to the account's ``deposit'' (a kind of secondary balance). Every block,\footnote{Just as in the previous scheme, it is vastly more efficient to calculate the decay just-in-time.} every account's deposit is multiplied by, $1 - \frac{1}{\tt{ACCOUNT\_DEPOSIT\_DECAY\_FACTOR}}$.  When an account decreases its size (an account being deleted can be viewed as decreasing its size to zero), it receives a refund of,
-\begin{equation}
-\textnormal{current\_account\_deposit} * \frac{\textnormal{old\_account\_size} - \textnormal{new\_account\_size}}{\textnormal{old\_account\_size}},
-\end{equation}
- and this amount is removed from the account's deposit.
- 
-This scheme weakens the ``neutrality'' of storage pricing, but it improves developer experience by making storage cheaper if an account has already held it for a long time.  We deem this an acceptable trade-off.  \question{Wouldn't this encourage rent-database contracts even more?}
-
-\todo{Have moved Dapp resurrection to the Appendix until we have a protocol for handling multiple resurrections.}
-
-\subsection{Paying for storage in a new internal currency?}
-
-The above schemes also expose another dichotomy: should storage be paid in gas (or, more generally, the ``weight'' metric of a blockchain), or be paid in the base cryptocurrency?
-
-There are two primary arguments for charging for storage in gas:
-\begin{itemize}
-\item \textbf{Simplicity}. Simplicity is a virtue. The protocol is simpler when there is only one mechanism for charging for resource consumption.
-\item \textbf{Less overhead} When accounts constantly consume a protocol's base cryptocurrency, additional transactions are required to keep accounts ``topped up''.
-\end{itemize}
-
-Note that, unlike Bitcoin's UTXO-based systems where account objects are created once and destroyed once, less overhead applies much more strongly to Ethereum, where accounts can have complex internal states and persist over the course of many interactions.
-
-There are several primary arguments for charging in a protocol's base cryptocurrency, or even defining an additional in-protocol resource.
-
-\begin{enumerate}
-\item \textbf{State space price stability}.  Decoupling pricing of state space consumption from a volatile transaction fee market makes state space pricing more stable, and allows for the design of a special-purpose fee schedule and supply curve that further promotes stability. This has two benefits:
+A solution that does not have these problems is to implement a time-based storage maintenance fee (sometimes also called ``rent''). The simplest way to implement this is simple: every account object is charged X coins per block per byte that it consumes in the state. If an account has less coins than the amount needed to pay for $N$ blocks (say, $N = 500$), then anyone can ``poke'' the account and delete it from storage, and claim $k N$ blocks' worth of rent as a bounty where $k \in (0,1]$. Implementing the above is impractical as every block going through every account and decrementing its balance has immense overhead. However, this can be computed quite practically through lazy evaluation:
 
 \begin{itemize}
-\item \textbf{Economic optimality}. Economic analysis dictates that state space prices should be stable in the medium term due to the social cost of state space consumption does not change quickly.
-
-\item \textbf{Reducing attack surface}. Attackers have vastly more means to influence gas prices.  If storage prices were in gas, and an attacker can quickly devalue gas, then ze can interfere with applications by causing objects to get deleted much earlier than their developers thought.
+\item All accounts store an additional data field, $LastBlockAccessed$
+\item An account's current balance can be computed as $balance - perBlockFee * sizeOf(account) * (curBlock - LastBlockAccessed)$. An account can be poked if this value goes below $perBlockFee * sizeOf(account) * 500$
+\item When an account's state is modified, its $balance$ is updated based on the above formula, and $LastBlockAccessed$ is set to the current block number
 \end{itemize}
 
-\item \textbf{Clean separation}. Freedom to design a separate supply curves for state space consumption and calculation/state-IO.
+Suppose that we want the maintenance fee to be able to vary over time. Then, for all block heights $h$ we save in storage $totalFee[h] = \sum_{i=1}^h Fee[i] = totalFee[h-1] + Fee[h]$. We compute the current balance as $balance - sizeOf(account) * (totalFee[curBlock] - totalFee[LastBlockAccessed])$ (note that $totalFee[curBlock] - totalFee[LastBlockAccessed] = \sum_{i=LastBlockAccessed}^{curBlock} Fee[i]$).
 
-\end{enumerate}
-
-Furthermore, in the specific case where rent is charged per-block, the fees paid by account objects during some block are not in any significant sense tied to transactions within that block, and so charging transaction senders is not a very natural solution.
-
-If fees are paid in a protocol's base cryptocurrency, then another question appears: how much to charge? Should there be a fixed price, should the price adjust up and down to target some rate of state size growth, or something in between? This is still arguably an unsolved research question.
-
-
-
-\section{The Two-currency Solution}
-\todo{We talk about how to merge the measures from Sections 4--6 into a one or two dimensional gas measure.}
-\todo{Come down on one side of whether want a new internal currency just for storage.}
+However, we will argue in favor of simply setting the maintenance fee to one specific value (eg. $10^{-7}$ ETH per byte per year), and leaving it this way forever. First of all, the social cost of storage use is clearly almost perfectly linear in the short and medium run, but it is also much more linear in the long run. There is no analog to the natural asymptote of bandwidth and computation costs in blockchains where at some point the uncle rate reaches 100\%; even if the storage of the Ethereum blockchain starts increasing by 10 GB per day, then blockchain nodes will be quickly relegated to only running on data centers, but the blockchain will still fundamentally be functional. In fact, if you assume that node storage capacity is distributed among the same distribution as the Cornell study\cite{cornell} shows bandwidth is, and assume the logarithmic utility function for node count, then the social cost is roughly $C(x) = log(x)$, or $C'(x) = \frac{1}{x}$ - very steeply \emph{sublinear}. Second, the developer and user experience considerably improves if developers and users can determine with exactness a minimum ``time to live'' for any given contract far ahead in advance. Variable fees do not have this property; a fixed fee does.
 
 \section{Conclusion}
 
