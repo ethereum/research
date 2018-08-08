@@ -261,11 +261,11 @@ Let us assume for simplicity that the demand elasticity is 1, and that the decen
 
 Reality is of course more complicated than this simple model, but the model does suffice to show that, because of the lucky coincidence of being forced to denominate fees in a cryptocurrency whose price is itself proportional to adoption, there is at least no very strong first-order reason to expect positive correlation between the nominal benefit and cost curves. Hence, the arguments for using fixed fees in addition to gas limits still stand.
 
-Arguably one of the key reasons behind the un-intuitiveness of fixed fees is that for most of the history of blockchain protocols, blockchains operated in a ``non-full blocks'' mode, where there was always space in a block to include more transactions. The fee required to be paid was only a minimal value, set as a software default. When a cryptocurrency experiences a large price rise, this causes fees experienced by users to rise greatly, until eventually the defaults are manually adjusted downwards \cite{coindesk-btc-txn-fee, reddit-rec-miners, vitalik-twitter1}.  Hence, transaction fees were kept artificially stable by what are essentially political constraints, whereas no such stabilizing effect existed for cryptocurrency prices.
+Arguably one of the key reasons behind the un-intuitiveness of fixed fees is that for most of the history of blockchain protocols, blockchains operated in a ``non-full blocks'' mode, where there was always space in a block to include more transactions. Miners have a software setting representing the minimum fee they are willing to accept, which almost all miners would keep at the default value, and users needed to pay this amount to get included. When a cryptocurrency experiences a large price rise, this causes fees experienced by users to rise greatly, until eventually the defaults are manually adjusted downwards \cite{coindesk-btc-txn-fee, reddit-rec-miners, vitalik-twitter1}.  Hence, transaction fees were kept artificially stable by what are essentially political constraints, whereas no such stabilizing effect existed for cryptocurrency prices.
 
 \begin{center}
 \includegraphics[width=3in]{GaspriceInGwei.png} \\
-\scriptsize{Gas prices in gwei. The two marked sudden drops are coordinated attempts by miners and developers to reduce minimum accepted gasprices, first from 50 gwei to 20 gwei, then from 20 gwei to 4 gwei. Similar coordinated fee decreases have taken place in Bitcoin\cite{btcfeesdown10x}.}
+\scriptsize{Average gas price in gwei. The two marked sudden drops are coordinated attempts by miners and developers to reduce minimum accepted gas prices, first from 50 gwei to 20 gwei, then from 20 gwei to 4 gwei. Similar coordinated fee decreases have taken place in Bitcoin\cite{btcfeesdown10x}.}
 \end{center}
 
 However, Bitcoin has recently entered the ``full blocks'' regime, where transactions are in permanent competition with each other to get included, and Ethereum has entered this regime during high-intensity token sales\cite{braveICO}. In this mode, fees become more volatile, and rises in adoption contribute to even more volatility. In Bitcoin, this has led to a $\sim 10x$ increase in fees in less than a year; in Ethereum, fees increase by a similar factor during token sales. Even on average, in the last year transaction fees have become considerably more volatile than the ETH price:
@@ -277,7 +277,7 @@ However, Bitcoin has recently entered the ``full blocks'' regime, where transact
 \footnote{Source: http://etherscan.io/charts; spreadsheet with data and calculations at http://vitalik.ca/files/FeesAndETH.ods}
 \end{center}
 
-In the absence of political pressure on miners to make further gas limit increases, we see no reason for this state of affairs to not continue; and if political pressure \emph{can} be used to increase gas limits when needed, then the same processes could be used to adjust a fixed dee.
+In the absence of political pressure on miners to make further gas limit increases, we see no reason for this state of affairs to not continue; and if political pressure \emph{can} be used to increase gas limits when needed, then the same processes could be used to adjust a fixed fee.
 
 \section{Transaction Fees and Auction Theory}
 
