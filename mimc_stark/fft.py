@@ -9,9 +9,9 @@ def _simple_ft(vals, modulus, roots_of_unity):
     return o
 
 def _fft(vals, modulus, roots_of_unity):
-    if len(vals) <= 1:
-        return vals
-        # return _simple_ft(vals, modulus, roots_of_unity)
+    if len(vals) <= 4:
+        #return vals
+        return _simple_ft(vals, modulus, roots_of_unity)
     L = _fft(vals[::2], modulus, roots_of_unity[::2])
     R = _fft(vals[1::2], modulus, roots_of_unity[::2])
     o = [0 for i in vals]
@@ -39,7 +39,14 @@ def fft(vals, modulus, root_of_unity, inv=False):
         return _fft(vals, modulus, rootz[:-1])
 
 def mul_polys(a, b, modulus, root_of_unity):
-    x1 = fft(a, modulus, root_of_unity)
-    x2 = fft(b, modulus, root_of_unity)
-    return fft([(v1*v2)%modulus for v1,v2 in zip(x1,x2)],
-               modulus, root_of_unity, inv=True)
+    rootz = [1, root_of_unity]
+    while rootz[-1] != 1:
+        rootz.append((rootz[-1] * root_of_unity) % modulus)
+    if len(rootz) > len(a) + 1:
+        a = a + [0] * (len(rootz) - len(a) - 1)
+    if len(rootz) > len(b) + 1:
+        b = b + [0] * (len(rootz) - len(b) - 1)
+    x1 = _fft(a, modulus, rootz[:-1])
+    x2 = _fft(b, modulus, rootz[:-1])
+    return _fft([(v1*v2)%modulus for v1,v2 in zip(x1,x2)],
+               modulus, rootz[:0:-1])

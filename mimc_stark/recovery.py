@@ -23,37 +23,43 @@ def p_of_kx(poly, modulus, k):
 
 # Return (x - root**positions[0]) * (x - root**positions[1]) * ...
 # possibly with a constant factor offset
-def zpoly(positions, modulus, root_of_unity):
+def _zpoly(positions, modulus, roots_of_unity):
     # If there are not more than 4 positions, use the naive
     # O(n^2) algorithm as it is faster
     if len(positions) <= 4:
         root = [1]
         for pos in positions:
-            x = pow(root_of_unity, pos, modulus)
+            x = roots_of_unity[pos]
             root.insert(0, 0)
             for j in range(len(root)-1):
                 root[j] -= root[j+1] * x
         return [x % modulus for x in root]
     else:
-        half_order_root_of_unity = pow(root_of_unity, 2, modulus)
         # Recursively find the zpoly for even indices and odd
         # indices, operating over a half-size subgroup in each
         # case
-        left = zpoly([x//2 for x in positions if x%2 == 0],
-                     modulus, half_order_root_of_unity)
-        right = zpoly([x//2 for x in positions if x%2 == 1],
-                     modulus, half_order_root_of_unity)
-        invroot = pow(root_of_unity, modulus - 2, modulus)
+        left = _zpoly([x//2 for x in positions if x%2 == 0],
+                     modulus, roots_of_unity[::2])
+        right = _zpoly([x//2 for x in positions if x%2 == 1],
+                     modulus, roots_of_unity[::2])
+        invroot = roots_of_unity[-1]
         # Offset the result for the odd indices, and combine
         # the two
         o = mul_polys(left, p_of_kx(right, modulus, invroot),
-                         modulus, root_of_unity)
+                         modulus, roots_of_unity[1])
     # Deal with the special case where mul_polys returns zero
     # when it should return x ^ (2 ** k) - 1
     if o == [0] * len(o):
         return [1] + [0] * (len(o) - 1) + [modulus - 1]
     else:
         return o
+
+def zpoly(positions, modulus, root_of_unity):
+    # Precompute roots of unity
+    rootz = [1, root_of_unity]
+    while rootz[-1] != 1:
+        rootz.append((rootz[-1] * root_of_unity) % modulus)
+    return _zpoly(positions, modulus, rootz[:-1])
 
 def erasure_code_recover(vals, modulus, root_of_unity):
     # Generate the polynomial that is zero at the roots of unity
