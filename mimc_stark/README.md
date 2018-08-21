@@ -4,6 +4,8 @@ DO NOT USE FOR ANYTHING IN REAL LIFE. DO NOT ASSUME THE PROTOCOL DESCRIBED HERE 
 
 #### What is this?
 
+See main article: https://vitalik.ca/general/2018/07/21/starks_part_3.html
+
 This is a very basic implementation of a STARK on a MIMC computation that is probably (ie. definitely) broken in a few places but is intended as a proof of concept to show the rough level of complexity that is involved in implementing a simple STARK. A STARK is a really cool proof-of-computation scheme that allows you to create an efficiently verifiable proof that some computation was executed correctly; the verification time only rises logarithmically with the computation time, and that relies only on hashes and information theory for security.
 
 The STARKs are done over a finite field chosen to have `2**32`'th roots of unity (to facilitate STARKs), and NOT have 3rd roots of unity (to facilitate MIMC). The MIMC permutation in general takes the form:
