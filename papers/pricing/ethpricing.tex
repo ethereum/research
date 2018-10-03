@@ -32,6 +32,7 @@
 
 
 % \usepackage{tabu}% http://ctan.org/pkg/tabu
+\usepackage{hyperref}
 
 \newcommand{\dashrule}[1][black]{%
   \color{#1}\rule[\dimexpr.5ex-.2pt]{4pt}{.4pt}\xleaders\hbox{\rule{4pt}{0pt}\rule[\dimexpr.5ex-.2pt]{4pt}{.4pt}}\hfill\kern0pt%
@@ -111,7 +112,7 @@ Second, one can categorize by different types of first and second-order effects.
 
 Each user $U_i$ has some direct resource cost function $R_i(W)$ representing the cost to the user of processing a given amount of weight. This cost can include electricity and bandwidth costs, marginal disk wear and tear, inconvenience from a user's other applications running more slowly, reduced battery life, and so on. For sufficiently high $w$, at some point the costs become unacceptable to any given user, at which point the user will drop offline (we assume $R_i(W)$ is flat above this point). Let $NodeCount(W)$ be the number of users still online at weight $W$. Note that different users could drop offline at different points for either of two reasons: (i) some users have a lower resource cost than others, and (ii) some users value being connected to the blockchain more than others.
 
-There is some utility function $D(k)$ reflecting the social value of the level of decentralization achieved by having the number of online nodes, which can be translated into a function $D(W)$ of the total transaction load. There may also be some cost function $A(W)$ that reflects the increased eash of attacking the network as more transactions get included. We can summarize all of these costs as a combined cost function $C(W) = \sum_i R_i(W) + (A(W) - A(0)) - (D(W) - D(0))$.
+There is some utility function $D(k)$ reflecting the social value of the level of decentralization achieved by having the number of online nodes, which can be translated into a function $D(W)$ of the total transaction load. There may also be some cost function $A(W)$ that reflects the increased ease of attacking the network as more transactions get included. We can summarize all of these costs as a combined cost function $C(W) = \sum_i R_i(W) + (A(W) - A(0)) - (D(W) - D(0))$.
 
 The above suffices as a model of a blockchain for the purpose of this paper; we do not need to care about details about proof of work, proof of stake, block structure, etc, except insofar as the details of those consensus algorithms and blockchain design patterns affect $NodeCount$ and $A$, and therefore $C$.
 
@@ -125,7 +126,7 @@ In Bitcoin and Ethereum, resources are priced using a simple ``cap-and-trade'' s
 \end{equation}
 \end{scriptsize}
 
-Where $len(x)$ returns the number of bytes in $x$. For technical reasons that have to do with attempting to price in history and state storage costs, the bytes in signatures of transactions are priced more cheaply than the non-signature data in transactions. In Ethereum, there is a measure called ``gas'' which incorporates the size of the block as well as the computational cost of verifying transactions and executing smart contract code. For simplicity of exposition, this can be approximated as:
+Where $len(x)$ returns the number of bytes in $x$. For technical reasons that is related to attempting to price in history and state storage costs, the bytes in signatures of transactions are priced more cheaply than the non-signature data in transactions. In Ethereum, there is a measure called ``gas'' which incorporates the size of the block as well as the computational cost of verifying transactions and executing smart contract code. For simplicity of exposition, this can be approximated as:
 
 \begin{footnotesize}
 \begin{equation}
@@ -139,7 +140,7 @@ A major problem with this approach is that a priori it has been difficult to det
 
 \section{Pricing Resources under Uncertainty}
 \label{sect:uncertainty}
-Blockchain resource pricing has many parallels to regulatory responses to environmental pollution.  Particularly, although the validator of a block is compensated for publishing the transactions, the cost of that block being published is borne by \emph{all full nodes}, much like how pollution produced by one factory must be suffered by everyone living in the village (if not an even larger area).  This cost being borne by all full nodes is the negative externality that we wish to limit.  Both blockchains and environmental regulators use economic interventions to limit activities with negative externalities, where the negative externalities have both measurable components as well as components with high Knightian uncertainty (i.e., ``unknown unknowns'') \cite{knight1921risk}.  Many results from environmental economics \cite{barder14} are directly applicable to blockchains.
+Blockchain resource pricing has many parallels to regulatory responses to environmental pollution.  Particularly, although the validator of a block is compensated for publishing the transactions, the cost of that block being published is borne by \emph{all full nodes}, much like how pollution produced by one factory must be suffered by everyone living in the village (if not an even larger area—the globe in the case of fossil fuel emissions).  This cost being borne by all full nodes is the negative externality that we wish to limit.  Both blockchains and environmental regulators use economic interventions to limit activities with negative externalities, where the negative externalities have both measurable components as well as components with high Knightian uncertainty (i.e., ``unknown unknowns'') \cite{knight1921risk}.  Many results from environmental economics \cite{barder14} are directly applicable to blockchains.
 
 Weitzman's 1974 paper ``Prices vs Quantities'' \cite{weitzman1974prices}, outlines the tradeoffs between regulation by price (e.g., carbon taxes) versus regulation by quantity (e.g., issuing a fixed number of permits and letting them trade on the market). One important insight that Weitzman cites is that if the policymaker has perfect information about the social cost function and the demand curve for consuming the resource (a.k.a. the ``benefit function''), the two approaches are equivalent: for any desired price, one can choose an equivalent quantity-based policy by issuing exactly the number of permits equal to the equilibrium quantity that would be purchased at that price. However, when there is uncertainty about the position and shape of the cost-benefit curves, the two approaches have substantial differences.
 
@@ -272,7 +273,7 @@ However, Bitcoin has recently entered the ``full blocks'' regime, where transact
 
 \begin{center}
 \includegraphics[width=3in]{PriceAndFees.png} \\
-\scriptsize{ETH price (lower) and average gasprice in USD (higher), Oct 2017 (post-Byzantium-hardfork) to July 2018. The mean absolute daily percentage change is 4.2\% for the ETH price in the shown time period, and 16.0\% for the USD-denominated average gasprice, and is standard deviation is used the average gasprice is $\approx 25$ times more volatile due to spikes.}
+\scriptsize{ETH price (lower) and average gasprice in USD (higher), Oct 2017 (post-Byzantium-hardfork) to July 2018. The mean absolute daily percentage change is 4.2\% for the ETH price in the shown time period, and 16.0\% for the USD-denominated average gasprice, and the standard deviation of the average gasprice is $\approx 25$ times more volatile due to spikes.}
 
 \footnote{Source: http://etherscan.io/charts; spreadsheet with data and calculations at http://vitalik.ca/files/FeesAndETH.ods}
 \end{center}
@@ -315,15 +316,15 @@ The area of the triangle, representing the total economic losses from an excessi
 \includegraphics[width=2.5in]{Triangle2.png} \\
 \end{center}
 
-By similar triangle laws the width increases by the same proportion, so the area increases from $A$ to $A * (1 + \frac{\delta}{r * (C'' + D'')})^2$. In the $+\delta$ period, the area decreases to $A * (1 - \frac{\delta}{r * (C'' + D'')})^2$. The average of $(1+x)^2 + (1-x)^2$ is $1 + x^2$, so the average of the two areas is $A * (1 + (\frac{\delta}{r * (C'' + D'')})^2)$.
+By similar triangle laws the width increases by the same proportion, so the area increases from $A$ to $A * (1 + \frac{\delta}{r * (C'' + D'')})^2$. In the $+\delta$ period, the area decreases to $A * (1 - \frac{\delta}{r * (C'' + D'')})^2$. The average of $(1+x)^2 + (1-x)^2$ is $\frac(1}{2} + x^2$, so the average of the two areas is $A * (\frac(1}{2} + (\frac{\delta}{r * (C'' + D'')})^2)$.
 
-Now, suppose we use a different algorithm. The protocol targets a \emph{long run} average weight of $1 + r$, but it does so by setting a price for transactions that adjusts slowly over time. The price that it would target is in this case is $1 - D'' * r$. Now, let us consider the average deadweight loss. Moving demand up by $\delta$ will move the triangle to the right by $\frac{\delta}{D''}$, which increases its height by $\frac{\delta * C''}{D''}$.
+Now, suppose we use a different algorithm. The protocol targets a \emph{long run} average weight of $1 + r$, but it does so by setting a price for transactions that adjusts slowly over time. The price that it would target in this case is $1 - D'' * r$. Now, let us consider the average deadweight loss. Moving demand up by $\delta$ will move the triangle to the right by $\frac{\delta}{D''}$, which increases its height by $\frac{\delta * C''}{D''}$.
 
 \begin{center}
 \includegraphics[width=2.5in]{Triangle3.png} \\
 \end{center}
 
-The original height was $r * (C'' + D'')$, so the height increases by a ratio of $1 + \frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')}$. By similar triangle laws the width increases by the same proportion, and in the $-\delta$ case we flip the sign in a similar way; the end result is that the average area is $A * (1 + (\frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')})^2)$.
+The original height was $r * (C'' + D'')$, so the height increases by a ratio of $1 + \frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')}$. By similar triangle laws the width increases by the same proportion, and in the $-\delta$ case we flip the sign in a similar way; the end result is that the average area is $A * (\frac(1}{2} + (\frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')})^2)$.
 
 It should be clear that the average area in the second case is smaller (ie. less inefficiency) than the average area in the first case if and only if $\frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')} < \frac{\delta}{r * (C'' + D'')}$, or alternatively $\frac{\delta * C''}{D''} < \delta$, or even more simply $C'' < D''$, and in other cases the average area in the second case is larger. What this thus proves is a sort of marginal analogue to Weitzman's 1974 result \cite{weitzman1974prices}, where in the exact same case where choosing a price is better than choosing a quantity, a quantity limit can be improved on the margin by replacing it with a ``flexible limit'' that is really just a price level that adjusts over the medium term to target the quantity limit.
 
@@ -333,7 +334,7 @@ We now propose an alternate resource pricing/limit rule that we believe provides
 \item Define a constantly adjusting in-protocol parameter $minFee$. Transaction senders are charged a fee of $minFee$ per weight unit; this fee is either burned or redistributed to consensus participants \emph{other than} the proposer of the block that included this transaction; this prevents profitable side-dealing arrangements where the transaction senders are refunded this fee.
 \item Define a new weight limit, $w_{newmax} = 2 * w_{max}$.
 \item Define an \emph{adjustment speed parameter} $adjSpeed$, with $0 < adjSpeed < 2$.
-\item In any particular block, let $w_{prev}$ be the amount of weight consumed in the previous block, and $minFee_{prev}$ be the previous block's $minFee$ value. See $minFee$ for this block to equal $minFee_{prev} * (1 + (\frac{w_{prev}}{w_{newmax}} - \frac{1}{2}) * adjSpeed$.
+\item In any particular block, let $w_{prev}$ be the amount of weight consumed in the previous block, and $minFee_{prev}$ be the previous block's $minFee$ value. Set $minFee$ for this block to equal $minFee_{prev} * (1 + (\frac{w_{prev}}{w_{newmax}} - \frac{1}{2}) * adjSpeed$.
 \end{itemize}
 
 This rule is likely to outperform simple limits in terms of allocative efficiency for the reasons cited above, and it also (except during sudden and extreme spikes) eliminates the issues with first and second price auctions described above. \footnote{In the specific case of storage pricing, a quirk in Ethereum gas pricing rules that allows storage to be (mostly) paid for before it is actually used allows for second-layer markets like GasToken\cite{gastoken} where gas can be burned to generate ``congealed storage use privileges'', which can then be used later. The possibility of doing this unintentionally creates efficiency gains similar in type, though smaller in size, than those described here.}
@@ -368,7 +369,7 @@ In Ethereum, there is a more complex gas cost schedule for storage-affecting ope
 \begin{enumerate}
     \item The \opcode{sstore} opcode, which saves a value in the contract's storage. If \opcode{sstore} overwrites an existing value, it costs 5000 gas, but if it adds a new value to storage, it costs 20,000 gas. If \opcode{sstore} is used to clear an existing value (so it no longer has to be saved in storage), then it costs the contract 5,000 gas, but a ``refund'' of 15,000 gas is given to the transaction sender.
 
-    \item \emph{Account creation}. Accounts can be created\footnote{Accounts can also be deleted through the \opcode{selfdestruct} opcode, which costs the contract 5,000 gas but refunds the transaction sender a 24,000 gas.} in three ways:
+    \item \emph{Account creation}. Accounts can be created\footnote{Accounts can also be deleted through the \opcode{selfdestruct} opcode, which costs the contract 5,000 gas but refunds the transaction sender 24,000 gas.} in three ways:
 
     \begin{itemize}
         \item creating a contract using the \opcode{create} opcode (32,000 gas, plus 200 per byte of code)
@@ -403,7 +404,7 @@ A solution that does not have these problems is to implement a time-based storag
 
 Suppose that we want the maintenance fee to be able to vary over time. Then, for all block heights $h$ we save in storage $totalFee[h] = \sum_{i=1}^h Fee[i] = totalFee[h-1] + Fee[h]$. We compute the current balance as $$balance - sizeOf(account) * (totalFee[curBlock] - totalFee[LastBlockAccessed])$$, where $totalFee[curBlock] - totalFee[LastBlockAccessed]$ can be understood as $\sum_{i=LastBlockAccessed}^{curBlock} Fee[i]$.
 
-However, we will argue in favor of simply setting the maintenance fee to one specific value (eg. $10^{-7}$ ETH per byte per year) and leaving it this way forever. First of all, the social cost of storage use is clearly almost perfectly linear in the short and medium run, but it is also much more linear in the long run. There is no analog to the natural asymptote of bandwidth and computation costs in blockchains where at some point the uncle rate reaches 100\%; even if the storage of the Ethereum blockchain starts increasing by 10 GB per day, then blockchain nodes will be quickly relegated to only running on data centers, but the blockchain will still fundamentally be functional. In fact, if you assume that node storage capacity is distributed among the same distribution as the Cornell study\cite{cornell} shows bandwidth is, so $NodeCount(W) = \frac{1}{W}$, and assume the logarithmic utility function for node count, so $D(x) = log(x) = -log(W)$ then the social cost component from node centralization is roughly $C(W) = log(W)$, or $C'(W) = \frac{1}{W}$ - very steeply \emph{sublinear}.
+However, we will argue in favor of simply setting the maintenance fee to one specific value (eg. $10^{-7}$ ETH per byte per year) and leaving it this way forever. First of all, the social cost of storage use is clearly almost perfectly linear in the short and medium run, but it is also much more linear in the long run. There is no analogue to the natural asymptote of bandwidth and computation costs in blockchains where at some point the uncle rate reaches 100\%; even if the storage of the Ethereum blockchain starts increasing by 10 GB per day, then blockchain nodes will be quickly relegated to only running on data centers, but the blockchain will still fundamentally be functional. In fact, if you assume that node storage capacity is distributed among the same distribution as the Cornell study\cite{cornell} shows bandwidth is, so $NodeCount(W) = \frac{1}{W}$, and assume the logarithmic utility function for node count, so $D(x) = log(x) = -log(W)$ then the social cost component from node centralization is roughly $C(W) = log(W)$, or $C'(W) = \frac{1}{W}$ - very steeply \emph{sublinear}.
 
 Second, the developer and user experience considerably improves if developers and users can determine with exactness a minimum ``time to live'' for any given contract far ahead in advance. Variable fees do not have this property; a fixed fee does. Third, as cryptocurrency prices are more stable than transaction fees, a fixed fee improves price predictability, in both cryptocurrency and fiat-denominated terms. Fourth, a fixed fee is simple, both intuitively and in the semi-formal sense of having low Kolmogorov complexity.
 
@@ -433,7 +434,7 @@ If the contract contains more funds at the time of the older hibernation that it
 \item A proof of non-prior-waking consists of a Merkle branch pointing to the contract's address once every $MinInterval$
 \end{itemize}
 
-Adjusting $MinInterval$ is a tradeoff: smaller values enable launching contracts cheaply for shorter periods of time, but larger values shrink the size of the witness required for waking, as well as shrinking the number of ever-growing historical state roots that need to be stored. For a $MinInterval$ of one week, and a state with $2^{30}$ accounts, waking a ten year old contract would require $32 * log(2<sup>30</sup>) * \frac{10 * 365.242}{7} \approx$ 500,000 bytes; a $MinInterval$ of one month reduces this to 115,200 bytes.
+Adjusting $MinInterval$ is a tradeoff: smaller values enable launching contracts cheaply for shorter periods of time, but larger values shrink the size of the witness required for waking, as well as shrinking the number of ever-growing historical state roots that need to be stored. For a $MinInterval$ of one week, and a state with $2^{30}$ accounts, waking a ten year old contract would require $32 * log(2^30) * \frac{10 * 365.242}{7} \approx$ 500,000 bytes; a $MinInterval$ of one month reduces this to 115,200 bytes.
 
 \section{Conclusion}
 
@@ -441,7 +442,9 @@ Economic analysis can be used to significantly improve the incentive alignment o
 
 More economic analysis and econometric research can be used to help identify further mechanisms that can be used to better reduce costs while discouraging wasteful use of public blockchain resources.
 
-\textbf{Acknowledgements.} \todo{fill me in.}
+\section{Acknowledgements}
+
+Phil Daian, Ari Juels, Micah Zoltu, Jamie Pitts, James Ray, and others who have contributed to pricing economics.
 
 
 \bibliography{ethpricing}
@@ -473,7 +476,7 @@ More economic analysis and econometric research can be used to help identify fur
 
 \section{The Full Ethereum Gas Function}
 \label{appendix:gasfunction}
-\todo{Put the full gas function here.}
+See https://ethereum.github.io/yellowpaper/paper.pdf#subsection.H.1.
 
 
 \end{document}
