@@ -316,7 +316,7 @@ The area of the triangle, representing the total economic losses from an excessi
 \includegraphics[width=2.5in]{Triangle2.png} \\
 \end{center}
 
-By similar triangle laws the width increases by the same proportion, so the area increases from $A$ to $A * (1 + \frac{\delta}{r * (C'' + D'')})^2$. In the $+\delta$ period, the area decreases to $A * (1 - \frac{\delta}{r * (C'' + D'')})^2$. The average of $(1+x)^2 + (1-x)^2$ is $\frac(1}{2} + x^2$, so the average of the two areas is $A * (\frac(1}{2} + (\frac{\delta}{r * (C'' + D'')})^2)$.
+By similar triangle laws the width increases by the same proportion, so the area increases from $A$ to $A * (1 + \frac{\delta}{r * (C'' + D'')})^2$. In the $+\delta$ period, the area decreases to $A * (1 - \frac{\delta}{r * (C'' + D'')})^2$. The average of $(1+x)^2 + (1-x)^2$ is $1 + x^2$, so the average of the two areas is $A * (1 + (\frac{\delta}{r * (C'' + D'')})^2)$.
 
 Now, suppose we use a different algorithm. The protocol targets a \emph{long run} average weight of $1 + r$, but it does so by setting a price for transactions that adjusts slowly over time. The price that it would target in this case is $1 - D'' * r$. Now, let us consider the average deadweight loss. Moving demand up by $\delta$ will move the triangle to the right by $\frac{\delta}{D''}$, which increases its height by $\frac{\delta * C''}{D''}$.
 
@@ -324,7 +324,7 @@ Now, suppose we use a different algorithm. The protocol targets a \emph{long run
 \includegraphics[width=2.5in]{Triangle3.png} \\
 \end{center}
 
-The original height was $r * (C'' + D'')$, so the height increases by a ratio of $1 + \frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')}$. By similar triangle laws the width increases by the same proportion, and in the $-\delta$ case we flip the sign in a similar way; the end result is that the average area is $A * (\frac(1}{2} + (\frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')})^2)$.
+The original height was $r * (C'' + D'')$, so the height increases by a ratio of $1 + \frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')}$. By similar triangle laws the width increases by the same proportion, and in the $-\delta$ case we flip the sign in a similar way; the end result is that the average area is $A * (1 + (\frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')})^2)$.
 
 It should be clear that the average area in the second case is smaller (ie. less inefficiency) than the average area in the first case if and only if $\frac{\frac{\delta * C''}{D''}}{r * (C'' + D'')} < \frac{\delta}{r * (C'' + D'')}$, or alternatively $\frac{\delta * C''}{D''} < \delta$, or even more simply $C'' < D''$, and in other cases the average area in the second case is larger. What this thus proves is a sort of marginal analogue to Weitzman's 1974 result \cite{weitzman1974prices}, where in the exact same case where choosing a price is better than choosing a quantity, a quantity limit can be improved on the margin by replacing it with a ``flexible limit'' that is really just a price level that adjusts over the medium term to target the quantity limit.
 
