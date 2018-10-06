@@ -1,6 +1,11 @@
 import random, heapq
 
+# Assuming `online` is the set of users that is online, find a path to
+# send `amount` coins from `frm` to `to` through `coins` where each
+# step along the path is between users that have adjacent fragments.
+# A transfer done in this way does not contribute to fragmentation.
 def find_path(coins, frm, to, amount, online):
+    # Determine who is whose neighbor
     neighbor_map = {}
     for i in range(amount, len(coins) - amount + 1):
         if coins[i-1] != coins[i]:
@@ -9,9 +14,10 @@ def find_path(coins, frm, to, amount, online):
                     neighbor_map[coins[i-1]] = list(set(neighbor_map.get(coins[i-1], []) + [coins[i]]))
                 if coins[i:i+amount] == [coins[i]] * amount:
                     neighbor_map[coins[i]] = list(set(neighbor_map.get(coins[i], []) + [coins[i-1]]))
+    # Search for the path
     parents = {frm: None}
     q = [(0, frm)]
-    while len(q) > 0:
+    while q:
         dist, sender = heapq.heappop(q)
         neighbors = neighbor_map.get(sender, [])
         for n in neighbors:
@@ -25,21 +31,7 @@ def find_path(coins, frm, to, amount, online):
                     return o
     return False
             
-
-def mk_fragmented_shuffle(coins, owners, shuffs):
-    L = [(i * owners)//coins for i in range(coins)]
-    for i in range(shuffs):
-        x1 = random.randrange(n)
-        x2 = random.randrange(n)
-        value = int(min(n - x1, n - x2, abs(x2 - x1)) ** random.random())
-        L[x1:x1+value], L[x2:x2+value] = L[x2:x2+value], L[x1:x1+value]
-    return L
-        
-def mk_shuffle(n):
-    L = list(range(1, n+1))
-    random.shuffle(L)
-    return ','.join([str(x) for x in L])
-
+# How many fragments are in this set of coins?
 def fragments(vals):
     tot = 1
     for i in range(1, len(vals)):
@@ -47,6 +39,8 @@ def fragments(vals):
             tot += 1
     return tot
 
+# Send `amt` coins from `frm` to `to`. Increases fragmentation by
+# maximum 1
 def send_coins(coins, frm, to, amt):
     coins_to_send = amt
     for i in range(len(coins)):
@@ -57,45 +51,96 @@ def send_coins(coins, frm, to, amt):
             return True
     return False
 
-def shunt_coins(coins, frm, to, amt):
+# Get the concrete range to transfer if we are transfering `amt`
+# coins from `frm` to `to` (must be neighboring fragments)
+def get_coin_shunt(coins, frm, to, amt):
     i = 1
-    while i < len(coins):
-        while i < len(coins) and not((coins[i-1] == frm and coins[i] == to) or (coins[i-1] == to and coins[i] == frm)):
+    L = len(coins)
+    while i < L:
+        while i < L and coins[i] not in (frm, to):
             i += 1
-        if coins[i-amt:i] == [frm] * amt:
+        if not((coins[i-1] == frm and coins[i] == to) or (coins[i-1] == to and coins[i] == frm)):
+            i += 1
+            continue
+        if coins[i-amt:i] == [frm] * amt and coins[i] == to:
             coins[i-amt:i] = [to] * amt
-            return True
-        if coins[i:i+amt] == [frm] * amt:
+            return (i-amt, i, to)
+        if coins[i:i+amt] == [frm] * amt and coins[i-1] == to:
             coins[i:i+amt] = [to] * amt
-            return True
+            return (i, i+amt, to)
         i += 1
     return False
 
-userz = 100
+# Find the largest slice controlled by `acct`
+def maxslice(coins, acct):
+    maxsz = 0
+    sz = 0
+    for i in range(len(coins)):
+        if coins[i] == acct:
+            sz += 1
+            maxsz = max(sz, maxsz)
+        else:
+            sz = 0
+    return maxsz
+
+# Count the number of coins and the number of fragments
+# held by each user
+def count_coins_and_fragments(coins):
+    user_count = max(coins) + 1
+    coin_count = [0] * user_count
+    frag_count = [0] * user_count
+    for i in range(len(coins)):
+        coin_count[coins[i]] += 1
+        if i > 0 and coins[i] != coins[i-1]:
+            frag_count[coins[i]] += 1
+    return coin_count, frag_count
+
+userz = 25
 coinz = 50000
-part_online = 0.2
-c = [(i*userz)//coinz for i in range(coinz)]
-for i in range(25000):
-    if i%10 == 0:
-        print(fragments(c))
+part_online = 0.1
+initial_fragments_per_user = 100
+ordering = list(range(userz)) * initial_fragments_per_user
+random.shuffle(ordering)
+c = [ordering[i * len(ordering) //coinz] for i in range(coinz)]
+balances = count_coins_and_fragments(c)[0]
+for i in range(250000):
+    if i%100 == 0:
+        print(i, fragments(c))
+    # if i%2000 == 0:
+    #     coin_count, frag_count = count_coins_and_fragments(c)
+    #     print(sorted(zip(coin_count, frag_count)))
+
+    # Randomly select sender, recipient and amount
     frm = random.randrange(userz)
     to = random.randrange(userz)
-    # amount = int(c.count(frm) ** random.random())
-    amount = random.randrange(1, 11)
-    if frm == to or amount == 0:
+    if frm == to:
         continue
-    path = find_path(c, frm, to, amount+1, [i for i in range(userz) if random.random() < part_online or i in (frm, to)])
-    #pre_balance = (c.count(frm), c.count(to))
-    if path:
-        print(path)
-        assert path[0] == frm
-        assert path[-1] == to
-        for i in range(1, len(path)):
-            assert shunt_coins(c, path[i-1], path[i], amount)
-    else:
-        print('no path')
-        assert amount <= c.count(frm)
-        assert send_coins(c, frm, to, amount)
-    #post_balance = (c.count(frm), c.count(to))
-    #assert pre_balance[0] - post_balance[0] == amount
-    #assert post_balance[1] - pre_balance[1] == amount
+    pre_balance = balances[frm]
+    amount = random.randrange(1, 1 + int(pre_balance ** random.random())) if pre_balance >= 2 else pre_balance
+    full_amount = amount
+    # print("Paying %d coins from %d to %d" % (amount, frm, to))
+    # Randomly select the users that are online
+    online = [i for i in range(userz) if random.random() < part_online or i in (frm, to)]
+    while amount > 0:
+        maxpay = maxslice(c, frm)
+        pay_this_round = min(amount, maxpay)
+        path = find_path(c, frm, to, pay_this_round, online)
+        if path:
+            #print("Found path for %d coins (%d hops)" % (pay_this_round, len(path)-1))
+            assert path[0] == frm
+            assert path[-1] == to
+            shunts = []
+            for i in range(1, len(path)):
+                shunts.append(get_coin_shunt(c, path[i-1], path[i], pay_this_round))
+                assert shunts[-1]
+            for shunt in shunts:
+                start, end, to = shunt
+                c[start:end] = [to] * (end-start)
+            amount -= pay_this_round
+        else:
+            # print('No path, paying remaining amount %d via fragmentation' % amount)
+            # print('%d fragments' % fragments(c))
+            assert send_coins(c, frm, to, amount)
+            break
+    balances[frm] -= full_amount
+    balances[to] += full_amount
