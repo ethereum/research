@@ -40,7 +40,7 @@ def path_to_key(k):
 def get(db, root, key):
     v = root
     path = key_to_path(key)
-    for i in range(256):
+    for i in range(0, 256, 4):
         if v == zerohashes[i]:
             return b'\x00' * 32
         child = db.get(v)
@@ -50,11 +50,9 @@ def get(db, root, key):
             else:
                 return b'\x00' * 32
         else:
-            if (path >> 255) & 1:
-                v = child[32:]
-            else:
-                v = child[:32]
-        path <<= 1
+            index = (path >> 252) & 15
+            v = child[32*index: 32*index+32]
+        path <<= 4
     return v
 
 # Make a root hash of a (sub)tree with a single key/value pair
@@ -66,32 +64,33 @@ def make_single_key_hash(path, depth, value):
     else:
         return sha3(make_single_key_hash(path << 1, depth + 1, value) + zerohashes[depth+1])
 
+# Hash together 16 elements
+def hash_16_els(vals):
+    assert len(vals) == 16
+    for _ in range(4):
+        vals = [sha3(vals[i] + vals[i+1]) for i in range(0, len(vals), 2)]
+    return vals[0]
+
 # Make a root hash of a (sub)tree with two key/value pairs, and save intermediate nodes in the DB
 def make_double_key_hash(db, path1, path2, depth, value1, value2):
     if depth == 256:
         raise Exception("Cannot fit two values into one slot!")
-    if (path1 >> 255) & 1:
-        if (path2 >> 255) & 1:
-            child = zerohashes[depth+1] + make_double_key_hash(db, path1 << 1, path2 << 1, depth + 1, value1, value2)
-            db.put(sha3(child), child)
-            return sha3(child)
-        else:
-            L = make_single_key_hash(path2 << 1, depth + 1, value2)
-            R = make_single_key_hash(path1 << 1, depth + 1, value1)
-            db.put(L, b'\x01' + path_to_key(path2 << 1) + value2)
-            db.put(R, b'\x01' + path_to_key(path1 << 1) + value1)
-            child = L + R
+    if ((path1 >> 252) & 15) == ((path2 >> 252) & 15):
+        children = [zerohashes[depth+4]] * 16
+        children[(path1 >> 252) & 15] = make_double_key_hash(db, path1 << 4, path2 << 4, depth + 4, value1, value2)
     else:
-        if (path2 >> 255) & 1:
-            L = make_single_key_hash(path1 << 1, depth + 1, value1)
-            R = make_single_key_hash(path2 << 1, depth + 1, value2)
-            db.put(L, b'\x01' + path_to_key(path1 << 1) + value1)
-            db.put(R, b'\x01' + path_to_key(path2 << 1) + value2)
-            child = L + R
-        else:
-            child = make_double_key_hash(db, path1 << 1, path2 << 1, depth + 1, value1, value2) + zerohashes[depth+1]
-    db.put(sha3(child), child)
-    return sha3(child)
+        Lkey = ((path1 >> 252) & 15)
+        L = make_single_key_hash(path1 << 4, depth + 4, value1)
+        Rkey = ((path2 >> 252) & 15)
+        R = make_single_key_hash(path2 << 4, depth + 4, value2)
+        db.put(L, b'\x01' + path_to_key(path1 << 4) + value1)
+        db.put(R, b'\x01' + path_to_key(path2 << 4) + value2)
+        children = [zerohashes[depth+4]] * 16
+        children[Lkey] = L
+        children[Rkey] = R
+    h = hash_16_els(children)
+    db.put(h, b''.join(children))
+    return h
             
 # Update a tree with a given key/value pair
 def update(db, root, key, value):
@@ -111,14 +110,14 @@ def _update(db, root, path, depth, value):
         origpath, origvalue = key_to_path(child[1:33]), child[33:]
         return make_double_key_hash(db, path, origpath, depth, value, origvalue)
     # Update a multi-key subtree: recurse down
-    elif (path >> 255) & 1:
-        new_child = child[:32] + _update(db, child[32:], path << 1, depth + 1, value)
-        db.put(sha3(new_child), new_child)
-        return sha3(new_child)
     else:
-        new_child = _update(db, child[:32], path << 1, depth + 1, value) + child[32:]
-        db.put(sha3(new_child), new_child)
-        return sha3(new_child)
+        assert len(child) == 512
+        index = (path >> 252) & 15
+        new_value = _update(db, child[index*32: index*32+32], path << 4, depth + 4, value)
+        new_children = [new_value if i == index else child[32*i:32*i+32] for i in range(16)]
+        h = hash_16_els(new_children)
+        db.put(h, b''.join(new_children))
+        return h
 
 def multi_update(db, root, keys, values):
     for k, v in zip(keys, values):
