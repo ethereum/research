@@ -126,7 +126,7 @@ In Bitcoin and Ethereum, resources are priced using a simple ``cap-and-trade'' s
 \end{equation}
 \end{scriptsize}
 
-Where $len(x)$ returns the number of bytes in $x$. For technical reasons that is related to attempting to price in history and state storage costs, the bytes in signatures of transactions are priced more cheaply than the non-signature data in transactions. In Ethereum, there is a measure called ``gas'' which incorporates the size of the block as well as the computational cost of verifying transactions and executing smart contract code. For simplicity of exposition, this can be approximated as:
+Where $len(x)$ returns the number of bytes in $x$. For technical reasons related to the desire to price in history and state storage costs, the bytes in signatures of transactions are priced more cheaply than the non-signature data in transactions. In Ethereum, there is a measure called ``gas'' which incorporates the size of the block as well as the computational cost of verifying transactions and executing smart contract code. For simplicity of exposition, this can be approximated as:
 
 \begin{footnotesize}
 \begin{equation}
