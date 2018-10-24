@@ -2,8 +2,8 @@ from networksim import NetworkSimulator
 from lmd_node import Node, NOTARIES, Block, Sig, genesis, SLOT_SIZE
 from distributions import normal_distribution
 
-net = NetworkSimulator(latency=45)
-notaries = [Node(i, net, ts=max(normal_distribution(5, 5)(), 0) * 0.1, sleepy=False) for i in range(NOTARIES)]
+net = NetworkSimulator(latency=300)
+notaries = [Node(i, net, ts=max(normal_distribution(3, 3)(), 0) * 0.1, sleepy=False) for i in range(NOTARIES)]
 net.agents = notaries
 net.generate_peers()
 for i in range(12000):
