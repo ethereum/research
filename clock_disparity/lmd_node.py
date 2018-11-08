@@ -26,8 +26,8 @@ def get_most_common_entry(lst):
     maxcount, maxkey = max(zip(counts.values(), counts.keys()))
     return maxkey, maxcount
 
-NOTARIES = 100
-SLOT_SIZE = 6
+NOTARIES = 50
+SLOT_SIZE = 3
 EPOCH_LENGTH = 25
 
 # Not a full RANDAO; stub for now
@@ -78,6 +78,7 @@ class Node():
         }
         self.sigs = {}
         self.main_chain = [genesis.hash]
+        self.lmd_head = genesis.hash
         self.timequeue = []
         self.parentqueue = {}
         self.children = {}
@@ -96,6 +97,7 @@ class Node():
         self.last_made_block = 0
         self.last_made_sig = 0
         self.most_recent_votes = {}
+        self.observed_ts_deltas = [0] * NOTARIES
 
     def broadcast(self, x):
         if self.sleepy and self.ts:
@@ -217,6 +219,9 @@ class Node():
             self.main_chain.append(block.hash)
         # Add child record
         self.add_to_multiset(self.children, block.parent_hash, block.hash)
+        # head = self.compute_lmd_head()
+        # if head.hash == block.hash:
+        self.observed_ts_deltas[block.proposer] = block.min_timestamp() - self.ts
         # Final steps
         self.process_children(block.hash)
         self.network.broadcast(self, block)
@@ -333,11 +338,18 @@ class Node():
     def get_sig_targets(self, head, slot):
         return [self.get_ancestor_at_slot(head, s).hash for s in range(slot - 1, max(slot - EPOCH_LENGTH, 0) - 1, -1)]
 
+    def get_adjusted_timestamp(self):
+        pull_threshold = 0.83
+        add_zeroes = int(NOTARIES * (pull_threshold * 2 -1))
+        index = int(NOTARIES * pull_threshold)
+        return self.ts + sorted(self.observed_ts_deltas + [0] * add_zeroes)[index]
+
     def tick(self):
         self.ts += 0.1
         self.log("Tick: %.1f" % self.ts, lvl=1)
         # Make a block?
-        slot = int(self.ts // SLOT_SIZE)
+        ts = self.get_adjusted_timestamp()
+        slot = int(ts // SLOT_SIZE)
         if slot > self.last_made_block and (slot % NOTARIES) == self.id:
             head = self.compute_lmd_head()
             b = Block(head, slot, self.id)
@@ -346,10 +358,10 @@ class Node():
         # Make a sig?
         if slot > self.last_made_sig and (slot % EPOCH_LENGTH) == self.id % EPOCH_LENGTH:
             head = self.compute_lmd_head()
-            sig = Sig(self.id, self.get_sig_targets(head, slot), slot, self.ts)
+            sig = Sig(self.id, self.get_sig_targets(head, slot), slot, ts)
             # self.log('Sig:', self.id, sig.slot, ' '.join([hexlify(t).decode('utf-8')[:4] for t in sig.targets]))
             self.broadcast(sig)
             self.last_made_sig = slot
         # Process time queue
-        while len(self.timequeue) and self.timequeue[0].min_timestamp() <= self.ts:
+        while len(self.timequeue) and self.timequeue[0].min_timestamp() <= ts:
             self.on_receive(self.timequeue.pop(0), reprocess=True)
