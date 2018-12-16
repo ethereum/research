@@ -339,7 +339,7 @@ class Node():
         return [self.get_ancestor_at_slot(head, s).hash for s in range(slot - 1, max(slot - EPOCH_LENGTH, 0) - 1, -1)]
 
     def get_adjusted_timestamp(self):
-        pull_threshold = 0.83
+        pull_threshold = 0.50
         add_zeroes = int(NOTARIES * (pull_threshold * 2 -1))
         index = int(NOTARIES * pull_threshold)
         return self.ts + sorted(self.observed_ts_deltas + [0] * add_zeroes)[index]
