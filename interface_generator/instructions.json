@@ -1,0 +1,8 @@
+[
+    {
+        "fun": "execute",
+        "prefills": [{"arg": "_data", "value": "0x"},
+                     {"arg": "_value", "fun": "m_dailyLimit", "inputs": []}],
+        "shows": [{"fun": "m_dailyLimit", "inputs": []}]
+    }
+]
