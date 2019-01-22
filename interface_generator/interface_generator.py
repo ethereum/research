@@ -50,7 +50,7 @@ function ___%s() {
 
 show_template = """
 <tr>
-    <td><span>%s</span></td>
+    <td><span>%s(%s)</span></td>
     <td><span id="%s"></span></td>
 </tr>
 <script>
@@ -78,6 +78,8 @@ def generate_interface(address, abi, instructions):
         abi_args = [x for x in abi if x.get("name", None) == function_name][0]
         for inp in abi_args["inputs"]:
             code += argument_template % (inp["name"], function_name + "___" + inp["name"])
+        if abi_args.get("payable", None):
+            code += argument_template % ("ETH amount to send", function_name + "___" + "ETH_AMOUNT_")
         for prefill in page.get('prefills', []):
             assert prefill['arg'] in [x['name'] for x in abi_args['inputs']]
             element_id = function_name + "___" + prefill['arg'] 
@@ -89,10 +91,15 @@ def generate_interface(address, abi, instructions):
                     ','.join(map(str, prefill['inputs'] + [' '])),
                     element_id,
                 )
+        input_args = ''
+        for inp in abi_args['inputs']:
+            input_args += 'document.getElementById("' + function_name + "___" + inp["name"] + '").value, '
+        if abi_args.get('payable', None):
+            input_args += '{value: web3.toWei(document.getElementById("' + function_name + '___ETH_AMOUNT_").value)}, '
         code += click_template % (
             function_name,
             function_name,
-            ','.join(['document.getElementById("' + function_name + "___" + inp["name"] + '").value' for inp in abi_args['inputs']]),
+            input_args,
             function_name,
             function_name
         )
@@ -100,6 +107,7 @@ def generate_interface(address, abi, instructions):
             element_id = function_name + "__show__" + str(i)
             code += show_template % (
                 show['fun'],
+                ','.join(map(str, show['inputs'])),
                 element_id,
                 show['fun'],
                 ','.join(map(str, show['inputs'] + [' '])),

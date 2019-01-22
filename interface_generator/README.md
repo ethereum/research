@@ -8,7 +8,7 @@ There have already been experiments in automated interface generators that look 
 
 The author is allowed to create a list of "tabs", each tab corresponding to one function execution (the language could and should be extended to offer a "dashboard" tab that simply shows info without offering any functions to execute), with a textbox for each argument. The interface designer can suggest prefilled values for arguments, which can be either constant values or calls of a constant function of the same contract, and can also give information to the user in the form of calls of constant functions with preset arguments that are repeated once per second.
 
-See out.html in this repo for a simple example using the Ethereum Foundation multisig wallet (only seven people in the world can use this to do anything useful; it is intended for illustrative purposes only). See interface.json for the interface file that produces this.
+See examples/foundation_out.html in this repo for a simple example using the Ethereum Foundation multisig wallet (only seven people in the world can use this to do anything useful; it is intended for illustrative purposes only). See examples/foundation_interface.json for the interface file that produces this.
 
 ### TODOs
 
