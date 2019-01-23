@@ -15,7 +15,7 @@ def add_value(branch, index, value):
         i += 1
     for j in range(0, i):
         value = hash(branch[j] + value)
-        branch[j] = zerohashes[j]
+        # branch[j] = zerohashes[j]
     branch[i] = value
 
 # Compute a Merkle root the dumb way
@@ -32,7 +32,7 @@ def get_root_from_branch(branch, size):
         if (size >> h) % 2 == 1:
             r = hash(branch[h] + r)
         else:
-            r = hash(r + branch[h])
+            r = hash(r + zerohashes[h])
     return r
 
 def branch_by_branch(values):
