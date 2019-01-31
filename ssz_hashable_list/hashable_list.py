@@ -27,7 +27,8 @@ class HashableList():
             assert len(v) == self.item_length
         self.items_per_chunk = SSZ_CHUNK_SIZE // self.item_length
 
-        # Build a list of chunks based on the number of items in the chunk
+        # Build a list of chunks based on the number of items in the chunk. Note that
+        # https://github.com/ethereum/eth2.0-specs/pull/538 is assumed to be in the spec here
         chunks = [
             zpad(b''.join(values[i:i+self.items_per_chunk]), SSZ_CHUNK_SIZE)
             for i in range(0, len(values), self.items_per_chunk)
