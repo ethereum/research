@@ -1,4 +1,4 @@
-from merkle_tree import merkelize, mk_branch, verify_branch, blake
+from permuted_tree import merkelize, mk_branch, verify_branch, blake, mk_multi_branch, verify_multi_branch
 from compression import compress_fri, decompress_fri, compress_branches, decompress_branches, bin_length
 from poly_utils import PrimeField
 import time
@@ -125,24 +125,26 @@ def mk_mimc_proof(inp, steps, round_constants):
     samples = spot_check_security_factor
     positions = get_pseudorandom_indices(l_mtree[1], precision, samples,
                                          exclude_multiples_of=extension_factor)
-    for pos in positions:
-        branches.append(mk_branch(mtree, pos))
-        branches.append(mk_branch(mtree, (pos + skips) % precision))
-        branches.append(mk_branch(l_mtree, pos))
+    augmented_positions = sum([[x, (x + skips) % precision] for x in positions], [])
+    #for pos in positions:
+    #    branches.append(mk_branch(mtree, pos))
+    #    branches.append(mk_branch(mtree, (pos + skips) % precision))
+    #    branches.append(mk_branch(l_mtree, pos))
     print('Computed %d spot checks' % samples)
 
     # Return the Merkle roots of P and D, the spot check Merkle proofs,
     # and low-degree proofs of P and D
     o = [mtree[1],
          l_mtree[1],
-         branches,
+         mk_multi_branch(mtree, augmented_positions),
+         mk_multi_branch(l_mtree, positions),
          prove_low_degree(l_evaluations, G2, steps * 2, modulus, exclude_multiples_of=extension_factor)]
     print("STARK computed in %.4f sec" % (time.time() - start_time))
     return o
 
 # Verifies a STARK
 def verify_mimc_proof(inp, steps, round_constants, output, proof):
-    m_root, l_root, branches, fri_proof = proof
+    m_root, l_root, main_branches, linear_comb_branches, fri_proof = proof
     start_time = time.time()
     assert steps <= 2**32 // extension_factor
     assert is_a_power_of_2(steps) and is_a_power_of_2(len(round_constants))
@@ -169,13 +171,16 @@ def verify_mimc_proof(inp, steps, round_constants, output, proof):
     samples = spot_check_security_factor
     positions = get_pseudorandom_indices(l_root, precision, samples,
                                          exclude_multiples_of=extension_factor)
+    augmented_positions = sum([[x, (x + skips) % precision] for x in positions], [])
     last_step_position = f.exp(G2, (steps - 1) * skips)
+    main_branch_leaves = verify_multi_branch(m_root, augmented_positions, main_branches)
+    linear_comb_branch_leaves = verify_multi_branch(l_root, positions, linear_comb_branches)
     for i, pos in enumerate(positions):
         x = f.exp(G2, pos)
         x_to_the_steps = f.exp(x, steps)
-        mbranch1 =  verify_branch(m_root, pos, branches[i*3])
-        mbranch2 =  verify_branch(m_root, (pos+skips)%precision, branches[i*3+1])
-        l_of_x = verify_branch(l_root, pos, branches[i*3 + 2], output_as_int=True)
+        mbranch1 = main_branch_leaves[i*2]
+        mbranch2 = main_branch_leaves[i*2+1]
+        l_of_x = int.from_bytes(linear_comb_branch_leaves[i], 'big')
 
         p_of_x = int.from_bytes(mbranch1[:32], 'big')
         p_of_g1x = int.from_bytes(mbranch2[:32], 'big')

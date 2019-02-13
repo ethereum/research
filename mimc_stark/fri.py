@@ -1,4 +1,4 @@
-from merkle_tree import merkelize, mk_branch, verify_branch
+from permuted_tree import merkelize, mk_branch, verify_branch, mk_multi_branch, verify_multi_branch
 from utils import get_power_cycle, get_pseudorandom_indices
 from poly_utils import PrimeField
 
@@ -45,14 +45,11 @@ def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus, exclude_mult
     # Pseudo-randomly select y indices to sample
     ys = get_pseudorandom_indices(m2[1], len(column), 40, exclude_multiples_of=exclude_multiples_of)
 
-    # Compute the Merkle branches for the values in the polynomial and the column
-    branches = []
-    for y in ys:
-        branches.append([mk_branch(m2, y)] +
-                        [mk_branch(m, y + (len(xs) // 4) * j) for j in range(4)])
+    # Compute the positions for the values in the polynomial
+    poly_positions = sum([[y + (len(xs) // 4) * j for j in range(4)] for y in ys], [])
 
-    # This component of the proof
-    o = [m2[1], branches]
+    # This component of the proof, including Merkle branches
+    o = [m2[1], mk_multi_branch(m2, ys), mk_multi_branch(m, poly_positions)]
 
     # Recurse...
     return [o] + prove_low_degree(column, f.exp(root_of_unity, 4),
@@ -77,7 +74,7 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, mo
 
     # Verify the recursive components of the proof
     for prf in proof[:-1]:
-        root2, branches = prf
+        root2, column_branches, poly_branches = prf
         print('Verifying degree <= %d' % maxdeg_plus_1)
 
         # Calculate the pseudo-random x coordinate
@@ -86,6 +83,13 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, mo
         # Calculate the pseudo-randomly sampled y indices
         ys = get_pseudorandom_indices(root2, roudeg // 4, 40,
                                       exclude_multiples_of=exclude_multiples_of)
+
+        # Compute the positions for the values in the polynomial
+        poly_positions = sum([[y + (roudeg // 4) * j for j in range(4)] for y in ys], [])
+
+        # Verify Merkle branches
+        column_values = verify_multi_branch(root2, ys, column_branches)
+        poly_values = verify_multi_branch(merkle_root, poly_positions, poly_branches)
 
         # For each y coordinate, get the x coordinates on the row, the values on
         # the row, and the value at that y from the column
@@ -98,11 +102,10 @@ def verify_low_degree_proof(merkle_root, root_of_unity, proof, maxdeg_plus_1, mo
             xcoords.append([(quartic_roots_of_unity[j] * x1) % modulus for j in range(4)])
 
             # The values from the original polynomial
-            row = [verify_branch(merkle_root, y + (roudeg // 4) * j, prf, output_as_int=True)
-                   for j, prf in zip(range(4), branches[i][1:])]
+            row = [int.from_bytes(x, 'big') for x in poly_values[i*4: i*4+4]]
             rows.append(row)
 
-            columnvals.append(verify_branch(root2, y, branches[i][0], output_as_int=True))
+            columnvals.append(int.from_bytes(column_values[i], 'big'))
 
         # Verify for each selected y coordinate that the four points from the
         # polynomial and the one point from the column that are on that y 

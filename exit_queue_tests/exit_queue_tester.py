@@ -3,7 +3,7 @@ from numpy.random import poisson
 # Target active staker size
 TARGET_AMOUNT_STAKING = 312500
 # Average time staking before withdrawal
-AVG_STAKING_TIME = 360
+AVG_STAKING_TIME = 120
 # How many withdrawals are permitted in
 # one day given a certain validator count?
 def withdrawals_per_day(validators):

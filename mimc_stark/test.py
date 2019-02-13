@@ -1,7 +1,8 @@
 from fft import fft
 from mimc_stark import mk_mimc_proof, modulus, mimc, verify_mimc_proof
-from compression import compress_fri, compress_branches, bin_length
-from merkle_tree import merkelize, mk_branch, verify_branch
+from compression import compress_fri, compress_branches
+from compression import bin_length as c_bin_length
+from merkle_tree import merkelize, mk_branch, verify_branch, bin_length
 from fri import prove_low_degree, verify_low_degree_proof
 
 def test_merkletree():
@@ -41,9 +42,9 @@ def test_stark():
     #constants = [random.randrange(modulus) for i in range(64)]
     constants = [(i**7) ^ 42 for i in range(64)]
     proof = mk_mimc_proof(INPUT, 2**LOGSTEPS, constants)
-    m_root, l_root, branches, fri_proof = proof
-    L1 = bin_length(compress_branches(branches))
-    L2 = bin_length(compress_fri(fri_proof))
+    m_root, l_root, main_branches, linear_comb_branches, fri_proof = proof
+    L1 = bin_length(main_branches) + bin_length(linear_comb_branches)
+    L2 = sum([32 + bin_length(x[1]) + bin_length(x[2]) for x in fri_proof[:-1]]) + len(b''.join(fri_proof[-1]))
     print("Approx proof length: %d (branches), %d (FRI proof), %d (total)" % (L1, L2, L1 + L2))
     assert verify_mimc_proof(3, 2**LOGSTEPS, constants, mimc(3, 2**LOGSTEPS, constants), proof)
 
