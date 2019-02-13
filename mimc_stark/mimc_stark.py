@@ -1,5 +1,4 @@
 from permuted_tree import merkelize, mk_branch, verify_branch, blake, mk_multi_branch, verify_multi_branch
-from compression import compress_fri, decompress_fri, compress_branches, decompress_branches, bin_length
 from poly_utils import PrimeField
 import time
 from fft import fft
