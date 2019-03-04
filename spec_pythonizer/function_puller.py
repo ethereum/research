@@ -8,6 +8,8 @@ code_lines.append("def slot_to_epoch(x): return x // 64")
 
 code_lines.append("""
 from typing import (
+    Any,
+    Callable,
     List,
     NewType,
     Tuple,
@@ -66,6 +68,8 @@ for linenum, line in enumerate(open(sys.argv[1]).readlines()):
                     code_lines.append(row[0] + ' = ' + (row[1].replace('**TBD**', '0x1234567890123567890123456789012357890')))
 
 print(open('minimal_ssz.py').read())
-            
+
 for line in code_lines:
     print(line)
+
+print(open('state_transition.py').read())

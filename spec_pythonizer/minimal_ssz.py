@@ -14,6 +14,21 @@ def SSZType(fields):
                     raise Exception("Missing constructor argument: %s" % f)
                 setattr(self, f, kwargs[f])
 
+        def __eq__(self, other):
+            return (
+                self.fields == other.fields and
+                self.serialize() == other.serialize()
+            )
+
+        def __hash__(self):
+            int.from_bytes(self.hash_tree_root(), byteorder="little")
+
+        def __str__(self):
+            output = []
+            for field in self.fields:
+                output.append(f'{field}: {getattr(self, field)}')
+            return "\n".join(output)
+
         def serialize(self):
             return serialize(self, self.__class__)
 
