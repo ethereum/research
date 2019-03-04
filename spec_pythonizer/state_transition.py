@@ -38,9 +38,9 @@ def process_transactions(state: BeaconState, block: BeaconBlock) -> None:
         state,
         block.body.voluntary_exits,
         MAX_VOLUNTARY_EXITS,
-        proces_exit,
+        process_exit,
     )
-    assert len(block.body.tranfers) == len(set(block.body.transfers))
+    assert len(block.body.transfers) == len(set(block.body.transfers))
     process_transaction_type(
         state,
         block.body.transfers,

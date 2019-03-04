@@ -68,6 +68,7 @@ for linenum, line in enumerate(open(sys.argv[1]).readlines()):
                     code_lines.append(row[0] + ' = ' + (row[1].replace('**TBD**', '0x1234567890123567890123456789012357890')))
 
 print(open('minimal_ssz.py').read())
+print(open('bls_stub.py').read())
 
 for line in code_lines:
     print(line)

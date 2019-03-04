@@ -21,7 +21,7 @@ def SSZType(fields):
             )
 
         def __hash__(self):
-            int.from_bytes(self.hash_tree_root(), byteorder="little")
+            return int.from_bytes(self.hash_tree_root(), byteorder="little")
 
         def __str__(self):
             output = []
@@ -154,3 +154,20 @@ def hash_tree_root(value, typ=None):
         return merkleize([hash_tree_root(getattr(value, field), subtype) for field, subtype in typ.fields.items()])
     else:
         raise Exception("Type not recognized")
+
+def truncate(container, field_name):
+    field_keys = list(container.fields.keys())
+    index = field_keys.index(field_name)
+    truncated_fields = {
+        key: container.fields[key]
+        for key in field_keys[:index]
+    }
+    truncated_class = SSZType(truncated_fields)
+    kwargs = {
+        field: getattr(container, field)
+        for field in field_keys[:index]
+    }
+    return truncated_class(**kwargs)
+
+def signed_root(container, field_name):
+    return hash_tree_root(truncate(container, field_name))
