@@ -2,15 +2,19 @@ from copy import deepcopy
 
 from spec import (
     # constants
+    BLS_WITHDRAWAL_PREFIX_BYTE,
     DEPOSIT_CONTRACT_TREE_DEPTH,
     FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
     GENESIS_FORK_VERSION,
     GENESIS_SLOT,
     MAX_DEPOSIT_AMOUNT,
+    MIN_ATTESTATION_INCLUSION_DELAY,
     SLOTS_PER_EPOCH,
     ZERO_HASH,
     # SSZ
+    Attestation,
+    AttestationData,
     BeaconBlock,
     BeaconBlockHeader,
     Deposit,
@@ -18,6 +22,7 @@ from spec import (
     DepositInput,
     Eth1Data,
     Fork,
+    Transfer,
     ProposerSlashing,
     Validator,
     VoluntaryExit,
@@ -26,6 +31,8 @@ from spec import (
     merkle_root,
     get_active_validator_indices,
     get_current_epoch,
+    get_crosslink_committees_at_slot,
+    get_epoch_start_slot,
     get_genesis_beacon_state,
     get_block_root,
     get_state_root,
@@ -124,6 +131,38 @@ def construct_empty_block_for_next_slot(state):
         previous_block_header.state_root = state.hash_tree_root()
     empty_block.previous_block_root = previous_block_header.hash_tree_root()
     return empty_block
+
+
+def build_attestation_data(state, slot, shard):
+    assert state.slot >= slot
+
+    if state.slot == slot:
+        block_root = construct_empty_block_for_next_slot(state).previous_block_root
+    else:
+        block_root = get_block_root(state, slot)
+
+    epoch_start_slot = get_epoch_start_slot(get_current_epoch(state))
+    if epoch_start_slot == slot:
+        epoch_boundary_root = block_root
+    else:
+        get_block_root(state, epoch_start_slot)
+
+    justified_epoch_slot = get_epoch_start_slot(state.justified_epoch)
+    if justified_epoch_slot == slot:
+        justified_block_root = block_root
+    else:
+        justified_block_root = get_block_root(state, justified_epoch_slot)
+
+    return AttestationData(
+        slot=slot,
+        shard=shard,
+        beacon_block_root=block_root,
+        epoch_boundary_root=epoch_boundary_root,
+        crosslink_data_root=ZERO_HASH,
+        latest_crosslink=deepcopy(state.latest_crosslinks[shard]),
+        justified_epoch=state.justified_epoch,
+        justified_block_root=justified_block_root,
+    )
 
 
 def test_slot_transition(state):
@@ -249,6 +288,50 @@ def test_deposit_in_block(state):
     assert test_state.validator_registry[index].pubkey == pubkeys[index]
 
 
+def test_attestation(state):
+    test_state = deepcopy(state)
+    current_epoch = get_current_epoch(test_state)
+    slot = state.slot
+    shard = state.current_shuffling_start_shard
+    attestation_data = build_attestation_data(state, slot, shard)
+
+    crosslink_committees = get_crosslink_committees_at_slot(state, slot)
+    crosslink_committee = [committee for committee, _shard in crosslink_committees if _shard == attestation_data.shard][0]
+
+    committee_size = len(crosslink_committee)
+    bitfield_length = (committee_size + 7) // 8
+    aggregation_bitfield = b'\x01' + b'\x00' * (bitfield_length - 1)
+    custody_bitfield = b'\x00' * bitfield_length
+    attestation = Attestation(
+        aggregation_bitfield=aggregation_bitfield,
+        data=attestation_data,
+        custody_bitfield=custody_bitfield,
+        aggregate_signature=b'\x42'*96,
+    )
+
+    #
+    # Add to state via block transition
+    #
+    block = construct_empty_block_for_next_slot(test_state)
+    block.slot += MIN_ATTESTATION_INCLUSION_DELAY
+    block.body.attestations.append(attestation)
+    state_transition(test_state, block)
+
+    assert len(test_state.current_epoch_attestations) == len(state.current_epoch_attestations) + 1
+
+    #
+    # Epoch transition should move to previous_epoch_attestations
+    #
+    pre_current_epoch_attestations = deepcopy(test_state.current_epoch_attestations)
+
+    block = construct_empty_block_for_next_slot(test_state)
+    block.slot += SLOTS_PER_EPOCH
+    state_transition(test_state, block)
+
+    assert len(test_state.current_epoch_attestations) == 0
+    assert test_state.previous_epoch_attestations == pre_current_epoch_attestations
+
+
 def test_voluntary_exit(state):
     test_state = deepcopy(state)
     current_epoch = get_current_epoch(test_state)
@@ -284,6 +367,46 @@ def test_voluntary_exit(state):
     assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
 
 
+def test_transfer(state):
+    test_state = deepcopy(state)
+    current_epoch = get_current_epoch(test_state)
+    sender_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[-1]
+    to_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[0]
+    pubkey = b'\x00' * 48
+    amount = test_state.validator_balances[sender_index]
+    pre_transfer_recipient_balance = test_state.validator_balances[to_index]
+    transfer = Transfer(
+        sender=sender_index,
+        to=to_index,
+        amount=amount,
+        fee=0,
+        slot=test_state.slot + 1,
+        pubkey=pubkey,
+        signature=b'\x42'*96,
+    )
+
+    # ensure withdrawal_credentials reproducable
+    test_state.validator_registry[sender_index].withdrawal_credentials = (
+        BLS_WITHDRAWAL_PREFIX_BYTE + hash(pubkey)[1:]
+    )
+    # un-activate so validator can transfer
+    test_state.validator_registry[sender_index].activation_epoch = FAR_FUTURE_EPOCH
+
+    #
+    # Add to state via block transition
+    #
+    block = construct_empty_block_for_next_slot(test_state)
+    block.body.transfers.append(transfer)
+    state_transition(test_state, block)
+
+    sender = test_state.validator_registry[sender_index]
+    sender_balance = test_state.validator_balances[sender_index]
+    recipient = test_state.validator_registry[to_index]
+    recipient_balance = test_state.validator_balances[to_index]
+    assert sender_balance == 0
+    assert recipient_balance == pre_transfer_recipient_balance + amount
+ 
+
 def sanity_tests():
     print("Buidling state with 100 validators...")
     initial_deposits, deposit_root = create_mock_genesis_validator_deposits()
@@ -305,8 +428,10 @@ def sanity_tests():
     test_skipped_slots(genesis_state)
     test_empty_epoch_transition(genesis_state)
     test_proposer_slashing(genesis_state)
+    test_attestation(genesis_state)
     test_deposit_in_block(genesis_state)
     test_voluntary_exit(genesis_state)
+    test_transfer(genesis_state)
     print("done!")
 
 
