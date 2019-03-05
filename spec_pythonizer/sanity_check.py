@@ -208,19 +208,6 @@ def test_proposer_slashing(state):
     # lost whistleblower reward
     assert test_state.validator_balances[validator_index] < state.validator_balances[validator_index]
 
-    #
-    # Process within epoch transition
-    #
-
-    # artificially trigger registry update
-    # test_state.validator_registry_update_epoch -= 1
-
-    # block = construct_empty_block_for_next_slot(test_state)
-    # block.slot += SLOTS_PER_EPOCH
-    # state_transition(test_state, block)
-
-    # assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
-
 
 def test_deposit_in_block(state):
     test_state = deepcopy(state)
@@ -313,13 +300,13 @@ def sanity_tests():
     print()
 
     print("Running some sanity check tests...")
-    # test_slot_transition(genesis_state)
-    # test_empty_block_transition(genesis_state)
-    # test_skipped_slots(genesis_state)
-    # test_empty_epoch_transition(genesis_state)
+    test_slot_transition(genesis_state)
+    test_empty_block_transition(genesis_state)
+    test_skipped_slots(genesis_state)
+    test_empty_epoch_transition(genesis_state)
     test_proposer_slashing(genesis_state)
-    # test_deposit_in_block(genesis_state)
-    # test_voluntary_exit(genesis_state)
+    test_deposit_in_block(genesis_state)
+    test_voluntary_exit(genesis_state)
     print("done!")
 
 
