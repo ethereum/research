@@ -61,8 +61,10 @@ for linenum, line in enumerate(open(sys.argv[1]).readlines()):
                     if '`' in row[i]:
                         row[i] = row[i][:row[i].find('`')]
                 eligible = True
+                if row[0][0] not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_':
+                    eligible = False
                 for c in row[0]:
-                    if c not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_':
+                    if c not in 'ABCDEFGHIJKLMNOPQRSTUVWXYZ_0123456789':
                         eligible = False
                 if eligible:
                     code_lines.append(row[0] + ' = ' + (row[1].replace('**TBD**', '0x1234567890123567890123456789012357890')))
