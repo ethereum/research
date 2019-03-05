@@ -4,6 +4,7 @@ from spec import (
     FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
     MAX_DEPOSIT_AMOUNT,
+    SLOTS_PER_EPOCH,
     ZERO_HASH,
     BeaconBlock,
     DepositData,
@@ -87,6 +88,18 @@ def test_skipped_slots(state):
         assert get_block_root(test_state, slot) == block.previous_block_root
 
 
+def test_empty_epoch_transition(state):
+    test_state = deepcopy(state)
+    block = construct_empty_block_for_next_slot(test_state)
+    block.slot += SLOTS_PER_EPOCH
+
+    state_transition(test_state, block)
+
+    assert test_state.slot == block.slot
+    for slot in range(state.slot, test_state.slot):
+        assert get_block_root(test_state, slot) == block.previous_block_root
+
+
 def sanity_tests():
     print("Buidling state with 1000 validators...")
     genesis_state = get_genesis_beacon_state(
@@ -105,6 +118,7 @@ def sanity_tests():
     test_slot_transition(genesis_state)
     test_empty_block_transition(genesis_state)
     test_skipped_slots(genesis_state)
+    test_empty_epoch_transition(genesis_state)
     print("done!")
 
 

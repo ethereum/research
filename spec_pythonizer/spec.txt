@@ -707,7 +707,7 @@ def get_previous_epoch(state: BeaconState) -> Epoch:
     """`
     Return the previous epoch of the given ``state``.
     """
-    return max(get_current_epoch(state) - 1, GENESIS_EPOCH)
+    return get_current_epoch(state) - 1
 ```
 
 ### `get_current_epoch`
@@ -1994,7 +1994,7 @@ def get_attesting_indices(state: BeaconState, attestations: List[PendingAttestat
 
 ```python
 def get_attesting_balance(state: BeaconState, attestations: List[PendingAttestation]) -> List[ValidatorIndex]:
-    return get_total_balance(state, get_attesting_indices(attestations, state))
+    return get_total_balance(state, get_attesting_indices(state, attestations))
 ```
 
 ```python
@@ -2030,13 +2030,13 @@ def get_winning_root_and_participants(state: BeaconState, shard: Shard) -> Tuple
         a for a in all_attestations if a.data.latest_crosslink == state.latest_crosslinks[shard]
     ]
     all_roots = [a.data.crosslink_data_root for a in valid_attestations]
-    
+
     def get_attestations_for(root) -> List[PendingAttestation]:
         return [a for a in valid_attestations if a.data.crosslink_data_root == root]
-        
+
     winning_root = max(all_roots, key=lambda r: get_attesting_balance(state, get_attestations_for(r)))
-    
-    return winning_root, get_attesting_indices(get_attestations_for(winning_root))
+
+    return winning_root, get_attesting_indices(state, get_attestations_for(winning_root))
 ```
 
 ```python
@@ -2068,12 +2068,12 @@ def update_justification_and_finalization(state: BeaconState) -> None:
     # Rotate the justification bitfield up one epoch to make room for the current epoch
     state.justification_bitfield <<= 1
     # If the previous epoch gets justified, fill the second last bit
-    previous_boundary_attesting_balance = get_attesting_balance(get_previous_epoch_boundary_attestations(state))
+    previous_boundary_attesting_balance = get_attesting_balance(state, get_previous_epoch_boundary_attestations(state))
     if previous_boundary_attesting_balance * 3 >= get_previous_total_balance(state) * 2:
         new_justified_epoch = get_current_epoch(state) - 1
         state.justification_bitfield |= 2
     # If the current epoch gets justified, fill the last bit
-    current_boundary_attesting_balance = get_attesting_balance(get_current_epoch_boundary_attestations(state))
+    current_boundary_attesting_balance = get_attesting_balance(state, get_current_epoch_boundary_attestations(state))
     if current_boundary_attesting_balance * 3 >= get_current_total_balance(state) * 2:
         new_justified_epoch = get_current_epoch(state)
         state.justification_bitfield |= 1
@@ -2105,6 +2105,9 @@ Run the following function:
 
 ```python
 def process_crosslinks(state: BeaconState) -> None:
+    current_epoch = get_current_epoch(state)
+    previous_epoch = current_epoch - 1
+    next_epoch = current_epoch + 1
     for slot in range(get_epoch_start_slot(previous_epoch), get_epoch_start_slot(next_epoch)):
         for crosslink_committee, shard in get_crosslink_committees_at_slot(state, slot):
             winning_root, participants = get_winning_root_and_participants(state, shard)
@@ -2168,15 +2171,15 @@ def compute_normal_justification_and_finalization_deltas(state: BeaconState) -> 
     deltas = [0 for index in range(len(state.validator_registry))]
     # Some helper variables
     boundary_attestations = get_previous_epoch_boundary_attestations(state)
-    boundary_attesting_balance = get_attesting_balance(boundary_attestations)
+    boundary_attesting_balance = get_attesting_balance(state, boundary_attestations)
     total_balance = get_previous_total_balance(state)
-    total_attesting_balance = get_attesting_balance(get_previous_epoch_attestations(state))
+    total_attesting_balance = get_attesting_balance(state, get_previous_epoch_attestations(state))
     matching_head_attestations = get_previous_epoch_matching_head_attestations(state)
-    matching_head_balance = get_attesting_balance(matching_head_attestations)
+    matching_head_balance = get_attesting_balance(state, matching_head_attestations)
     # Process rewards or penalties for all validators
     for index in get_active_validator_indices(state.validator_registry, previous_epoch):
         # Expected FFG source
-        if index in get_attesting_indices(state.previous_epoch_attestations):
+        if index in get_attesting_indices(state, state.previous_epoch_attestations):
             deltas[index] += get_base_reward(state, index) * total_attesting_balance // total_balance
             # Inclusion speed bonus
             deltas[index] += (
@@ -2186,15 +2189,15 @@ def compute_normal_justification_and_finalization_deltas(state: BeaconState) -> 
         else:
             deltas[index] -= get_base_reward(state, index)
         # Expected FFG target
-        if index in get_attesting_indices(boundary_attestations):
+        if index in get_attesting_indices(state, boundary_attestations):
             deltas[index] += get_base_reward(state, index) * boundary_attesting_balance // total_balance
         else:
             deltas[index] -= get_base_reward(state, index)
         # Expected head
-        if index in get_attesting_indices(matching_head_attestations):
+        if index in get_attesting_indices(state, matching_head_attestations):
             deltas[index] += get_base_reward(state, index) * matching_head_balance // total_balance
         else:
-            deltas[index] -= get_base_reward(state, index)    
+            deltas[index] -= get_base_reward(state, index)
         # Proposer bonus
         proposer_index = get_beacon_proposer_index(state, inclusion_slot(state, index))
         deltas[proposer_index] += base_reward(state, index) // ATTESTATION_INCLUSION_REWARD_QUOTIENT
@@ -2210,7 +2213,7 @@ def compute_inactivity_leak_deltas(state: BeaconState) -> List[Gwei]:
     active_validator_indices = get_active_validator_indices(state.validator_registry, get_previous_epoch(state))
     epochs_since_finality = get_current_epoch(state) + 1 - state.finalized_epoch
     for index in active_validator_indices:
-        if index not in get_attesting_indices(get_previous_epoch_attestations(state)):
+        if index not in get_attesting_indices(state, get_previous_epoch_attestations(state)):
             deltas[index] -= get_inactivity_penalty(state, index, epochs_since_finality)
         else:
             # If a validator did attest, apply a small penalty for getting attestations included late
@@ -2220,9 +2223,9 @@ def compute_inactivity_leak_deltas(state: BeaconState) -> List[Gwei]:
             )
             deltas[index] -= base_reward(state, index)
                     
-        if index not in get_attesting_indices(boundary_attestations):
+        if index not in get_attesting_indices(state, boundary_attestations):
             deltas[index] -= get_inactivity_penalty(state, index, epochs_since_finality)
-        if index not in get_attesting_indices(matching_head_attestations):
+        if index not in get_attesting_indices(state, matching_head_attestations):
             deltas[index] -= get_base_reward(state, index)
     # Penalize slashed-but-inactive validators as though they were active but offline
     for index in range(len(state.validator_registry)):
