@@ -1692,10 +1692,10 @@ At every `slot > GENESIS_SLOT` run the following function:
 ```python
 def advance_slot(state: BeaconState) -> None:
     state.latest_state_roots[state.slot % SLOTS_PER_HISTORICAL_ROOT] = hash_tree_root(state)
-    if state.latest_block_header.state_root == ZERO_HASH:
-        state.latest_block_header.state_root = get_state_root(state, state.slot)
-    state.latest_block_roots[state.slot % SLOTS_PER_HISTORICAL_ROOT] = hash_tree_root(state.latest_block_header)
     state.slot += 1
+    if state.latest_block_header.state_root == ZERO_HASH:
+        state.latest_block_header.state_root = get_state_root(state, state.slot - 1)
+    state.latest_block_roots[(state.slot - 1) % SLOTS_PER_HISTORICAL_ROOT] = hash_tree_root(state.latest_block_header)
 ```
 
 ### Per-block processing
@@ -2168,6 +2168,9 @@ First, we define some additional helpers:
 
 ```python
 def get_base_reward(state: BeaconState, index: ValidatorIndex) -> Gwei:
+    if get_previous_total_balance(state) == 0:
+        return 0
+
     adjusted_quotient = integer_squareroot(get_previous_total_balance(state)) // BASE_REWARD_QUOTIENT
     return get_effective_balance(state, index) // adjusted_quotient // 5
 ```
@@ -2293,7 +2296,7 @@ def get_crosslink_deltas(state: BeaconState) -> Tuple[List[Gwei], List[Gwei]]:
         for crosslink_committee, shard in get_crosslink_committees_at_slot(state, slot):
             winning_root, participants = get_winning_root_and_participants(state, shard)
             participating_balance = get_total_balance(state, participants)
-            total_balance = get_total_balance(state, crossling_committee)
+            total_balance = get_total_balance(state, crosslink_committee)
             for index in crosslink_committee:
                 if index in participants:
                     deltas[0][index] += get_base_reward(state, index) * participating_balance // total_balance
