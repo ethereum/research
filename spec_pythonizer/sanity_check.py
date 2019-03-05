@@ -6,16 +6,19 @@ from spec import (
     FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
     GENESIS_FORK_VERSION,
+    GENESIS_SLOT,
     MAX_DEPOSIT_AMOUNT,
     SLOTS_PER_EPOCH,
     ZERO_HASH,
     # SSZ
     BeaconBlock,
+    BeaconBlockHeader,
     Deposit,
     DepositData,
     DepositInput,
     Eth1Data,
     Fork,
+    ProposerSlashing,
     Validator,
     VoluntaryExit,
     # functions
@@ -166,6 +169,59 @@ def test_empty_epoch_transition(state):
         assert get_block_root(test_state, slot) == block.previous_block_root
 
 
+def test_proposer_slashing(state):
+    test_state = deepcopy(state)
+    current_epoch = get_current_epoch(test_state)
+    validator_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[-1]
+    slot = GENESIS_SLOT
+    header_1 = BeaconBlockHeader(
+        slot=slot,
+        previous_block_root=b'\x00'*32,
+        state_root=b'\x00'*32,
+        block_body_root=b'\x00'*32,
+        signature=b'\x00'*96
+    )
+    header_2 = deepcopy(header_1)
+    header_2.previous_block_root = b'\x02'*32
+
+    proposer_slashing = ProposerSlashing(
+        proposer_index=validator_index,
+        header_1=header_1,
+        header_2=header_2,
+    )
+
+    #
+    # Add to state via block transition
+    #
+    block = construct_empty_block_for_next_slot(test_state)
+    block.body.proposer_slashings.append(proposer_slashing)
+    state_transition(test_state, block)
+
+    assert not state.validator_registry[validator_index].initiated_exit
+    assert not state.validator_registry[validator_index].slashed
+
+    slashed_validator = test_state.validator_registry[validator_index]
+    assert not slashed_validator.initiated_exit
+    assert slashed_validator.slashed
+    assert slashed_validator.exit_epoch < FAR_FUTURE_EPOCH
+    assert slashed_validator.withdrawable_epoch < FAR_FUTURE_EPOCH
+    # lost whistleblower reward
+    assert test_state.validator_balances[validator_index] < state.validator_balances[validator_index]
+
+    #
+    # Process within epoch transition
+    #
+
+    # artificially trigger registry update
+    # test_state.validator_registry_update_epoch -= 1
+
+    # block = construct_empty_block_for_next_slot(test_state)
+    # block.slot += SLOTS_PER_EPOCH
+    # state_transition(test_state, block)
+
+    # assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
+
+
 def test_deposit_in_block(state):
     test_state = deepcopy(state)
     test_deposit_data_leaves = deepcopy(all_deposit_data_leaves)
@@ -257,12 +313,13 @@ def sanity_tests():
     print()
 
     print("Running some sanity check tests...")
-    test_slot_transition(genesis_state)
-    test_empty_block_transition(genesis_state)
-    test_skipped_slots(genesis_state)
-    test_empty_epoch_transition(genesis_state)
-    test_deposit_in_block(genesis_state)
-    test_voluntary_exit(genesis_state)
+    # test_slot_transition(genesis_state)
+    # test_empty_block_transition(genesis_state)
+    # test_skipped_slots(genesis_state)
+    # test_empty_epoch_transition(genesis_state)
+    test_proposer_slashing(genesis_state)
+    # test_deposit_in_block(genesis_state)
+    # test_voluntary_exit(genesis_state)
     print("done!")
 
 
