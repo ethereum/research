@@ -30,7 +30,7 @@ def SSZType(fields):
             return "\n".join(output)
 
         def serialize(self):
-            return serialize(self, self.__class__)
+            return serialize_value(self, self.__class__)
 
         def hash_tree_root(self):
             return hash_tree_root(self, self.__class__)
@@ -68,7 +68,7 @@ def coerce_to_bytes(x):
     else:
         raise Exception("Expecting bytes")
 
-def serialize(value, typ):
+def serialize_value(value, typ):
     if isinstance(typ, str) and typ[:4] == 'uint':
         length = int(typ[4:])
         assert length in (8, 16, 32, 64, 128, 256)
@@ -77,17 +77,17 @@ def serialize(value, typ):
         assert value in (True, False)
         return b'\x01' if value is True else b'\x00'
     elif (isinstance(typ, list) and len(typ) == 1) or typ == 'bytes':
-        serialized_bytes = coerce_to_bytes(value) if typ == 'bytes' else b''.join([serialize(element, typ[0]) for element in value])
+        serialized_bytes = coerce_to_bytes(value) if typ == 'bytes' else b''.join([serialize_value(element, typ[0]) for element in value])
         assert len(serialized_bytes) < 2**(8 * BYTES_PER_LENGTH_PREFIX)
         serialized_length = len(serialized_bytes).to_bytes(BYTES_PER_LENGTH_PREFIX, 'little')
         return serialized_length + serialized_bytes
     elif isinstance(typ, list) and len(typ) == 2:
-        return ''.join([serialize(element, typ[0]) for element in value])
+        return ''.join([serialize_value(element, typ[0]) for element in value])
     elif isinstance(typ, str) and len(typ) > 5 and typ[:5] == 'bytes':
         assert len(value) == int(typ[5:]), (value, int(typ[5:]))
         return coerce_to_bytes(value)
     elif hasattr(typ, 'fields'):
-        serialized_bytes = b''.join([serialize(getattr(value, field), subtype) for field, subtype in typ.fields.items()])
+        serialized_bytes = b''.join([serialize_value(getattr(value, field), subtype) for field, subtype in typ.fields.items()])
         if is_constant_sized(typ):
             return serialized_bytes
         else:
@@ -103,7 +103,7 @@ def chunkify(bytez):
     return [bytez[i:i+32] for i in range(0, len(bytez), 32)]
 
 def pack(values, subtype):
-    return chunkify(b''.join([serialize(value, subtype) for value in values]))
+    return chunkify(b''.join([serialize_value(value, subtype) for value in values]))
 
 def is_power_of_two(x):
     return x > 0 and x & (x-1) == 0
@@ -171,3 +171,6 @@ def truncate(container, field_name):
 
 def signed_root(container, field_name):
     return hash_tree_root(truncate(container, field_name))
+
+def serialize(ssz_object):
+    return getattr(ssz_object, 'serialize')()
