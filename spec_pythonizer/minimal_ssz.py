@@ -72,7 +72,7 @@ def serialize_value(value, typ):
     if isinstance(typ, str) and typ[:4] == 'uint':
         length = int(typ[4:])
         assert length in (8, 16, 32, 64, 128, 256)
-        return value.to_bytes(length, 'little')
+        return value.to_bytes(length // 8, 'little')
     elif typ == 'bool':
         assert value in (True, False)
         return b'\x01' if value is True else b'\x00'
