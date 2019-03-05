@@ -17,9 +17,12 @@ from spec import (
     Eth1Data,
     Fork,
     Validator,
+    VoluntaryExit,
     # functions
     int_to_bytes48,
     merkle_root,
+    get_active_validator_indices,
+    get_current_epoch,
     get_genesis_beacon_state,
     get_block_root,
     get_state_root,
@@ -44,7 +47,7 @@ def hash(x): return sha256(x).digest()
 
 
 num_validators = 100
-pubkeys = [int_to_bytes48(i) for i in range(100)]
+pubkeys = [int_to_bytes48(i) for i in range(10000)]
 all_deposit_data_leaves = list()
 
 
@@ -80,7 +83,7 @@ def create_mock_genesis_validator_deposits():
     withdrawal_credentials = b'\x22' * 32
     deposit_timestamp = 0
     proof_of_possession = b'\x33' * 96
-    
+
     deposit_data_list = []
     for i in range(num_validators):
         deposit_data=DepositData(
@@ -102,17 +105,11 @@ def create_mock_genesis_validator_deposits():
 
     genesis_validator_deposits = []
     for i in range(num_validators):
-        fork = Fork(
-            previous_version=GENESIS_FORK_VERSION,
-            current_version=GENESIS_FORK_VERSION,
-            epoch=GENESIS_EPOCH,
-        )
         genesis_validator_deposits.append(Deposit(
             proof=list(get_merkle_proof(tree, item_index=i)),
             index=i,
             deposit_data=deposit_data_list[i]
-            
-        )) 
+        ))
     return genesis_validator_deposits, root
 
 
@@ -154,8 +151,6 @@ def test_skipped_slots(state):
 
     assert test_state.slot == block.slot
     for slot in range(state.slot, test_state.slot):
-        print('get_block_root(test_state, slot)', get_block_root(test_state, slot))
-        print('block.previous_block_root', block.previous_block_root)
         assert get_block_root(test_state, slot) == block.previous_block_root
 
 
@@ -169,6 +164,81 @@ def test_empty_epoch_transition(state):
     assert test_state.slot == block.slot
     for slot in range(state.slot, test_state.slot):
         assert get_block_root(test_state, slot) == block.previous_block_root
+
+
+def test_deposit_in_block(state):
+    test_state = deepcopy(state)
+    test_deposit_data_leaves = deepcopy(all_deposit_data_leaves)
+    withdrawal_credentials = b'\x42' * 32
+    deposit_timestamp = 1
+    proof_of_possession = b'\x44' * 96
+
+    index = len(test_deposit_data_leaves)
+    deposit_data = DepositData(
+        amount=MAX_DEPOSIT_AMOUNT,
+        timestamp=deposit_timestamp,
+        deposit_input=DepositInput(
+            pubkey=pubkeys[index],
+            withdrawal_credentials=withdrawal_credentials,
+            proof_of_possession=proof_of_possession,
+        ),
+    )
+    item = hash(deposit_data.serialize())
+    test_deposit_data_leaves.append(item)
+    tree = calc_merkle_tree_from_leaves(tuple(test_deposit_data_leaves))
+    root = get_merkle_root((tuple(test_deposit_data_leaves)))
+    proof = list(get_merkle_proof(tree, item_index=index))
+    assert verify_merkle_branch(item, proof, DEPOSIT_CONTRACT_TREE_DEPTH, index, root)
+
+    deposit = Deposit(
+        proof=list(proof),
+        index=index,
+        deposit_data=deposit_data,
+    )
+
+    test_state.latest_eth1_data.deposit_root = root
+    block = construct_empty_block_for_next_slot(test_state)
+    block.body.deposits.append(deposit)
+
+    state_transition(test_state, block)
+    assert len(test_state.validator_registry) == len(state.validator_registry) + 1
+    assert len(test_state.validator_balances) == len(state.validator_balances) + 1
+    assert test_state.validator_registry[index].pubkey == pubkeys[index]
+
+
+def test_voluntary_exit(state):
+    test_state = deepcopy(state)
+    current_epoch = get_current_epoch(test_state)
+    validator_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[-1]
+    voluntary_exit = VoluntaryExit(
+        epoch=current_epoch,
+        validator_index=validator_index,
+        signature=b'\x00'*96,
+    )
+
+    #
+    # Add to state via block transition
+    #
+    block = construct_empty_block_for_next_slot(test_state)
+    block.body.voluntary_exits.append(voluntary_exit)
+    state_transition(test_state, block)
+
+    assert not state.validator_registry[validator_index].initiated_exit
+    assert test_state.validator_registry[validator_index].initiated_exit
+    assert test_state.validator_registry[validator_index].exit_epoch == FAR_FUTURE_EPOCH
+
+    #
+    # Process within epoch transition
+    #
+
+    # artificially trigger registry update
+    test_state.validator_registry_update_epoch -= 1
+
+    block = construct_empty_block_for_next_slot(test_state)
+    block.slot += SLOTS_PER_EPOCH
+    state_transition(test_state, block)
+
+    assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
 
 
 def sanity_tests():
@@ -191,6 +261,8 @@ def sanity_tests():
     test_empty_block_transition(genesis_state)
     test_skipped_slots(genesis_state)
     test_empty_epoch_transition(genesis_state)
+    test_deposit_in_block(genesis_state)
+    test_voluntary_exit(genesis_state)
     print("done!")
 
 
