@@ -101,7 +101,7 @@ def test_empty_epoch_transition(state):
 
 
 def sanity_tests():
-    print("Buidling state with 1000 validators...")
+    print("Buidling state with 100 validators...")
     genesis_state = get_genesis_beacon_state(
         [],
         0,
@@ -110,7 +110,7 @@ def sanity_tests():
             block_hash="\x00"*32
         ),
     )
-    add_validators_to_genesis(genesis_state, 1000)
+    add_validators_to_genesis(genesis_state, 100)
     print("done!")
     print()
 
