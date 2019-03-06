@@ -82,6 +82,7 @@ def serialize_value(value, typ):
         serialized_length = len(serialized_bytes).to_bytes(BYTES_PER_LENGTH_PREFIX, 'little')
         return serialized_length + serialized_bytes
     elif isinstance(typ, list) and len(typ) == 2:
+        assert len(value) == typ[1]
         return ''.join([serialize_value(element, typ[0]) for element in value])
     elif isinstance(typ, str) and len(typ) > 5 and typ[:5] == 'bytes':
         assert len(value) == int(typ[5:]), (value, int(typ[5:]))
@@ -142,6 +143,7 @@ def hash_tree_root(value, typ=None):
     elif isinstance(typ, list) and len(typ) == 1 and not is_basic(typ[0]):
         return mix_in_length(merkleize([hash_tree_root(element, typ[0]) for element in value]), len(value))
     elif isinstance(typ, list) and len(typ) == 2 and is_basic(typ[0]):
+        assert len(value) == typ[1]
         return merkleize(pack(value, typ[0]))
     elif typ == 'bytes':
         return mix_in_length(merkleize(chunkify(coerce_to_bytes(value))), len(value))
