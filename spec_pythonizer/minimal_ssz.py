@@ -99,7 +99,7 @@ def serialize_value(value, typ):
         raise Exception("Type not recognized")
 
 def chunkify(bytez):
-    bytez += b'\x00' * (len(bytez) % BYTES_PER_CHUNK)
+    bytez += b'\x00' * (-len(bytez) % BYTES_PER_CHUNK)
     return [bytez[i:i+32] for i in range(0, len(bytez), 32)]
 
 def pack(values, subtype):
