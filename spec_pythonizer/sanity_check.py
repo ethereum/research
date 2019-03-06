@@ -372,13 +372,13 @@ def test_transfer(state):
     test_state = deepcopy(state)
     current_epoch = get_current_epoch(test_state)
     sender_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[-1]
-    to_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[0]
+    recipient_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[0]
     pubkey = b'\x00' * 48
     amount = test_state.validator_balances[sender_index]
-    pre_transfer_recipient_balance = test_state.validator_balances[to_index]
+    pre_transfer_recipient_balance = test_state.validator_balances[recipient_index]
     transfer = Transfer(
         sender=sender_index,
-        to=to_index,
+        recipient=recipient_index,
         amount=amount,
         fee=0,
         slot=test_state.slot + 1,
@@ -401,7 +401,7 @@ def test_transfer(state):
     state_transition(test_state, block)
 
     sender_balance = test_state.validator_balances[sender_index]
-    recipient_balance = test_state.validator_balances[to_index]
+    recipient_balance = test_state.validator_balances[recipient_index]
     assert sender_balance == 0
     assert recipient_balance == pre_transfer_recipient_balance + amount
 
