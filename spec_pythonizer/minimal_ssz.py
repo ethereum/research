@@ -155,22 +155,21 @@ def hash_tree_root(value, typ=None):
     else:
         raise Exception("Type not recognized")
 
-def truncate(container, field_name):
+def truncate(container):
     field_keys = list(container.fields.keys())
-    index = field_keys.index(field_name)
     truncated_fields = {
         key: container.fields[key]
-        for key in field_keys[:index]
+        for key in field_keys[:-1]
     }
     truncated_class = SSZType(truncated_fields)
     kwargs = {
         field: getattr(container, field)
-        for field in field_keys[:index]
+        for field in field_keys[:-1]
     }
     return truncated_class(**kwargs)
 
-def signed_root(container, field_name):
-    return hash_tree_root(truncate(container, field_name))
+def signed_root(container):
+    return hash_tree_root(truncate(container))
 
 def serialize(ssz_object):
     return getattr(ssz_object, 'serialize')()
