@@ -33,6 +33,50 @@ def verify_branch(root, index, proof, output_as_int=False):
     assert v == root
     return int.from_bytes(proof[0], 'big') if output_as_int else proof[0]
 
+def get_proof_indices(tree_indices, depth):
+    leaf_count = 2**depth
+    # Get indices included in any proof
+    initial_indices = set({})
+    for i in tree_indices:
+        x = leaf_count + i
+        while x > 1:
+            initial_indices.add(x ^ 1)
+            x //= 2
+    initial_indices = [leaf_count + i for i in tree_indices] + sorted(list(initial_indices))[::-1]
+    print('initial', initial_indices)
+    # Get indices that can be removed
+    redundant_indices = set({})
+    indices_to_remove = set({})
+    for index in initial_indices:
+        print('redundant', redundant_indices, 'removed', indices_to_remove, 'checking', index)
+        if index in redundant_indices:
+            indices_to_remove.add(index)
+        else:
+            while index > 1:
+                redundant_indices.add(index)
+                if (index ^ 1) not in redundant_indices:
+                    break
+                index //= 2
+    return [i for i in initial_indices if i not in indices_to_remove and i-leaf_count not in tree_indices]
+
+def mk_multi_proof(tree, indices):
+    return [tree[i] for i in get_proof_indices(indices, len(tree) // 2)]
+
+def verify_multi_proof(root, indices, leaves, depth, proof):
+    tree = {}
+    for index, leaf in zip(indices, leaves):
+        tree[2**depth + index] = leaf
+    for index, proofitem in zip(get_proof_indices(indices, 2**depth), proof):
+        tree[index] = proofitem
+    indexqueue = sorted(tree.keys())[:-1]
+    i = 0
+    while i < len(indexqueue):
+        index = indexqueue[i]
+        if index^1 in tree:
+            tree[index//2] = blake(tree[index - index%2] + tree[index - index%2 + 1])
+            indexqueue.append(index//2)
+    return 1 in tree and tree[1] == root
+
 # Make a compressed proof for multiple indices
 def mk_multi_branch(tree, indices):
     # Branches we are outputting
@@ -67,7 +111,8 @@ def mk_multi_branch(tree, indices):
                 b[j] = b''
             scanned[index^1] = True
             index //= 2
-    return output
+    return output        
+    
 
 # Verify a compressed proof
 def verify_multi_branch(root, indices, proof):
