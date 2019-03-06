@@ -1303,7 +1303,7 @@ def process_deposit(state: BeaconState, deposit: Deposit) -> None:
     serialized_deposit_data = serialize(deposit.deposit_data)
     # Deposits must be processed in order
     assert deposit.index == state.deposit_index
-    
+
     # Verify the Merkle branch
     merkle_branch_is_valid = verify_merkle_branch(
         leaf=hash(serialized_deposit_data),
@@ -1313,17 +1313,17 @@ def process_deposit(state: BeaconState, deposit: Deposit) -> None:
         root=state.latest_eth1_data.deposit_root,
     )
     assert merkle_branch_is_valid
-        
+
     # Increment the next deposit index we are expecting. Note that this
     # needs to be done here because while the deposit contract will never
     # create an invalid Merkle branch, it may admit an invalid deposit
     # object, and we need to be able to skip over it
     state.deposit_index += 1
-    
+
     # Verify the proof of possession
     proof_is_valid = bls_verify(
         pubkey=deposit_input.pubkey,
-        message_hash=signed_root(deposit_input, "proof_of_possession"),
+        message_hash=signed_root(deposit_input),
         signature=deposit_input.proof_of_possession,
         domain=get_domain(
             state.fork,
@@ -1716,7 +1716,7 @@ def process_block_header(state: BeaconState, block: BeaconBlock) -> None:
     proposer = state.validator_registry[get_beacon_proposer_index(state, state.slot)]
     assert bls_verify(
         pubkey=proposer.pubkey,
-        message_hash=signed_root(block, "signature"),
+        message_hash=signed_root(block),
         signature=block.signature,
         domain=get_domain(state.fork, get_current_epoch(state), DOMAIN_BEACON_BLOCK)
     )
@@ -1780,7 +1780,7 @@ def process_proposer_slashing(state: BeaconState,
     for header in (proposer_slashing.header_1, proposer_slashing.header_2):
         assert bls_verify(
             pubkey=proposer.pubkey,
-            message_hash=signed_root(header, "signature"),           
+            message_hash=signed_root(header),
             signature=header.signature,
             domain=get_domain(state.fork, slot_to_epoch(header.slot), DOMAIN_BEACON_BLOCK)
         )
@@ -1932,7 +1932,7 @@ def process_exit(state: BeaconState, exit: VoluntaryExit) -> None:
     # Verify signature
     assert bls_verify(
         pubkey=validator.pubkey,
-        message_hash=signed_root(exit, "signature"),
+        message_hash=signed_root(exit),
         signature=exit.signature,
         domain=get_domain(state.fork, exit.epoch, DOMAIN_VOLUNTARY_EXIT)
     )
@@ -1977,7 +1977,7 @@ def process_transfer(state: BeaconState, transfer: Transfer) -> None:
     # Verify that the signature is valid
     assert bls_verify(
         pubkey=transfer.pubkey,
-        message_hash=signed_root(transfer, "signature"),
+        message_hash=signed_root(transfer),
         signature=transfer.signature,
         domain=get_domain(state.fork, slot_to_epoch(transfer.slot), DOMAIN_TRANSFER)
     )
