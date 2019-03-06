@@ -72,7 +72,7 @@ def serialize_value(value, typ):
     if isinstance(typ, str) and typ[:4] == 'uint':
         length = int(typ[4:])
         assert length in (8, 16, 32, 64, 128, 256)
-        return value.to_bytes(length, 'little')
+        return value.to_bytes(length // 8, 'little')
     elif typ == 'bool':
         assert value in (True, False)
         return b'\x01' if value is True else b'\x00'
@@ -99,7 +99,7 @@ def serialize_value(value, typ):
         raise Exception("Type not recognized")
 
 def chunkify(bytez):
-    bytez += b'\x00' * (len(bytez) % BYTES_PER_CHUNK)
+    bytez += b'\x00' * (-len(bytez) % BYTES_PER_CHUNK)
     return [bytez[i:i+32] for i in range(0, len(bytez), 32)]
 
 def pack(values, subtype):
