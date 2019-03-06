@@ -4,6 +4,7 @@ from spec import (
     # constants
     BLS_WITHDRAWAL_PREFIX_BYTE,
     DEPOSIT_CONTRACT_TREE_DEPTH,
+    EJECTION_BALANCE,
     FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
     GENESIS_FORK_VERSION,
@@ -399,13 +400,33 @@ def test_transfer(state):
     block.body.transfers.append(transfer)
     state_transition(test_state, block)
 
-    sender = test_state.validator_registry[sender_index]
     sender_balance = test_state.validator_balances[sender_index]
-    recipient = test_state.validator_registry[to_index]
     recipient_balance = test_state.validator_balances[to_index]
     assert sender_balance == 0
     assert recipient_balance == pre_transfer_recipient_balance + amount
- 
+
+
+def test_ejection(state):
+    test_state = deepcopy(state)
+
+    current_epoch = get_current_epoch(test_state)
+    validator_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[-1]
+
+    assert test_state.validator_registry[validator_index].exit_epoch == FAR_FUTURE_EPOCH
+
+    # set validator balance to below ejection threshold
+    test_state.validator_balances[validator_index] = EJECTION_BALANCE - 1
+
+
+    #
+    # trigger epoch transition
+    #
+    block = construct_empty_block_for_next_slot(test_state)
+    block.slot += SLOTS_PER_EPOCH
+    state_transition(test_state, block)
+
+    assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
+
 
 def sanity_tests():
     print("Buidling state with 100 validators...")
@@ -432,6 +453,7 @@ def sanity_tests():
     test_deposit_in_block(genesis_state)
     test_voluntary_exit(genesis_state)
     test_transfer(genesis_state)
+    test_ejection(genesis_state)
     print("done!")
 
 
