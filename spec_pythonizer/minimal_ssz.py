@@ -39,7 +39,7 @@ def SSZType(fields):
     return SSZObject
 
 def is_basic(typ):
-    return isinstance(typ, str) and typ[:4] in ('uint', 'bool')
+    return isinstance(typ, str) and (typ[:4] in ('uint', 'bool') or typ == 'byte')
 
 def is_constant_sized(typ):
     if is_basic(typ):
