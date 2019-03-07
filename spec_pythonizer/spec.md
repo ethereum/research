@@ -1303,7 +1303,7 @@ def process_deposit(state: BeaconState, deposit: Deposit) -> None:
     serialized_deposit_data = serialize(deposit.deposit_data)
     # Deposits must be processed in order
     assert deposit.index == state.deposit_index
-
+    
     # Verify the Merkle branch
     merkle_branch_is_valid = verify_merkle_branch(
         leaf=hash(serialized_deposit_data),
@@ -1313,13 +1313,13 @@ def process_deposit(state: BeaconState, deposit: Deposit) -> None:
         root=state.latest_eth1_data.deposit_root,
     )
     assert merkle_branch_is_valid
-
+        
     # Increment the next deposit index we are expecting. Note that this
     # needs to be done here because while the deposit contract will never
     # create an invalid Merkle branch, it may admit an invalid deposit
     # object, and we need to be able to skip over it
     state.deposit_index += 1
-
+    
     # Verify the proof of possession
     proof_is_valid = bls_verify(
         pubkey=deposit_input.pubkey,
@@ -2059,7 +2059,9 @@ def get_winning_root_and_participants(state: BeaconState, shard: Shard) -> Tuple
     def get_attestations_for(root) -> List[PendingAttestation]:
         return [a for a in valid_attestations if a.data.crosslink_data_root == root]
 
-    winning_root = max(all_roots, key=lambda r: get_attesting_balance(state, get_attestations_for(r)))
+    # Winning crosslink root is the root with the most votes for it, ties broken in favor of
+    # lexicographically higher hash
+    winning_root = max(all_roots, key=lambda r: (get_attesting_balance(state, get_attestations_for(r)), r))
 
     return winning_root, get_attesting_indices(state, get_attestations_for(winning_root))
 ```
@@ -2270,7 +2272,12 @@ def compute_inactivity_leak_deltas(state: BeaconState) -> Tuple[List[Gwei], List
             deltas[1][index] += get_base_reward(state, index)
     # Penalize slashed-but-inactive validators as though they were active but offline
     for index in range(len(state.validator_registry)):
-        if index not in active_validator_indices and state.validator_registry[index].slashed:
+        eligible = (
+            index not in active_validator_indices and
+            state.validator_registry[index].slashed and
+            get_current_epoch(state) < state.validator_registry[index].withdrawable_epoch
+        )
+        if eligible:
             deltas[1][index] += (
                 2 * get_inactivity_penalty(state, index, epochs_since_finality) +
                 get_base_reward(state, index)
