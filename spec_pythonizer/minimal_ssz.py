@@ -151,7 +151,7 @@ def hash_tree_root(value, typ=None):
         assert len(value) == int(typ[5:])
         return merkleize(chunkify(coerce_to_bytes(value)))
     elif isinstance(typ, list) and len(typ) == 2 and not is_basic(typ[0]):
-        return merkleize([hash_tree_root(getattr(value, field), subtype) for field, subtype in typ.fields.items()])
+        return merkleize([hash_tree_root(element, typ[0]) for element in value])
     elif hasattr(typ, 'fields'):
         return merkleize([hash_tree_root(getattr(value, field), subtype) for field, subtype in typ.fields.items()])
     else:
