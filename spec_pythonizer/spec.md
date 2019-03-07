@@ -21,35 +21,30 @@
         - [Max transactions per block](#max-transactions-per-block)
         - [Signature domains](#signature-domains)
     - [Data structures](#data-structures)
+        - [Misc dependencies](#misc-dependencies)
             - [`Fork`](#fork)
             - [`Crosslink`](#crosslink)
             - [`Eth1Data`](#eth1data)
             - [`Eth1DataVote`](#eth1datavote)
-        - [Beacon chain transactions](#beacon-chain-transactions)
-            - [Attestations](#attestations)
-                - [`AttestationData`](#attestationdata)
-                - [`AttestationDataAndCustodyBit`](#attestationdataandcustodybit)
-                - [`Attestation`](#attestation)
-            - [Deposits](#deposits)
-                - [`DepositInput`](#depositinput)
-                - [`DepositData`](#depositdata)
-                - [`Deposit`](#deposit)
-            - [Voluntary exits](#voluntary-exits)
-                - [`VoluntaryExit`](#voluntaryexit)
-            - [Transfers](#transfers)
-                - [`Transfer`](#transfer)
-        - [Beacon chain blocks](#beacon-chain-blocks)
+            - [`AttestationData`](#attestationdata)
+            - [`AttestationDataAndCustodyBit`](#attestationdataandcustodybit)
+            - [`SlashableAttestation`](#slashableattestation)
+            - [`DepositInput`](#depositinput)
+            - [`DepositData`](#depositdata)
             - [`BeaconBlockHeader`](#beaconblockheader)
-            - [Proposer slashings](#proposer-slashings)
-                - [`ProposerSlashing`](#proposerslashing)
-            - [Attester slashings](#attester-slashings)
-                - [`SlashableAttestation`](#slashableattestation)
-                - [`AttesterSlashing`](#attesterslashing)
-            - [`BeaconBlockBody`](#beaconblockbody)
-            - [`BeaconBlock`](#beaconblock)
-        - [Beacon chain state](#beacon-chain-state)
             - [`Validator`](#validator)
             - [`PendingAttestation`](#pendingattestation)
+        - [Beacon transactions](#beacon-transactions)
+            - [`ProposerSlashing`](#proposerslashing)
+            - [`AttesterSlashing`](#attesterslashing)
+            - [`Attestation`](#attestation)
+            - [`Deposit`](#deposit)
+            - [`VoluntaryExit`](#voluntaryexit)
+            - [`Transfer`](#transfer)
+        - [Beacon blocks](#beacon-blocks)
+            - [`BeaconBlockBody`](#beaconblockbody)
+            - [`BeaconBlock`](#beaconblock)
+        - [Beacon state](#beacon-state)
             - [`BeaconState`](#beaconstate)
     - [Custom Types](#custom-types)
     - [Helper functions](#helper-functions)
@@ -284,6 +279,10 @@ Code snippets appearing in `this style` are to be interpreted as Python code.
 
 The following data structures are defined as [SimpleSerialize (SSZ)](https://github.com/ethereum/eth2.0-specs/blob/master/specs/simple-serialize.md) objects.
 
+The types are defined topologically to aid in facilitating an executable version of the spec.
+
+### Misc dependencies
+
 #### `Fork`
 
 ```python
@@ -330,11 +329,7 @@ The following data structures are defined as [SimpleSerialize (SSZ)](https://git
 }
 ```
 
-### Beacon chain transactions
-
-#### Attestations
-
-##### `AttestationData`
+#### `AttestationData`
 
 ```python
 {
@@ -357,7 +352,7 @@ The following data structures are defined as [SimpleSerialize (SSZ)](https://git
 }
 ```
 
-##### `AttestationDataAndCustodyBit`
+#### `AttestationDataAndCustodyBit`
 
 ```python
 {
@@ -368,132 +363,7 @@ The following data structures are defined as [SimpleSerialize (SSZ)](https://git
 }
 ```
 
-##### `Attestation`
-
-```python
-{
-    # Attester aggregation bitfield
-    'aggregation_bitfield': 'bytes',
-    # Attestation data
-    'data': AttestationData,
-    # Custody bitfield
-    'custody_bitfield': 'bytes',
-    # BLS aggregate signature
-    'aggregate_signature': 'bytes96',
-}
-```
-
-#### Deposits
-
-##### `DepositInput`
-
-```python
-{
-    # BLS pubkey
-    'pubkey': 'bytes48',
-    # Withdrawal credentials
-    'withdrawal_credentials': 'bytes32',
-    # A BLS signature of this `DepositInput`
-    'proof_of_possession': 'bytes96',
-}
-```
-
-##### `DepositData`
-
-```python
-{
-    # Amount in Gwei
-    'amount': 'uint64',
-    # Timestamp from deposit contract
-    'timestamp': 'uint64',
-    # Deposit input
-    'deposit_input': DepositInput,
-}
-```
-
-##### `Deposit`
-
-```python
-{
-    # Branch in the deposit tree
-    'proof': ['bytes32', DEPOSIT_CONTRACT_TREE_DEPTH],
-    # Index in the deposit tree
-    'index': 'uint64',
-    # Data
-    'deposit_data': DepositData,
-}
-```
-
-#### Voluntary exits
-
-##### `VoluntaryExit`
-
-```python
-{
-    # Minimum epoch for processing exit
-    'epoch': 'uint64',
-    # Index of the exiting validator
-    'validator_index': 'uint64',
-    # Validator signature
-    'signature': 'bytes96',
-}
-```
-
-#### Transfers
-
-##### `Transfer`
-
-```python
-{
-    # Sender index
-    'sender': 'uint64',
-    # Recipient index
-    'recipient': 'uint64',
-    # Amount in Gwei
-    'amount': 'uint64',
-    # Fee in Gwei for block proposer
-    'fee': 'uint64',
-    # Inclusion slot
-    'slot': 'uint64',
-    # Sender withdrawal pubkey
-    'pubkey': 'bytes48',
-    # Sender signature
-    'signature': 'bytes96',
-}
-```
-
-### Beacon chain blocks
-
-#### `BeaconBlockHeader`
-
-```python
-{
-    'slot': 'uint64',
-    'previous_block_root': 'bytes32',
-    'state_root': 'bytes32',
-    'block_body_root': 'bytes32',
-    'signature': 'bytes96',
-}
-```
-
-#### Proposer slashings
-
-##### `ProposerSlashing`
-
-```python
-{
-    # Proposer index
-    'proposer_index': 'uint64',
-    # First block header
-    'header_1': BeaconBlockHeader,
-    # Second block header
-    'header_2': BeaconBlockHeader,
-}
-```
-
-#### Attester slashings
-
-##### `SlashableAttestation`
+#### `SlashableAttestation`
 
 ```python
 {
@@ -508,47 +378,43 @@ The following data structures are defined as [SimpleSerialize (SSZ)](https://git
 }
 ```
 
-##### `AttesterSlashing`
+#### `DepositInput`
 
 ```python
 {
-    # First slashable attestation
-    'slashable_attestation_1': SlashableAttestation,
-    # Second slashable attestation
-    'slashable_attestation_2': SlashableAttestation,
+    # BLS pubkey
+    'pubkey': 'bytes48',
+    # Withdrawal credentials
+    'withdrawal_credentials': 'bytes32',
+    # A BLS signature of this `DepositInput`
+    'proof_of_possession': 'bytes96',
 }
 ```
 
-
-#### `BeaconBlockBody`
+#### `DepositData`
 
 ```python
 {
-    'randao_reveal': 'bytes96',
-    'eth1_data': Eth1Data,
-    'proposer_slashings': [ProposerSlashing],
-    'attester_slashings': [AttesterSlashing],
-    'attestations': [Attestation],
-    'deposits': [Deposit],
-    'voluntary_exits': [VoluntaryExit],
-    'transfers': [Transfer],
+    # Amount in Gwei
+    'amount': 'uint64',
+    # Timestamp from deposit contract
+    'timestamp': 'uint64',
+    # Deposit input
+    'deposit_input': DepositInput,
 }
 ```
 
-#### `BeaconBlock`
+#### `BeaconBlockHeader`
 
 ```python
 {
-    # Header
     'slot': 'uint64',
     'previous_block_root': 'bytes32',
     'state_root': 'bytes32',
-    'body': BeaconBlockBody,
+    'block_body_root': 'bytes32',
     'signature': 'bytes96',
 }
 ```
-
-### Beacon chain state
 
 #### `Validator`
 
@@ -585,6 +451,126 @@ The following data structures are defined as [SimpleSerialize (SSZ)](https://git
     'inclusion_slot': 'uint64',
 }
 ```
+
+### Beacon transactions
+
+#### `ProposerSlashing`
+
+```python
+{
+    # Proposer index
+    'proposer_index': 'uint64',
+    # First block header
+    'header_1': BeaconBlockHeader,
+    # Second block header
+    'header_2': BeaconBlockHeader,
+}
+```
+
+#### `AttesterSlashing`
+
+```python
+{
+    # First slashable attestation
+    'slashable_attestation_1': SlashableAttestation,
+    # Second slashable attestation
+    'slashable_attestation_2': SlashableAttestation,
+}
+```
+
+#### `Attestation`
+
+```python
+{
+    # Attester aggregation bitfield
+    'aggregation_bitfield': 'bytes',
+    # Attestation data
+    'data': AttestationData,
+    # Custody bitfield
+    'custody_bitfield': 'bytes',
+    # BLS aggregate signature
+    'aggregate_signature': 'bytes96',
+}
+```
+
+#### `Deposit`
+
+```python
+{
+    # Branch in the deposit tree
+    'proof': ['bytes32', DEPOSIT_CONTRACT_TREE_DEPTH],
+    # Index in the deposit tree
+    'index': 'uint64',
+    # Data
+    'deposit_data': DepositData,
+}
+```
+
+#### `VoluntaryExit`
+
+```python
+{
+    # Minimum epoch for processing exit
+    'epoch': 'uint64',
+    # Index of the exiting validator
+    'validator_index': 'uint64',
+    # Validator signature
+    'signature': 'bytes96',
+}
+```
+
+#### `Transfer`
+
+```python
+{
+    # Sender index
+    'sender': 'uint64',
+    # Recipient index
+    'recipient': 'uint64',
+    # Amount in Gwei
+    'amount': 'uint64',
+    # Fee in Gwei for block proposer
+    'fee': 'uint64',
+    # Inclusion slot
+    'slot': 'uint64',
+    # Sender withdrawal pubkey
+    'pubkey': 'bytes48',
+    # Sender signature
+    'signature': 'bytes96',
+}
+```
+
+### Beacon blocks
+
+#### `BeaconBlockBody`
+
+```python
+{
+    'randao_reveal': 'bytes96',
+    'eth1_data': Eth1Data,
+    'proposer_slashings': [ProposerSlashing],
+    'attester_slashings': [AttesterSlashing],
+    'attestations': [Attestation],
+    'deposits': [Deposit],
+    'voluntary_exits': [VoluntaryExit],
+    'transfers': [Transfer],
+}
+```
+
+#### `BeaconBlock`
+
+```python
+{
+    # Header
+    'slot': 'uint64',
+    'previous_block_root': 'bytes32',
+    'state_root': 'bytes32',
+    'body': BeaconBlockBody,
+    'signature': 'bytes96',
+}
+```
+
+### Beacon state
 
 #### `BeaconState`
 
