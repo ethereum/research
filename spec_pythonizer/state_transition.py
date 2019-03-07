@@ -49,11 +49,15 @@ def process_transactions(state: BeaconState, block: BeaconBlock) -> None:
     )
 
 
-def process_block(state: BeaconState, block: BeaconBlock) -> None:
+def process_block(state: BeaconState,
+                  block: BeaconBlock,
+                  verify_state_root: bool=False) -> None:
     process_block_header(state, block)
     process_randao(state, block)
     process_eth1_data(state, block)
     process_transactions(state, block)
+    if verify_state_root:
+        verify_block_state_root(state, block)
 
 
 def process_epoch_transition(state: BeaconState) -> None:
@@ -68,10 +72,13 @@ def process_epoch_transition(state: BeaconState) -> None:
     finish_epoch_update(state)
 
 
-def state_transition(state: BeaconState, block: BeaconBlock) -> BeaconState:
+def state_transition(state: BeaconState,
+                     block: BeaconBlock,
+                     verify_state_root: bool=False) -> BeaconState:
     while state.slot < block.slot:
+        store_state_root(state)
+        if (state.slot + 1) % SLOTS_PER_EPOCH == 0:
+            process_epoch_transition(state)
         advance_slot(state)
         if block.slot == state.slot:
             process_block(state, block)
-        if (state.slot + 1) % SLOTS_PER_EPOCH == 0:
-            process_epoch_transition(state)
