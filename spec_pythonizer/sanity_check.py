@@ -41,7 +41,7 @@ from spec import (
     advance_slot,
     process_block,
     state_transition,
-    store_state_root,
+    cache_state_root,
     verify_merkle_branch,
 )
 from utils.merkle_normal import ( 
@@ -169,7 +169,7 @@ def build_attestation_data(state, slot, shard):
 
 def test_slot_transition(state):
     test_state = deepcopy(state)
-    store_state_root(test_state)
+    cache_state_root(test_state)
     advance_slot(test_state)
     assert test_state.slot == state.slot + 1
     assert get_state_root(test_state, state.slot) == state.hash_tree_root()
