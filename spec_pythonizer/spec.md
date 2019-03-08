@@ -110,6 +110,7 @@
     - [Beacon chain processing](#beacon-chain-processing)
         - [Beacon chain fork choice rule](#beacon-chain-fork-choice-rule)
     - [Beacon chain state transition function](#beacon-chain-state-transition-function)
+        - [State-root caching](#state-root-caching)
         - [Per-epoch processing](#per-epoch-processing)
             - [Helper functions](#helper-functions-1)
             - [Justification](#justification)
@@ -1654,7 +1655,7 @@ def lmd_ghost(store: Store, start_state: BeaconState, start_block: BeaconBlock) 
         children = get_children(store, head)
         if len(children) == 0:
             return head
-        head = max(children, key=get_vote_count)
+        head = max(children, key=lambda x: (get_vote_count(x), hash_tree_root(x)))
 ```
 
 ## Beacon chain state transition function
@@ -1666,14 +1667,15 @@ We now define the state transition function. At a high level the state transitio
 3. The per-slot transitions, which happens at every slot.
 4. The per-block transitions, which happens at every block.
 
-The state-root caching, caches the state root of the previous slot;
-The per-epoch transitions focus on the [validator](#dfn-validator) registry, including adjusting balances and activating and exiting [validators](#dfn-validator), as well as processing crosslinks and managing block justification/finalization;
-The per-slot transitions focus on the slot counter and block roots records updates;
-The per-block transitions generally focus on verifying aggregate signatures and saving temporary records relating to the per-block activity in the `BeaconState`.
+Transition section notes:
+* The state-root caching, caches the state root of the previous slot;
+* The per-epoch transitions focus on the [validator](#dfn-validator) registry, including adjusting balances and activating and exiting [validators](#dfn-validator), as well as processing crosslinks and managing block justification/finalization;
+* The per-slot transitions focus on the slot counter and block roots records updates;
+* The per-block transitions generally focus on verifying aggregate signatures and saving temporary records relating to the per-block activity in the `BeaconState`.
 
 Beacon blocks that trigger unhandled Python exceptions (e.g. out-of-range list accesses) and failed `assert`s during the state transition are considered invalid.
 
-_Note_: If there are skipped slots between a block and its parent block, run the steps in the [per-epoch](#per-epoch-processing) and [per-slot](#per-slot-processing) sections once for each skipped slot and then once for the slot containing the new block.
+_Note_: If there are skipped slots between a block and its parent block, run the steps in the [state-root](#state-root-caching), [per-epoch](#per-epoch-processing), and [per-slot](#per-slot-processing) sections once for each skipped slot and then once for the slot containing the new block.
 
 ### State-root caching
 
@@ -1801,7 +1803,7 @@ def update_justification_and_finalization(state: BeaconState) -> None:
     if current_boundary_attesting_balance * 3 >= get_current_total_balance(state) * 2:
         new_justified_epoch = get_current_epoch(state)
         state.justification_bitfield |= 1
-        
+
     # Process finalizations
     bitfield = state.justification_bitfield
     current_epoch = get_current_epoch(state)
@@ -1814,10 +1816,10 @@ def update_justification_and_finalization(state: BeaconState) -> None:
     # The 1st/2nd/3rd most recent epochs are all justified, the 1st using the 3rd as source
     if (bitfield >> 0) % 8 == 0b111 and state.justified_epoch == current_epoch - 2:
         state.finalized_epoch = state.justified_epoch
-    # The 1st/2nd most recent epochs are both justified, the 1st using the 2nd as source        
+    # The 1st/2nd most recent epochs are both justified, the 1st using the 2nd as source
     if (bitfield >> 0) % 4 == 0b11 and state.justified_epoch == current_epoch - 1:
         state.finalized_epoch = state.justified_epoch
-        
+
     # Rotate justified epochs
     state.previous_justified_epoch = state.justified_epoch
     state.justified_epoch = new_justified_epoch
@@ -1940,7 +1942,7 @@ def compute_normal_justification_and_finalization_deltas(state: BeaconState) -> 
 ```
 
 When blocks are not finalizing normally...
-            
+
 ```python
 def compute_inactivity_leak_deltas(state: BeaconState) -> Tuple[List[Gwei], List[Gwei]]:
     # deltas[0] for rewards
@@ -2024,7 +2026,7 @@ def apply_rewards(state: BeaconState) -> None:
 
 #### Ejections
 
-* Run `process_ejections(state)`.
+Run `process_ejections(state)`.
 
 ```python
 def process_ejections(state: BeaconState) -> None:
@@ -2148,7 +2150,6 @@ def process_slashings(state: BeaconState) -> None:
     # Compute `total_penalties`
     total_at_start = state.latest_slashed_balances[(current_epoch + 1) % LATEST_SLASHED_EXIT_LENGTH]
     total_at_end = state.latest_slashed_balances[current_epoch % LATEST_SLASHED_EXIT_LENGTH]
-
     total_penalties = total_at_end - total_at_start
 
     for index, validator in enumerate(state.validator_registry):
@@ -2217,10 +2218,10 @@ At every `slot > GENESIS_SLOT` run the following function:
 
 ```python
 def advance_slot(state: BeaconState) -> None:
-    state.slot += 1
     if state.latest_block_header.state_root == ZERO_HASH:
-        state.latest_block_header.state_root = get_state_root(state, state.slot - 1)
-    state.latest_block_roots[(state.slot - 1) % SLOTS_PER_HISTORICAL_ROOT] = hash_tree_root(state.latest_block_header)
+        state.latest_block_header.state_root = state.latest_block_roots[state.slot % SLOTS_PER_HISTORICAL_ROOT]
+    state.latest_block_roots[state.slot % SLOTS_PER_HISTORICAL_ROOT] = hash_tree_root(state.latest_block_header)
+    state.slot += 1
 ```
 
 ### Per-block processing
@@ -2325,7 +2326,7 @@ def process_attester_slashing(state: BeaconState,
     Process ``AttesterSlashing`` transaction.
     Note that this function mutates ``state``.
     """
-    attestation1 = attester_slashing.slashable_attestation_1  
+    attestation1 = attester_slashing.slashable_attestation_1
     attestation2 = attester_slashing.slashable_attestation_2
     # Check that the attestations are conflicting
     assert attestation1.data != attestation2.data
@@ -2428,7 +2429,7 @@ def process_attestation(state: BeaconState, attestation: Attestation) -> None:
     if slot_to_epoch(attestation.data.slot) == get_current_epoch(state):
         state.current_epoch_attestations.append(pending_attestation)
     elif slot_to_epoch(attestation.data.slot) == get_previous_epoch(state):
-        state.previous_epoch_attestations.append(pending_attestation)        
+        state.previous_epoch_attestations.append(pending_attestation)
 ```
 
 ##### Deposits
