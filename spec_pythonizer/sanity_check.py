@@ -10,6 +10,7 @@ from spec import (
     GENESIS_SLOT,
     MAX_DEPOSIT_AMOUNT,
     MIN_ATTESTATION_INCLUSION_DELAY,
+    PERSISTENT_COMMITTEE_PERIOD,
     SLOTS_PER_EPOCH,
     SLOTS_PER_HISTORICAL_ROOT,
     ZERO_HASH,
@@ -361,6 +362,9 @@ def test_voluntary_exit(state):
         validator_index=validator_index,
         signature=b'\x00'*96,
     )
+
+    # move state forward PERSISTENT_COMMITTEE_PERIOD epochs to allow for exit
+    test_state.slot += PERSISTENT_COMMITTEE_PERIOD * SLOTS_PER_EPOCH
 
     #
     # Add to state via block transition
