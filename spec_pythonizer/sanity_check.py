@@ -40,7 +40,7 @@ from spec import (
     cache_state,
     verify_merkle_branch,
 )
-from utils.merkle_sparse import (
+from utils.merkle_minimal import (
     calc_merkle_tree_from_leaves,
     get_merkle_proof,
     get_merkle_root,
@@ -468,17 +468,29 @@ def sanity_tests():
 
     print("Running some sanity check tests...")
     test_slot_transition(genesis_state)
+    print("Passed slot transition test")
     test_empty_block_transition(genesis_state)
+    print("Passed empty block transition test")
     test_skipped_slots(genesis_state)
+    print("Passed skipped slot test")
     test_empty_epoch_transition(genesis_state)
+    print("Passed empty epoch transition test")
     test_empty_epoch_transition_not_finalizing(genesis_state)
+    print("Passed non-finalizing epoch test")
     test_proposer_slashing(genesis_state)
+    print("Passed proposer slashing test")
     test_attestation(genesis_state)
+    print("Passed attestation test")
     test_deposit_in_block(genesis_state)
+    print("Passed deposit test")
     test_voluntary_exit(genesis_state)
+    print("Passed voluntary exit test")
     test_transfer(genesis_state)
+    print("Passed transfer test")
     test_ejection(genesis_state)
+    print("Passed ejection test")
     test_historical_batch(genesis_state)
+    print("Passed historical batch test")
     print("done!")
 
 
