@@ -29,13 +29,15 @@ from spec import (
     # functions
     int_to_bytes48,
     get_active_validator_indices,
+    get_balance,
+    get_block_root,
     get_current_epoch,
     get_crosslink_committees_at_slot,
     get_epoch_start_slot,
     get_genesis_beacon_state,
-    get_block_root,
     get_state_root,
     get_empty_block,
+    set_balance,
     advance_slot,
     state_transition,
     cache_state,
@@ -71,18 +73,6 @@ def get_sample_genesis_validator(index):
 
 def get_empty_root():
     return get_merkle_root((ZERO_HASH,))
-
-
-def add_validators_to_genesis(state, num_validators):
-    # currently bypassing normal deposit route
-    # TODO: get merkle root working and use normal genesis_deposits
-    state.validator_registry = [
-        get_sample_genesis_validator(i)
-        for i in range(num_validators)
-    ]
-    state.validator_balances = [
-        int(MAX_DEPOSIT_AMOUNT) for i in range(num_validators)
-    ]
 
 
 def create_mock_genesis_validator_deposits(num_validators=100):
@@ -266,7 +256,8 @@ def test_proposer_slashing(state):
     assert slashed_validator.exit_epoch < FAR_FUTURE_EPOCH
     assert slashed_validator.withdrawable_epoch < FAR_FUTURE_EPOCH
     # lost whistleblower reward
-    assert test_state.validator_balances[validator_index] < state.validator_balances[validator_index]
+    assert get_balance(test_state, validator_index) < get_balance(state, validator_index)
+    # assert test_state.validator_balances[validator_index] < state.validator_balances[validator_index]
 
 
 def test_deposit_in_block(state):
@@ -305,7 +296,8 @@ def test_deposit_in_block(state):
 
     state_transition(test_state, block)
     assert len(test_state.validator_registry) == len(state.validator_registry) + 1
-    assert len(test_state.validator_balances) == len(state.validator_balances) + 1
+    assert len(test_state.low_balances) == len(state.low_balances) + 1
+    # assert len(test_state.validator_balances) == len(state.validator_balances) + 1
     assert test_state.validator_registry[index].pubkey == pubkeys[index]
 
 
@@ -397,8 +389,10 @@ def test_transfer(state):
     sender_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[-1]
     recipient_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[0]
     pubkey = b'\x00' * 48
-    amount = test_state.validator_balances[sender_index]
-    pre_transfer_recipient_balance = test_state.validator_balances[recipient_index]
+    amount = get_balance(test_state, sender_index)
+    # amount = test_state.validator_balances[sender_index]
+    pre_transfer_recipient_balance = get_balance(test_state, recipient_index)
+    # pre_transfer_recipient_balance = test_state.validator_balances[recipient_index]
     transfer = Transfer(
         sender=sender_index,
         recipient=recipient_index,
@@ -423,8 +417,10 @@ def test_transfer(state):
     block.body.transfers.append(transfer)
     state_transition(test_state, block)
 
-    sender_balance = test_state.validator_balances[sender_index]
-    recipient_balance = test_state.validator_balances[recipient_index]
+    sender_balance = get_balance(test_state, sender_index)
+    recipient_balance = get_balance(test_state, recipient_index)
+    # sender_balance = test_state.validator_balances[sender_index]
+    # recipient_balance = test_state.validator_balances[recipient_index]
     assert sender_balance == 0
     assert recipient_balance == pre_transfer_recipient_balance + amount
 
@@ -438,7 +434,8 @@ def test_ejection(state):
     assert test_state.validator_registry[validator_index].exit_epoch == FAR_FUTURE_EPOCH
 
     # set validator balance to below ejection threshold
-    test_state.validator_balances[validator_index] = EJECTION_BALANCE - 1
+    # test_state.validator_balances[validator_index] = EJECTION_BALANCE - 1
+    set_balance(test_state, validator_index, EJECTION_BALANCE - 1)
 
 
     #
