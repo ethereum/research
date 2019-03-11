@@ -76,7 +76,7 @@ def state_transition(state: BeaconState,
                      block: BeaconBlock,
                      verify_state_root: bool=False) -> BeaconState:
     while state.slot < block.slot:
-        cache_state_root(state)
+        cache_state(state)
         if (state.slot + 1) % SLOTS_PER_EPOCH == 0:
             process_epoch_transition(state)
         advance_slot(state)

@@ -7,29 +7,26 @@ from spec import (
     EJECTION_BALANCE,
     FAR_FUTURE_EPOCH,
     GENESIS_EPOCH,
-    GENESIS_FORK_VERSION,
     GENESIS_SLOT,
     MAX_DEPOSIT_AMOUNT,
     MIN_ATTESTATION_INCLUSION_DELAY,
     SLOTS_PER_EPOCH,
+    SLOTS_PER_HISTORICAL_ROOT,
     ZERO_HASH,
     # SSZ
     Attestation,
     AttestationData,
-    BeaconBlock,
     BeaconBlockHeader,
     Deposit,
     DepositData,
     DepositInput,
     Eth1Data,
-    Fork,
     Transfer,
     ProposerSlashing,
     Validator,
     VoluntaryExit,
     # functions
     int_to_bytes48,
-    merkle_root,
     get_active_validator_indices,
     get_current_epoch,
     get_crosslink_committees_at_slot,
@@ -39,13 +36,9 @@ from spec import (
     get_state_root,
     get_empty_block,
     advance_slot,
-    process_block,
     state_transition,
-    cache_state_root,
+    cache_state,
     verify_merkle_branch,
-)
-from utils.merkle_normal import ( 
-    verify_merkle_proof,
 )
 from utils.merkle_sparse import (
     calc_merkle_tree_from_leaves,
@@ -55,10 +48,10 @@ from utils.merkle_sparse import (
 
 from hashlib import sha256
 
+
 def hash(x): return sha256(x).digest()
 
 
-num_validators = 100
 pubkeys = [int_to_bytes48(i) for i in range(10000)]
 all_deposit_data_leaves = list()
 
@@ -91,7 +84,7 @@ def add_validators_to_genesis(state, num_validators):
     ]
 
 
-def create_mock_genesis_validator_deposits():
+def create_mock_genesis_validator_deposits(num_validators=100):
     withdrawal_credentials = b'\x22' * 32
     deposit_timestamp = 0
     proof_of_possession = b'\x33' * 96
@@ -123,6 +116,18 @@ def create_mock_genesis_validator_deposits():
             deposit_data=deposit_data_list[i]
         ))
     return genesis_validator_deposits, root
+
+
+def create_genesis_state(num_validators=100, genesis_time=0):
+    initial_deposits, deposit_root = create_mock_genesis_validator_deposits(num_validators)
+    return get_genesis_beacon_state(
+        initial_deposits,
+        genesis_time=genesis_time,
+        genesis_eth1_data=Eth1Data(
+            deposit_root=deposit_root,
+            block_hash=ZERO_HASH,
+        ),
+    )
 
 
 def construct_empty_block_for_next_slot(state):
@@ -169,7 +174,7 @@ def build_attestation_data(state, slot, shard):
 
 def test_slot_transition(state):
     test_state = deepcopy(state)
-    cache_state_root(test_state)
+    cache_state(test_state)
     advance_slot(test_state)
     assert test_state.slot == state.slot + 1
     assert get_state_root(test_state, state.slot) == state.hash_tree_root()
@@ -184,6 +189,8 @@ def test_empty_block_transition(state):
 
     assert len(test_state.eth1_data_votes) == len(state.eth1_data_votes) + 1
     assert get_block_root(test_state, state.slot) == block.previous_block_root
+
+    return [block], test_state
 
 
 def test_skipped_slots(state):
@@ -208,6 +215,17 @@ def test_empty_epoch_transition(state):
     assert test_state.slot == block.slot
     for slot in range(state.slot, test_state.slot):
         assert get_block_root(test_state, slot) == block.previous_block_root
+
+
+def test_empty_epoch_transition_not_finalizing(state):
+    test_state = deepcopy(state)
+    block = construct_empty_block_for_next_slot(test_state)
+    block.slot += SLOTS_PER_EPOCH * 5
+
+    state_transition(test_state, block)
+
+    assert test_state.slot == block.slot
+    assert test_state.finalized_epoch < get_current_epoch(test_state) - 4
 
 
 def test_proposer_slashing(state):
@@ -429,18 +447,22 @@ def test_ejection(state):
     assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
 
 
+def test_historical_batch(state):
+    test_state = deepcopy(state)
+
+    test_state.slot += SLOTS_PER_HISTORICAL_ROOT - (test_state.slot % SLOTS_PER_HISTORICAL_ROOT) - 1
+    block = construct_empty_block_for_next_slot(test_state)
+
+    state_transition(test_state, block)
+
+    assert test_state.slot == block.slot
+    assert get_current_epoch(test_state) % (SLOTS_PER_HISTORICAL_ROOT // SLOTS_PER_EPOCH) == 0
+    assert len(test_state.historical_roots) == len(state.historical_roots) + 1
+
+
 def sanity_tests():
     print("Buidling state with 100 validators...")
-    initial_deposits, deposit_root = create_mock_genesis_validator_deposits()
-    genesis_state = get_genesis_beacon_state(
-        initial_deposits,
-        genesis_time=0,
-        genesis_eth1_data=Eth1Data(
-            deposit_root=deposit_root,
-            block_hash=ZERO_HASH,
-        ),
-    )
-    # add_validators_to_genesis(genesis_state, 100)
+    genesis_state = create_genesis_state(num_validators=100)
     print("done!")
     print()
 
@@ -449,12 +471,14 @@ def sanity_tests():
     test_empty_block_transition(genesis_state)
     test_skipped_slots(genesis_state)
     test_empty_epoch_transition(genesis_state)
+    test_empty_epoch_transition_not_finalizing(genesis_state)
     test_proposer_slashing(genesis_state)
     test_attestation(genesis_state)
     test_deposit_in_block(genesis_state)
     test_voluntary_exit(genesis_state)
     test_transfer(genesis_state)
     test_ejection(genesis_state)
+    test_historical_batch(genesis_state)
     print("done!")
 
 
