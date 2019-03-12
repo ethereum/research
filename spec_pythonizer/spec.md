@@ -1015,7 +1015,7 @@ def get_beacon_proposer_index(state: BeaconState,
     assert previous_epoch <= epoch <= next_epoch
 
     first_committee, _ = get_crosslink_committees_at_slot(state, slot, registry_change)[0]
-    return first_committee[slot % len(first_committee)]
+    return first_committee[epoch % len(first_committee)]
 ```
 
 ### `verify_merkle_branch`
@@ -1517,8 +1517,8 @@ def get_genesis_beacon_state(genesis_validator_deposits: List[Deposit],
         slot=GENESIS_SLOT,
         genesis_time=genesis_time,
         fork=Fork(
-            previous_version=GENESIS_FORK_VERSION,
-            current_version=GENESIS_FORK_VERSION,
+            previous_version=int_to_bytes4(GENESIS_FORK_VERSION),
+            current_version=int_to_bytes4(GENESIS_FORK_VERSION),
             epoch=GENESIS_EPOCH,
         ),
 
