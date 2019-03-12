@@ -348,6 +348,52 @@ def test_deposit_in_block(state):
 
 
 @timeit
+def test_deposit_top_up(state):
+    test_state = deepcopy(state)
+    test_deposit_data_leaves = deepcopy(all_deposit_data_leaves)
+    withdrawal_credentials = b'\x42' * 32
+    deposit_timestamp = 1
+    proof_of_possession = b'\x44' * 96
+    amount = MAX_DEPOSIT_AMOUNT // 4
+    validator_index = 0
+
+    merkle_index = len(test_deposit_data_leaves)
+    deposit_data = DepositData(
+        amount=amount,
+        timestamp=deposit_timestamp,
+        deposit_input=DepositInput(
+            pubkey=test_state.validator_registry[validator_index].pubkey,
+            withdrawal_credentials=withdrawal_credentials,
+            proof_of_possession=proof_of_possession,
+        ),
+    )
+    item = hash(deposit_data.serialize())
+    test_deposit_data_leaves.append(item)
+    tree = calc_merkle_tree_from_leaves(tuple(test_deposit_data_leaves))
+    root = get_merkle_root((tuple(test_deposit_data_leaves)))
+    proof = list(get_merkle_proof(tree, item_index=merkle_index))
+    assert verify_merkle_branch(item, proof, DEPOSIT_CONTRACT_TREE_DEPTH, merkle_index, root)
+
+    deposit = Deposit(
+        proof=list(proof),
+        index=merkle_index,
+        deposit_data=deposit_data,
+    )
+
+    test_state.latest_eth1_data.deposit_root = root
+    block = construct_empty_block_for_next_slot(test_state)
+    block.body.deposits.append(deposit)
+
+    pre_balance = test_state.validator_balances[validator_index]
+    state_transition(test_state, block)
+    assert len(test_state.validator_registry) == len(state.validator_registry)
+    assert len(test_state.validator_balances) == len(state.validator_balances)
+    assert test_state.validator_balances[validator_index] == pre_balance + amount
+
+    return state, [block], test_state
+
+
+@timeit
 def test_attestation(state):
     test_state = deepcopy(state)
     current_epoch = get_current_epoch(test_state)
@@ -543,6 +589,8 @@ def sanity_tests():
     print("Passed attestation test\n")
     test_cases.append(test_deposit_in_block(genesis_state))
     print("Passed deposit test\n")
+    test_cases.append(test_deposit_top_up(genesis_state))
+    print("Passed deposit top up test\n")
     test_cases.append(test_voluntary_exit(genesis_state))
     print("Passed voluntary exit test\n")
     test_cases.append(test_transfer(genesis_state))
