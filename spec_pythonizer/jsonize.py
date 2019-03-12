@@ -38,13 +38,10 @@ def dejsonize(json, typ):
         for field, subtype in typ.fields.items():
             temp[field] = dejsonize(json[field], subtype)
             if field + "_hash_tree_root" in json:
-                print("helloo")
                 assert(json[field + "_hash_tree_root"] == 
                        hash_tree_root(temp[field], subtype).hex())
         ret = typ(**temp)
         if "hash_tree_root" in json:
-            print("hello")
-            print(json["hash_tree_root"], hash_tree_root(ret, typ).hex())
             assert(json["hash_tree_root"] == 
                    hash_tree_root(ret, typ).hex())
         return ret
