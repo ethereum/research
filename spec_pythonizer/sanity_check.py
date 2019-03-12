@@ -1,5 +1,8 @@
 from copy import deepcopy
 import time
+import sys
+import json
+from jsonize import jsonize
 
 import spec
 from spec import (
@@ -210,7 +213,7 @@ def test_empty_block_transition(state):
     assert len(test_state.eth1_data_votes) == len(state.eth1_data_votes) + 1
     assert get_block_root(test_state, state.slot) == block.previous_block_root
 
-    return [block], test_state
+    return state, [block], test_state
 
 
 @timeit
@@ -225,6 +228,8 @@ def test_skipped_slots(state):
     for slot in range(state.slot, test_state.slot):
         assert get_block_root(test_state, slot) == block.previous_block_root
 
+    return state, [block], test_state
+
 
 @timeit
 def test_empty_epoch_transition(state):
@@ -238,6 +243,8 @@ def test_empty_epoch_transition(state):
     for slot in range(state.slot, test_state.slot):
         assert get_block_root(test_state, slot) == block.previous_block_root
 
+    return state, [block], test_state
+
 
 @timeit
 def test_empty_epoch_transition_not_finalizing(state):
@@ -249,6 +256,8 @@ def test_empty_epoch_transition_not_finalizing(state):
 
     assert test_state.slot == block.slot
     assert test_state.finalized_epoch < get_current_epoch(test_state) - 4
+
+    return state, [block], test_state
 
 
 @timeit
@@ -292,6 +301,8 @@ def test_proposer_slashing(state):
     # lost whistleblower reward
     assert test_state.validator_balances[validator_index] < state.validator_balances[validator_index]
 
+    return state, [block], test_state
+
 
 @timeit
 def test_deposit_in_block(state):
@@ -332,6 +343,8 @@ def test_deposit_in_block(state):
     assert len(test_state.validator_registry) == len(state.validator_registry) + 1
     assert len(test_state.validator_balances) == len(state.validator_balances) + 1
     assert test_state.validator_registry[index].pubkey == pubkeys[index]
+
+    return state, [block], test_state
 
 
 @timeit
@@ -378,6 +391,8 @@ def test_attestation(state):
     assert len(test_state.current_epoch_attestations) == 0
     assert test_state.previous_epoch_attestations == pre_current_epoch_attestations
 
+    return state, [block], test_state
+
 
 @timeit
 def test_voluntary_exit(state):
@@ -416,6 +431,8 @@ def test_voluntary_exit(state):
     state_transition(test_state, block)
 
     assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
+
+    return state, [block], test_state
 
 
 @timeit
@@ -456,6 +473,8 @@ def test_transfer(state):
     assert sender_balance == 0
     assert recipient_balance == pre_transfer_recipient_balance + amount
 
+    return state, [block], test_state
+
 
 @timeit
 def test_ejection(state):
@@ -479,6 +498,8 @@ def test_ejection(state):
 
     assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
 
+    return state, [block], test_state
+
 
 @timeit
 def test_historical_batch(state):
@@ -493,6 +514,8 @@ def test_historical_batch(state):
     assert get_current_epoch(test_state) % (SLOTS_PER_HISTORICAL_ROOT // SLOTS_PER_EPOCH) == 0
     assert len(test_state.historical_roots) == len(state.historical_roots) + 1
 
+    return state, [block], test_state
+
 
 @timeit
 def sanity_tests():
@@ -501,33 +524,36 @@ def sanity_tests():
     print("done!")
     print()
 
+    test_cases = []
+
     print("Running some sanity check tests...\n")
     test_slot_transition(genesis_state)
     print("Passed slot transition test\n")
-    test_empty_block_transition(genesis_state)
+    test_cases.append(test_empty_block_transition(genesis_state))
     print("Passed empty block transition test\n")
-    test_skipped_slots(genesis_state)
+    test_cases.append(test_skipped_slots(genesis_state))
     print("Passed skipped slot test\n")
-    test_empty_epoch_transition(genesis_state)
+    test_cases.append(test_empty_epoch_transition(genesis_state))
     print("Passed empty epoch transition test\n")
-    test_empty_epoch_transition_not_finalizing(genesis_state)
+    test_cases.append(test_empty_epoch_transition_not_finalizing(genesis_state))
     print("Passed non-finalizing epoch test\n")
-    test_proposer_slashing(genesis_state)
+    test_cases.append(test_proposer_slashing(genesis_state))
     print("Passed proposer slashing test\n")
-    test_attestation(genesis_state)
+    test_cases.append(test_attestation(genesis_state))
     print("Passed attestation test\n")
-    test_deposit_in_block(genesis_state)
+    test_cases.append(test_deposit_in_block(genesis_state))
     print("Passed deposit test\n")
-    test_voluntary_exit(genesis_state)
+    test_cases.append(test_voluntary_exit(genesis_state))
     print("Passed voluntary exit test\n")
-    test_transfer(genesis_state)
+    test_cases.append(test_transfer(genesis_state))
     print("Passed transfer test\n")
-    test_ejection(genesis_state)
+    test_cases.append(test_ejection(genesis_state))
     print("Passed ejection test\n")
-    test_historical_batch(genesis_state)
+    test_cases.append(test_historical_batch(genesis_state))
     print("Passed historical batch test\n")
     print("done!")
 
+    return test_cases
 
 # Monkey patch validator shuffling cache
 _get_shuffling = spec.get_shuffling
@@ -564,4 +590,43 @@ def hash(x):
 spec.hash = hash
 
 if __name__ == "__main__":
-    sanity_tests()
+    test_cases = sanity_tests()
+
+    if "--generate-json" in sys.argv:
+        j = {}
+        j["title"] = "Sanity tests"
+        j["summary"] = "Basic sanity checks from phase 0 spec pythonization"
+        j["test_suite"] = "sanity_tests"
+        j["fork"] = "tchaikovsky"
+        j["version"] = "1.0"
+
+        test_cases_json = []
+        for test_case in test_cases:
+            config = {
+                "SHARD_COUNT": spec.SHARD_COUNT,
+                "TARGET_COMMITTEE_SIZE": spec.TARGET_COMMITTEE_SIZE,
+                "GENESIS_SLOT": spec.GENESIS_SLOT,
+                "GENESIS_EPOCH": spec.GENESIS_EPOCH,
+                "MIN_ATTESTATION_INCLUSION_DELAY": spec.MIN_ATTESTATION_INCLUSION_DELAY,
+                "SLOTS_PER_EPOCH": spec.SLOTS_PER_EPOCH,
+                "LATEST_RANDAO_MIXES_LENGTH": spec.LATEST_RANDAO_MIXES_LENGTH,
+                "SLOTS_PER_HISTORICAL_ROOT": spec.SLOTS_PER_HISTORICAL_ROOT,
+                "LATEST_ACTIVE_INDEX_ROOTS_LENGTH": spec.LATEST_ACTIVE_INDEX_ROOTS_LENGTH,
+                "LATEST_SLASHED_EXIT_LENGTH": spec.LATEST_SLASHED_EXIT_LENGTH,
+            }
+            initial_state = jsonize(test_case[0], type(test_case[0]))
+            blocks = jsonize(test_case[1], [type(test_case[1][0])])
+            expected_state = jsonize(test_case[2], type(test_case[2]))
+            expected_state_root = hash_tree_root(test_case[2], type(test_case[2]))
+            test_cases_json.append({
+                "config": config,
+                "initial_state": initial_state,
+                "blocks": blocks,
+                "expected_state": expected_state,
+                "expected_state_root": expected_state_root.hex(),
+            })
+
+        j["test_cases"] = test_cases_json
+
+        with open("test_cases.json", "w") as f:
+            json.dump(j, f, indent=4)
