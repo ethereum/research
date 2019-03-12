@@ -144,10 +144,7 @@ def construct_empty_block_for_next_slot(state):
 def build_attestation_data(state, slot, shard):
     assert state.slot >= slot
 
-    if state.slot == slot:
-        block_root = construct_empty_block_for_next_slot(state).previous_block_root
-    else:
-        block_root = get_block_root(state, slot)
+    block_root = construct_empty_block_for_next_slot(state).previous_block_root
 
     epoch_start_slot = get_epoch_start_slot(get_current_epoch(state))
     if epoch_start_slot == slot:
@@ -155,11 +152,10 @@ def build_attestation_data(state, slot, shard):
     else:
         get_block_root(state, epoch_start_slot)
 
-    justified_epoch_slot = get_epoch_start_slot(state.justified_epoch)
-    if justified_epoch_slot == slot:
-        justified_block_root = block_root
+    if slot < epoch_start_slot:
+        justified_block_root = state.previous_justified_root
     else:
-        justified_block_root = get_block_root(state, justified_epoch_slot)
+        justified_block_root = state.justified_root
 
     return AttestationData(
         slot=slot,
