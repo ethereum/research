@@ -175,17 +175,17 @@ def build_attestation_data(state, slot, shard):
     if slot < epoch_start_slot:
         justified_block_root = state.previous_justified_root
     else:
-        justified_block_root = state.justified_root
+        justified_block_root = state.current_justified_root
 
     return AttestationData(
         slot=slot,
         shard=shard,
         beacon_block_root=block_root,
-        epoch_boundary_root=epoch_boundary_root,
+        source_epoch=state.current_justified_epoch,
+        source_root=justified_block_root,
+        target_root=epoch_boundary_root,
         crosslink_data_root=ZERO_HASH,
-        latest_crosslink=deepcopy(state.latest_crosslinks[shard]),
-        justified_epoch=state.justified_epoch,
-        justified_block_root=justified_block_root,
+        previous_crosslink=deepcopy(state.latest_crosslinks[shard]),
     )
 
 
