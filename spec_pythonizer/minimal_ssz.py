@@ -83,7 +83,7 @@ def serialize_value(value, typ):
         return serialized_length + serialized_bytes
     elif isinstance(typ, list) and len(typ) == 2:
         assert len(value) == typ[1]
-        return ''.join([serialize_value(element, typ[0]) for element in value])
+        return b''.join([serialize_value(element, typ[0]) for element in value])
     elif isinstance(typ, str) and len(typ) > 5 and typ[:5] == 'bytes':
         assert len(value) == int(typ[5:]), (value, int(typ[5:]))
         return coerce_to_bytes(value)
