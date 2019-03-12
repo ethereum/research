@@ -266,6 +266,7 @@ def test_proposer_slashing(state):
     )
     header_2 = deepcopy(header_1)
     header_2.previous_block_root = b'\x02'*32
+    header_2.slot = slot + 1
 
     proposer_slashing = ProposerSlashing(
         proposer_index=validator_index,
@@ -527,13 +528,14 @@ def sanity_tests():
     print("Passed historical batch test\n")
     print("done!")
 
+
 # Monkey patch validator shuffling cache
 _get_shuffling = spec.get_shuffling
 shuffling_cache = {}
 def get_shuffling(seed: Bytes32,
                   validators: List[Validator],
                   epoch: Epoch) -> List[List[ValidatorIndex]]:
-    
+
     param_hash = (seed, hash_tree_root(validators, [Validator]), epoch)
 
     if param_hash in shuffling_cache:
@@ -545,7 +547,9 @@ def get_shuffling(seed: Bytes32,
         shuffling_cache[param_hash] = ret
         return ret
 
+
 spec.get_shuffling = get_shuffling
+
 
 hash_cache = {}
 def hash(x):
@@ -555,6 +559,7 @@ def hash(x):
         ret = sha256(x).digest()
         hash_cache[x] = ret
         return ret
+
 
 spec.hash = hash
 
