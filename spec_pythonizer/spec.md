@@ -290,9 +290,9 @@ The types are defined topologically to aid in facilitating an executable version
 ```python
 {
     # Previous fork version
-    'previous_version': 'uint64',
+    'previous_version': 'bytes4',
     # Current fork version
-    'current_version': 'uint64',
+    'current_version': 'bytes4',
     # Fork epoch number
     'epoch': 'uint64',
 }
@@ -1106,7 +1106,7 @@ def get_total_balance(state: BeaconState, validators: List[ValidatorIndex]) -> G
 
 ```python
 def get_fork_version(fork: Fork,
-                     epoch: Epoch) -> int:
+                     epoch: Epoch) -> bytes:
     """
     Return the fork version of the given ``epoch``.
     """
@@ -1125,8 +1125,7 @@ def get_domain(fork: Fork,
     """
     Get the domain number that represents the fork meta and signature domain.
     """
-    fork_version = get_fork_version(fork, epoch)
-    return fork_version * 2**32 + domain_type
+    return bytes_to_int(get_fork_version(fork, epoch) + int_to_bytes4(domain_type))
 ```
 
 ### `get_bitfield_bit`
