@@ -76,3 +76,4 @@ for line in code_lines:
     print(line)
 
 print(open('state_transition.py').read())
+print(open('monkey_patches.py').read())

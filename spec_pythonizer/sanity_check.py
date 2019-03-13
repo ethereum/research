@@ -1,10 +1,9 @@
-from copy import deepcopy
-import time
+import os
 import sys
-import json
-from jsonize import jsonize
+import time
 
-import spec
+from copy import deepcopy
+
 from spec import (
     # constants
     BLS_WITHDRAWAL_PREFIX_BYTE,
@@ -20,9 +19,6 @@ from spec import (
     SLOTS_PER_HISTORICAL_ROOT,
     ZERO_HASH,
     # SSZ
-    Bytes32,
-    List,
-    Epoch,
     Attestation,
     AttestationData,
     BeaconBlockHeader,
@@ -33,7 +29,6 @@ from spec import (
     Transfer,
     ProposerSlashing,
     Validator,
-    ValidatorIndex,
     VoluntaryExit,
     # functions
     int_to_bytes48,
@@ -49,16 +44,19 @@ from spec import (
     state_transition,
     cache_state,
     verify_merkle_branch,
-    hash_tree_root,
-    hash
+    hash,
 )
 from utils.merkle_minimal import (
     calc_merkle_tree_from_leaves,
     get_merkle_proof,
     get_merkle_root,
 )
+from state_test_gen import (
+    generate_from_test,
+    dump_json,
+    dump_yaml,
+)
 
-from hashlib import sha256
 
 def timeit(method):
     def timed(*args, **kw):
@@ -209,7 +207,7 @@ def test_empty_block_transition(state):
     assert len(test_state.eth1_data_votes) == len(state.eth1_data_votes) + 1
     assert get_block_root(test_state, state.slot) == block.previous_block_root
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -224,7 +222,7 @@ def test_skipped_slots(state):
     for slot in range(state.slot, test_state.slot):
         assert get_block_root(test_state, slot) == block.previous_block_root
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -239,7 +237,7 @@ def test_empty_epoch_transition(state):
     for slot in range(state.slot, test_state.slot):
         assert get_block_root(test_state, slot) == block.previous_block_root
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -253,7 +251,7 @@ def test_empty_epoch_transition_not_finalizing(state):
     assert test_state.slot == block.slot
     assert test_state.finalized_epoch < get_current_epoch(test_state) - 4
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -297,7 +295,7 @@ def test_proposer_slashing(state):
     # lost whistleblower reward
     assert test_state.validator_balances[validator_index] < state.validator_balances[validator_index]
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -340,7 +338,7 @@ def test_deposit_in_block(state):
     assert len(test_state.validator_balances) == len(state.validator_balances) + 1
     assert test_state.validator_registry[index].pubkey == pubkeys[index]
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -386,7 +384,7 @@ def test_deposit_top_up(state):
     assert len(test_state.validator_balances) == len(state.validator_balances)
     assert test_state.validator_balances[validator_index] == pre_balance + amount
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -433,7 +431,7 @@ def test_attestation(state):
     assert len(test_state.current_epoch_attestations) == 0
     assert test_state.previous_epoch_attestations == pre_current_epoch_attestations
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -474,7 +472,7 @@ def test_voluntary_exit(state):
 
     assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -515,7 +513,7 @@ def test_transfer(state):
     assert sender_balance == 0
     assert recipient_balance == pre_transfer_recipient_balance + amount
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -540,7 +538,7 @@ def test_ejection(state):
 
     assert test_state.validator_registry[validator_index].exit_epoch < FAR_FUTURE_EPOCH
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -556,7 +554,7 @@ def test_historical_batch(state):
     assert get_current_epoch(test_state) % (SLOTS_PER_HISTORICAL_ROOT // SLOTS_PER_EPOCH) == 0
     assert len(test_state.historical_roots) == len(state.historical_roots) + 1
 
-    return state, [block], test_state
+    return [block], test_state
 
 
 @timeit
@@ -571,106 +569,77 @@ def sanity_tests():
     print("Running some sanity check tests...\n")
     test_slot_transition(genesis_state)
     print("Passed slot transition test\n")
-    test_cases.append(test_empty_block_transition(genesis_state))
+    test_cases.append(
+        generate_from_test(test_empty_block_transition, genesis_state, fields=['slot'])
+    )
     print("Passed empty block transition test\n")
-    test_cases.append(test_skipped_slots(genesis_state))
+    test_cases.append(
+        generate_from_test(test_skipped_slots, genesis_state, fields=['slot', 'latest_block_roots'])
+    )
     print("Passed skipped slot test\n")
-    test_cases.append(test_empty_epoch_transition(genesis_state))
+    test_cases.append(
+        generate_from_test(test_empty_epoch_transition, genesis_state, fields=['slot', 'latest_block_roots'])
+    )
     print("Passed empty epoch transition test\n")
-    test_cases.append(test_empty_epoch_transition_not_finalizing(genesis_state))
+    test_cases.append(
+        generate_from_test(test_empty_epoch_transition_not_finalizing, genesis_state, fields=['slot', 'finalized_epoch'])
+    )
     print("Passed non-finalizing epoch test\n")
-    test_cases.append(test_proposer_slashing(genesis_state))
+    test_cases.append(
+        generate_from_test(test_proposer_slashing, genesis_state)
+    )
     print("Passed proposer slashing test\n")
-    test_cases.append(test_attestation(genesis_state))
+    test_cases.append(
+        generate_from_test(test_attestation, genesis_state)
+    )
     print("Passed attestation test\n")
-    test_cases.append(test_deposit_in_block(genesis_state))
+    test_cases.append(
+        generate_from_test(test_deposit_in_block, genesis_state)
+    )
     print("Passed deposit test\n")
-    test_cases.append(test_deposit_top_up(genesis_state))
+    test_cases.append(
+        generate_from_test(test_deposit_top_up, genesis_state)
+    )
     print("Passed deposit top up test\n")
-    test_cases.append(test_voluntary_exit(genesis_state))
+    test_cases.append(
+        generate_from_test(test_voluntary_exit, genesis_state)
+    )
     print("Passed voluntary exit test\n")
-    test_cases.append(test_transfer(genesis_state))
+    test_cases.append(
+        generate_from_test(test_transfer, genesis_state)
+    )
     print("Passed transfer test\n")
-    test_cases.append(test_ejection(genesis_state))
+    test_cases.append(
+        generate_from_test(test_ejection, genesis_state)
+    )
     print("Passed ejection test\n")
-    test_cases.append(test_historical_batch(genesis_state))
+    test_cases.append(
+        generate_from_test(test_historical_batch, genesis_state)
+    )
     print("Passed historical batch test\n")
     print("done!")
 
     return test_cases
 
-# Monkey patch validator shuffling cache
-_get_shuffling = spec.get_shuffling
-shuffling_cache = {}
-def get_shuffling(seed: Bytes32,
-                  validators: List[Validator],
-                  epoch: Epoch) -> List[List[ValidatorIndex]]:
-
-    param_hash = (seed, hash_tree_root(validators, [Validator]), epoch)
-
-    if param_hash in shuffling_cache:
-        #print("Cache hit, epoch={0}".format(epoch))
-        return shuffling_cache[param_hash]
-    else:
-        #print("Cache miss, epoch={0}".format(epoch))
-        ret = _get_shuffling(seed, validators, epoch)
-        shuffling_cache[param_hash] = ret
-        return ret
-
-
-spec.get_shuffling = get_shuffling
-
-
-hash_cache = {}
-def hash(x):
-    if x in hash_cache:
-        return hash_cache[x]
-    else:
-        ret = sha256(x).digest()
-        hash_cache[x] = ret
-        return ret
-
-
-spec.hash = hash
 
 if __name__ == "__main__":
     test_cases = sanity_tests()
 
-    if "--generate-json" in sys.argv:
-        j = {}
-        j["title"] = "Sanity tests"
-        j["summary"] = "Basic sanity checks from phase 0 spec pythonization"
-        j["test_suite"] = "sanity_tests"
-        j["fork"] = "tchaikovsky"
-        j["version"] = "1.0"
+    test = {}
+    metadata = {}
+    metadata['title'] = "Sanity tests"
+    metadata['summary'] = "Basic sanity checks from phase 0 spec pythonization"
+    metadata['test_suite'] = "beacon_state"
+    metadata['fork'] = "tchaikovsky"
+    metadata['version'] = "v0.5.0"
+    test['metadata'] = metadata
+    test['test_cases'] = test_cases
 
-        test_cases_json = []
-        for test_case in test_cases:
-            config = {
-                "SHARD_COUNT": spec.SHARD_COUNT,
-                "TARGET_COMMITTEE_SIZE": spec.TARGET_COMMITTEE_SIZE,
-                "GENESIS_SLOT": spec.GENESIS_SLOT,
-                "GENESIS_EPOCH": spec.GENESIS_EPOCH,
-                "MIN_ATTESTATION_INCLUSION_DELAY": spec.MIN_ATTESTATION_INCLUSION_DELAY,
-                "SLOTS_PER_EPOCH": spec.SLOTS_PER_EPOCH,
-                "LATEST_RANDAO_MIXES_LENGTH": spec.LATEST_RANDAO_MIXES_LENGTH,
-                "SLOTS_PER_HISTORICAL_ROOT": spec.SLOTS_PER_HISTORICAL_ROOT,
-                "LATEST_ACTIVE_INDEX_ROOTS_LENGTH": spec.LATEST_ACTIVE_INDEX_ROOTS_LENGTH,
-                "LATEST_SLASHED_EXIT_LENGTH": spec.LATEST_SLASHED_EXIT_LENGTH,
-            }
-            initial_state = jsonize(test_case[0], type(test_case[0]))
-            blocks = jsonize(test_case[1], [type(test_case[1][0])])
-            expected_state = jsonize(test_case[2], type(test_case[2]))
-            expected_state_root = hash_tree_root(test_case[2], type(test_case[2]))
-            test_cases_json.append({
-                "config": config,
-                "initial_state": initial_state,
-                "blocks": blocks,
-                "expected_state": expected_state,
-                "expected_state_root": expected_state_root.hex(),
-            })
-
-        j["test_cases"] = test_cases_json
-
-        with open("test_cases.json", "w") as f:
-            json.dump(j, f, indent=4)
+    if '--output-json' in sys.argv:
+        os.makedirs('output', exist_ok=True)
+        with open("output/sanity_check_tests.json", "w+") as outfile:
+            dump_json(test, outfile)
+    if '--output-yaml' in sys.argv:
+        os.makedirs('output', exist_ok=True)
+        with open("output/sanity_check_tests.yaml", "w+") as outfile:
+            dump_yaml(test, outfile)
