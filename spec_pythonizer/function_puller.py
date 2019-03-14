@@ -4,7 +4,8 @@ code_lines = []
 
 for i in (1, 2, 3, 4, 8, 32, 48, 96):
     code_lines.append("def int_to_bytes%d(x): return x.to_bytes(%d, 'little')" % (i, i))
-code_lines.append("def slot_to_epoch(x): return x // 64")
+code_lines.append("SLOTS_PER_EPOCH = 64")  # stub, will get overwritten by real var
+code_lines.append("def slot_to_epoch(x): return x // SLOTS_PER_EPOCH")
 
 code_lines.append("""
 from typing import (

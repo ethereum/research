@@ -63,7 +63,7 @@ CONFIG_FIELDS = [
 ]
 
 
-def generate_test_case(pre_state, blocks, post_state, config=None, fields=None, root=False):
+def generate_test_case(pre_state, blocks, post_state, name=None, config=None, fields=None, verify_signatures=False, root=False):
     if config is None:
         config = {}
     if fields is None:
@@ -77,7 +77,10 @@ def generate_test_case(pre_state, blocks, post_state, config=None, fields=None, 
         else:
             value = getattr(spec, field)
         test_config[field] = '0x' + value.hex() if isinstance(value, bytes) else value
+    if name:
+        test_case['name'] = name
     test_case['config'] = test_config
+    test_case['verify_signatures'] = verify_signatures
     test_case['initial_state'] = jsonize(pre_state, type(pre_state))
     test_case['blocks'] = jsonize(blocks, [type(blocks[0])])
     if len(fields) == 0:
@@ -94,7 +97,7 @@ def generate_test_case(pre_state, blocks, post_state, config=None, fields=None, 
     return test_case
 
 
-def generate_from_test(test_fn, start_state, config=None, fields=None, root=False):
+def generate_from_test(test_fn, init_state, config=None, fields=None, verify_signatures=False, root=False):
     #
     # ``test_fn`` must accept ``start_state`` and return (blocks, post_state)
     #
@@ -103,8 +106,16 @@ def generate_from_test(test_fn, start_state, config=None, fields=None, root=Fals
     if fields is None:
         fields = []
 
-    blocks, post_state = test_fn(start_state)
-    return generate_test_case(start_state, blocks, post_state, config, fields)
+    pre_state, blocks, post_state = test_fn(init_state)
+    return generate_test_case(
+        pre_state,
+        blocks,
+        post_state,
+        name=test_fn.__name__,
+        config=config,
+        verify_signatures=verify_signatures,
+        fields=fields
+    )
 
 
 def dump_yaml(test, outfile):
