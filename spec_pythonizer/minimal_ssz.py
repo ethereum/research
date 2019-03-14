@@ -1,6 +1,5 @@
-from hashlib import sha256
+from utils.hash import hash
 
-def hash(x): return sha256(x).digest()
 
 BYTES_PER_CHUNK = 32
 BYTES_PER_LENGTH_PREFIX = 4

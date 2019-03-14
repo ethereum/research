@@ -122,7 +122,7 @@ def dump_yaml(test, outfile):
     import oyaml as yaml
 
     yaml.dump(test['metadata'], outfile, default_flow_style=False)
-    yaml.dump({'test_cases': test['test_cases']}, outfile)
+    yaml.dump({'test_cases': test['test_cases']}, outfile, default_flow_style=True)
 
 
 def dump_json(test, outfile):

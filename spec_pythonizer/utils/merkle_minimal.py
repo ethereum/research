@@ -1,5 +1,5 @@
-from hashlib import sha256
-def hash(x): return sha256(x).digest()
+from utils.hash import hash
+
 
 zerohashes = [b'\x00' * 32]
 for i in range(1, 32):

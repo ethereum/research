@@ -3,12 +3,15 @@ import sys
 import time
 
 from copy import deepcopy
-
+from py_ecc import bls
 import spec
+
+from minimal_ssz import signed_root
 from spec import (
     # SSZ
     Attestation,
     AttestationData,
+    AttestationDataAndCustodyBit,
     BeaconBlockHeader,
     Deposit,
     DepositData,
@@ -19,16 +22,20 @@ from spec import (
     Validator,
     VoluntaryExit,
     # functions
+    int_to_bytes32,
     int_to_bytes48,
     get_active_validator_indices,
-    get_current_epoch,
+    get_attestation_participants,
+    get_block_root,
     get_crosslink_committees_at_slot,
+    get_current_epoch,
+    get_domain,
+    get_empty_block,
     get_epoch_start_slot,
     get_genesis_beacon_state,
-    get_block_root,
     get_state_root,
-    get_empty_block,
     advance_slot,
+    slot_to_epoch,
     state_transition,
     cache_state,
     verify_merkle_branch,
@@ -44,6 +51,12 @@ from state_test_gen import (
     dump_json,
     dump_yaml,
 )
+
+
+privkeys = [i+1 for i in range(1000)]
+pubkeys = [bls.privtopub(privkey) for privkey in privkeys]
+pubkey_to_privkey = {pubkey: privkey for privkey, pubkey in zip(privkeys, pubkeys)}
+all_deposit_data_leaves = list()
 
 
 def overwrite_spec_config(config):
@@ -77,51 +90,25 @@ def timeit(method):
 
     return timed
 
-pubkeys = [int_to_bytes48(i) for i in range(10000)]
-all_deposit_data_leaves = list()
-
-
-def get_sample_genesis_validator(index):
-    return Validator(
-        pubkey=int_to_bytes48(index),
-        withdrawal_credentials=spec.ZERO_HASH,
-        activation_epoch=spec.GENESIS_EPOCH,
-        exit_epoch=spec.FAR_FUTURE_EPOCH,
-        withdrawable_epoch=spec.FAR_FUTURE_EPOCH,
-        initiated_exit=False,
-        slashed=False,
-    )
-
 
 def get_empty_root():
     return get_merkle_root((spec.ZERO_HASH,))
 
 
-def add_validators_to_genesis(state, num_validators):
-    # currently bypassing normal deposit route
-    # TODO: get merkle root working and use normal genesis_deposits
-    state.validator_registry = [
-        get_sample_genesis_validator(i)
-        for i in range(num_validators)
-    ]
-    state.validator_balances = [
-        int(spec.MAX_DEPOSIT_AMOUNT) for i in range(num_validators)
-    ]
-
-
 def create_mock_genesis_validator_deposits(num_validators=100):
-    withdrawal_credentials = b'\x22' * 32
     deposit_timestamp = 0
     proof_of_possession = b'\x33' * 96
 
     deposit_data_list = []
     for i in range(num_validators):
-        deposit_data=DepositData(
+        pubkey = pubkeys[i]
+        privkey = pubkey_to_privkey[pubkey]
+        deposit_data = DepositData(
             amount=spec.MAX_DEPOSIT_AMOUNT,
             timestamp=deposit_timestamp,
             deposit_input=DepositInput(
-                pubkey=pubkeys[i],
-                withdrawal_credentials=withdrawal_credentials,
+                pubkey=pubkey,
+                withdrawal_credentials=privkey.to_bytes(32, byteorder='big'),
                 proof_of_possession=proof_of_possession,
             ),
         )
@@ -265,6 +252,8 @@ def test_proposer_slashing(state):
     test_state = deepcopy(state)
     current_epoch = get_current_epoch(test_state)
     validator_index = get_active_validator_indices(test_state.validator_registry, current_epoch)[-1]
+    pubkey = pubkeys[validator_index]
+    privkey = pubkey_to_privkey[pubkey]
     slot = spec.GENESIS_SLOT
     header_1 = BeaconBlockHeader(
         slot=slot,
@@ -276,6 +265,22 @@ def test_proposer_slashing(state):
     header_2 = deepcopy(header_1)
     header_2.previous_block_root = b'\x02'*32
     header_2.slot = slot + 1
+
+    domain = get_domain(
+        fork=test_state.fork,
+        epoch=get_current_epoch(test_state),
+        domain_type=spec.DOMAIN_BEACON_BLOCK,
+    )
+    header_1.signature = bls.sign(
+        message_hash=signed_root(header_1),
+        privkey=privkey,
+        domain=domain,
+    )
+    header_2.signature = bls.sign(
+        message_hash=signed_root(header_2),
+        privkey=privkey,
+        domain=domain,
+    )
 
     proposer_slashing = ProposerSlashing(
         proposer_index=validator_index,
@@ -304,24 +309,40 @@ def test_proposer_slashing(state):
     return state, [block], test_state
 
 
+def create_deposit_data(state, pubkey, amount):
+    privkey = pubkey_to_privkey[pubkey]
+    deposit_input = DepositInput(
+        pubkey=pubkey,
+        withdrawal_credentials=privkey.to_bytes(32, byteorder='big'),
+        proof_of_possession=b'00'*96,
+    )
+    proof_of_possession = bls.sign(
+        message_hash=signed_root(deposit_input),
+        privkey=privkey,
+        domain=get_domain(
+            state.fork,
+            get_current_epoch(state),
+            spec.DOMAIN_DEPOSIT,
+        )
+    )
+    deposit_input.proof_of_possession = proof_of_possession
+    deposit_data = DepositData(
+        amount=amount,
+        timestamp=0,
+        deposit_input=deposit_input,
+    )
+    return deposit_data
+
+
 # @timeit
 def test_deposit_in_block(state):
     pre_state = deepcopy(state)
     test_deposit_data_leaves = deepcopy(all_deposit_data_leaves)
-    withdrawal_credentials = b'\x42' * 32
-    deposit_timestamp = 1
-    proof_of_possession = b'\x44' * 96
 
     index = len(test_deposit_data_leaves)
-    deposit_data = DepositData(
-        amount=spec.MAX_DEPOSIT_AMOUNT,
-        timestamp=deposit_timestamp,
-        deposit_input=DepositInput(
-            pubkey=pubkeys[index],
-            withdrawal_credentials=withdrawal_credentials,
-            proof_of_possession=proof_of_possession,
-        ),
-    )
+    pubkey = pubkeys[index]
+    deposit_data = create_deposit_data(pre_state, pubkey, spec.MAX_DEPOSIT_AMOUNT)
+
     item = hash(deposit_data.serialize())
     test_deposit_data_leaves.append(item)
     tree = calc_merkle_tree_from_leaves(tuple(test_deposit_data_leaves))
@@ -352,22 +373,13 @@ def test_deposit_in_block(state):
 def test_deposit_top_up(state):
     pre_state = deepcopy(state)
     test_deposit_data_leaves = deepcopy(all_deposit_data_leaves)
-    withdrawal_credentials = b'\x42' * 32
-    deposit_timestamp = 1
-    proof_of_possession = b'\x44' * 96
-    amount = spec.MAX_DEPOSIT_AMOUNT // 4
+
     validator_index = 0
+    amount = spec.MAX_DEPOSIT_AMOUNT // 4
+    pubkey = pubkeys[validator_index]
+    deposit_data = create_deposit_data(pre_state, pubkey, amount)
 
     merkle_index = len(test_deposit_data_leaves)
-    deposit_data = DepositData(
-        amount=amount,
-        timestamp=deposit_timestamp,
-        deposit_input=DepositInput(
-            pubkey=pre_state.validator_registry[validator_index].pubkey,
-            withdrawal_credentials=withdrawal_credentials,
-            proof_of_possession=proof_of_possession,
-        ),
-    )
     item = hash(deposit_data.serialize())
     test_deposit_data_leaves.append(item)
     tree = calc_merkle_tree_from_leaves(tuple(test_deposit_data_leaves))
@@ -413,7 +425,32 @@ def test_attestation(state):
         aggregation_bitfield=aggregation_bitfield,
         data=attestation_data,
         custody_bitfield=custody_bitfield,
-        aggregate_signature=b'\x42'*96,
+        aggregate_signature=b'\x00'*96,
+    )
+    participants = get_attestation_participants(
+        test_state,
+        attestation.data,
+        attestation.aggregation_bitfield,
+    )
+    assert len(participants) == 1
+
+    validator_index = participants[0]
+    pubkey = pubkeys[validator_index]
+    privkey = pubkey_to_privkey[pubkey]
+
+    message_hash = AttestationDataAndCustodyBit(
+        data=attestation.data,
+        custody_bit=0b0,
+    ).hash_tree_root()
+
+    attestation.aggregation_signature = bls.sign(
+        message_hash=message_hash,
+        privkey=privkey,
+        domain=get_domain(
+            fork=test_state.fork,
+            epoch=get_current_epoch(test_state),
+            domain_type=spec.DOMAIN_ATTESTATION,
+        )
     )
 
     #
@@ -445,6 +482,7 @@ def test_attestation(state):
 def test_voluntary_exit(state):
     pre_state = deepcopy(state)
     validator_index = get_active_validator_indices(pre_state.validator_registry, get_current_epoch(pre_state))[-1]
+    pubkey = pubkeys[validator_index]
 
     # move state forward PERSISTENT_COMMITTEE_PERIOD epochs to allow for exit
     pre_state.slot += spec.PERSISTENT_COMMITTEE_PERIOD * spec.SLOTS_PER_EPOCH
@@ -457,6 +495,15 @@ def test_voluntary_exit(state):
         epoch=get_current_epoch(pre_state),
         validator_index=validator_index,
         signature=b'\x00'*96,
+    )
+    voluntary_exit.signature = bls.sign(
+        message_hash=signed_root(voluntary_exit),
+        privkey=pubkey_to_privkey[pubkey],
+        domain=get_domain(
+            fork=pre_state.fork,
+            epoch=get_current_epoch(pre_state),
+            domain_type=spec.DOMAIN_VOLUNTARY_EXIT,
+        )
     )
 
     #
@@ -488,7 +535,8 @@ def test_transfer(state):
     current_epoch = get_current_epoch(pre_state)
     sender_index = get_active_validator_indices(pre_state.validator_registry, current_epoch)[-1]
     recipient_index = get_active_validator_indices(pre_state.validator_registry, current_epoch)[0]
-    pubkey = b'\x00' * 48
+    transfer_pubkey = pubkeys[-1]
+    transfer_privkey = pubkey_to_privkey[transfer_pubkey]
     amount = pre_state.validator_balances[sender_index]
     pre_transfer_recipient_balance = pre_state.validator_balances[recipient_index]
     transfer = Transfer(
@@ -497,13 +545,22 @@ def test_transfer(state):
         amount=amount,
         fee=0,
         slot=pre_state.slot + 1,
-        pubkey=pubkey,
-        signature=b'\x42'*96,
+        pubkey=transfer_pubkey,
+        signature=b'\x00'*96,
+    )
+    transfer.signature = bls.sign(
+        message_hash=signed_root(transfer),
+        privkey=transfer_privkey,
+        domain=get_domain(
+            fork=pre_state.fork,
+            epoch=get_current_epoch(pre_state),
+            domain_type=spec.DOMAIN_TRANSFER,
+        )
     )
 
     # ensure withdrawal_credentials reproducable
     pre_state.validator_registry[sender_index].withdrawal_credentials = (
-        spec.BLS_WITHDRAWAL_PREFIX_BYTE + hash(pubkey)[1:]
+        spec.BLS_WITHDRAWAL_PREFIX_BYTE + hash(transfer_pubkey)[1:]
     )
     # un-activate so validator can transfer
     pre_state.validator_registry[sender_index].activation_epoch = spec.FAR_FUTURE_EPOCH
@@ -568,21 +625,11 @@ def test_historical_batch(state):
 
 
 @timeit
-def sanity_tests():
-    print("Buidling state with 100 validators...")
-    config = {
-        "SHARD_COUNT": 8,
-        "MIN_ATTESTATION_INCLUSION_DELAY": 2,
-        "TARGET_COMMITTEE_SIZE": 4,
-        "SLOTS_PER_EPOCH": 8,
-        "GENESIS_EPOCH": spec.GENESIS_SLOT // 8,
-        "SLOTS_PER_HISTORICAL_ROOT": 64,
-        "LATEST_RANDAO_MIXES_LENGTH": 64,
-        "LATEST_ACTIVE_INDEX_ROOTS_LENGTH": 64,
-        "LATEST_SLASHED_EXIT_LENGTH": 64,
-    }
-    overwrite_spec_config(config)
-    genesis_state = create_genesis_state(num_validators=32)
+def sanity_tests(num_validators=100, config=None):
+    print(f"Buidling state with {num_validators} validators...")
+    if config:
+        overwrite_spec_config(config)
+    genesis_state = create_genesis_state(num_validators=num_validators)
     print("done!")
     print()
 
@@ -645,7 +692,19 @@ def sanity_tests():
 
 
 if __name__ == "__main__":
-    test_cases = sanity_tests()
+    config = {
+        "SHARD_COUNT": 8,
+        "MIN_ATTESTATION_INCLUSION_DELAY": 2,
+        "TARGET_COMMITTEE_SIZE": 4,
+        "SLOTS_PER_EPOCH": 8,
+        "GENESIS_EPOCH": spec.GENESIS_SLOT // 8,
+        "SLOTS_PER_HISTORICAL_ROOT": 64,
+        "LATEST_RANDAO_MIXES_LENGTH": 64,
+        "LATEST_ACTIVE_INDEX_ROOTS_LENGTH": 64,
+        "LATEST_SLASHED_EXIT_LENGTH": 64,
+    }
+
+    test_cases = sanity_tests(32, config)
 
     test = {}
     metadata = {}
