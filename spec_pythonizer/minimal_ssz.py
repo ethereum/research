@@ -38,7 +38,14 @@ def SSZType(fields):
     return SSZObject
 
 class Vector(list):
-    pass
+    def __init__(self, x):
+        list.__init__(self, x)
+        self.length = len(x)
+
+    def append(*args):
+        raise Exception("Cannot change the length of a vector")
+
+    remove = clear = extend = pop = insert = append
 
 def is_basic(typ):
     return isinstance(typ, str) and (typ[:4] in ('uint', 'bool') or typ == 'byte')
