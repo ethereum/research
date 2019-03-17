@@ -37,6 +37,16 @@ def SSZType(fields):
     SSZObject.fields = fields
     return SSZObject
 
+class Vector(list):
+    def __init__(self, x):
+        list.__init__(self, x)
+        self.length = len(x)
+
+    def append(*args):
+        raise Exception("Cannot change the length of a vector")
+
+    remove = clear = extend = pop = insert = append
+
 def is_basic(typ):
     return isinstance(typ, str) and (typ[:4] in ('uint', 'bool') or typ == 'byte')
 
@@ -67,7 +77,9 @@ def coerce_to_bytes(x):
     else:
         raise Exception("Expecting bytes")
 
-def serialize_value(value, typ):
+def serialize_value(value, typ=None):
+    if typ is None:
+        typ = infer_type(value)
     if isinstance(typ, str) and typ[:4] == 'uint':
         length = int(typ[4:])
         assert length in (8, 16, 32, 64, 128, 256)
@@ -123,6 +135,8 @@ def mix_in_length(root, length):
 def infer_type(value):
     if hasattr(value.__class__, 'fields'):
         return value.__class__
+    elif isinstance(value, Vector):
+        return [infer_type(value[0]) if len(value) > 0 else 'uint64', len(value)]
     elif isinstance(value, list):
         return [infer_type(value[0])] if len(value) > 0 else ['uint64']
     elif isinstance(value, (bytes, str)):
