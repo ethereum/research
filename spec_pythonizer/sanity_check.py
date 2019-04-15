@@ -683,7 +683,7 @@ def sanity_tests(num_validators=100, config=None):
     )
     print("Passed ejection test\n")
     test_cases.append(
-        generate_from_test(test_historical_batch, genesis_state, fields=['historical_roots'])
+        generate_from_test(test_historical_batch, genesis_state, config=config, fields=['historical_roots'])
     )
     print("Passed historical batch test\n")
     print("done!")
@@ -705,6 +705,8 @@ if __name__ == "__main__":
     }
 
     test_cases = sanity_tests(32, config)
+    # uncomment below to run/generate against the default config
+    # test_cases = sanity_tests(100)
 
     test = {}
     metadata = {}

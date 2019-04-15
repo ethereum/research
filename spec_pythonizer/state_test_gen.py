@@ -121,8 +121,8 @@ def generate_from_test(test_fn, init_state, config=None, fields=None, verify_sig
 def dump_yaml(test, outfile):
     import oyaml as yaml
 
-    yaml.dump(test['metadata'], outfile, default_flow_style=False)
-    yaml.dump({'test_cases': test['test_cases']}, outfile, default_flow_style=True)
+    yaml.safe_dump(test['metadata'], outfile, default_flow_style=False)
+    yaml.safe_dump({'test_cases': test['test_cases']}, outfile, default_flow_style=False)
 
 
 def dump_json(test, outfile):
