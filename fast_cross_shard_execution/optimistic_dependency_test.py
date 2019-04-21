@@ -31,7 +31,7 @@ class Dependency():
 actors = ["Alice", "Bob", "Charlie", "David", "Epsie"]
 
 # Initial empty state
-state = {a: Account(Dependency(0, zero_hash), [], 0) for a in actors}
+state = {a: Account(Dependency(0, zero_hash), [], 100) for a in actors}
 
 # The set of dependencies that the protocol thinks is most likely to be correct
 # Think of these as being receipt roots of all shards, with the i'th hash
@@ -91,11 +91,6 @@ def transfer(frm, to, value, height, hash):
         balance_delta(frm, -value, height, hash)
     return True
 
-# Begin the test: start by giving everyone some money
-for i, a in enumerate(actors):
-    deps.append(new_hash())
-    assert transfer(None, a, random.randrange(100), i+1, deps[-1])
-
 print("Starting balance: %d" % state["Charlie"].balance)
 
 # Run the main test....
@@ -104,15 +99,15 @@ for i in range(200):
     # 16% chance: new dependency
     if r < 0.16:
         deps.append(new_hash())
-    # 40% chance: xfer from another shard
-    elif r < 0.56:
+    # 20% chance: xfer from another shard
+    elif r < 0.36:
         to = random.choice(actors)
         reorg(to)
         value = random.randrange(100)
         assert transfer(None, to, value, len(deps)-1, deps[-1])
         if to == "Charlie":
             print("Received %d coins, new balance %d, conditional on (%d, %s)" % (value, state[to].balance, len(deps)-1, deps[-1]))
-    # 40% chance: xfer between two accounts inside the shard
+    # 60% chance: xfer between two accounts inside the shard
     elif r < 0.96:
         to = random.choice(actors)
         frm = random.choice([x for x in actors if x != to])
@@ -127,7 +122,10 @@ for i in range(200):
             print("Received %d coins from %s, new balance %d, conditional on (%d, %s)" % (value, frm, state[to].balance, common_ht, deps[common_ht]))
     # 4% chance: revert some dependencies
     else:
-        for i in range(min(random.randrange(8), len(deps) - 1)):
+        num_to_revert = min(random.randrange(8), len(deps) - 1)
+        for i in range(num_to_revert):
             print("Reverted (%d, %s)" % (len(deps)-1, deps.pop()))
+        for i in range(num_to_revert):
+            deps.append(new_hash())
         reorg("Charlie")
         print("New balance: %d" % state["Charlie"].balance)
