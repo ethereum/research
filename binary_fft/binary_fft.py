@@ -24,7 +24,7 @@ class BinaryField():
         self.modulus = modulus
         self.height = log2(self.modulus)
         self.order = 2**self.height - 1
-        for base in range(2, modulus - 1):
+        for base in range(2, min(modulus - 1, 80)):
             powers = [1]
             while (len(powers) == 1 or powers[-1] != 1) and len(powers) < self.order + 2:
                 powers.append(raw_mod(raw_mul(powers[-1], base), self.modulus))
@@ -52,6 +52,7 @@ class BinaryField():
         return 0 if x == 0 else self.cache[(self.invcache[x] - self.invcache[y]) % self.order]
 
     def inv(self, x):
+        assert x != 0
         return self.cache[(self.order - self.invcache[x]) % self.order]
 
     def exp(self, x, p):
@@ -208,7 +209,7 @@ def compose(field, poly, k):
 # Equivalent to [field.eval_poly_at(poly, x) for x in domain]
 # Special thanks to www.math.clemson.edu/~sgao/papers/GM10.pdf for insights
 # though this algorithm is not exactly identical to any algorithm in the paper
-def fft(field, poly, domain):
+def fft(field, domain, poly):
     # Base case: constant polynomials
     if len(domain) == 1:
         return [poly[0]]
@@ -222,15 +223,15 @@ def fft(field, poly, domain):
     casted_domain = [field.mul(x, offset ^ x) for x in domain][::2]
     # Two half-size sub-problems over the smaller domain, recovering
     # evaluations of evens and odds over the smaller domain
-    even_points = fft(field, evens, casted_domain)
-    odd_points = fft(field, odds, casted_domain)
+    even_points = fft(field, casted_domain, evens)
+    odd_points = fft(field, casted_domain, odds)
     # Combine the evaluations of evens and odds into evaluations of poly
     L = [e ^ field.mul(d, o) for d,e,o in zip(domain[::2], even_points, odd_points)]
     R = [e ^ field.mul(d, o) for d,e,o in zip(domain[1::2], even_points, odd_points)]
     return [R[i//2] if i%2 else L[i//2] for i in range(len(domain))]
 
 # The inverse function of fft, does the steps backwards
-def invfft(field, vals, domain):
+def invfft(field, domain, vals):
     # Base case: constant polynomials
     if len(domain) == 1:
         return [vals[0]]
@@ -246,11 +247,66 @@ def invfft(field, vals, domain):
     casted_domain = [field.mul(x, offset ^ x) for x in domain][::2]
     # Two half-size problems over the smaller domains, recovering
     # the polynomials evens and odds
-    evens = invfft(field, even_points, casted_domain)
-    odds = invfft(field, odd_points, casted_domain)
+    evens = invfft(field, casted_domain, even_points)
+    odds = invfft(field, casted_domain, odd_points)
     # Given evens and odds where poly(x) = evens(x**2+offset*x) + x * odds(x**2+offset*x),
     # recover poly
     composed_evens = compose(field, evens, offset) + [0]
     composed_odds = compose(field, odds, offset) + [0]
     o = [composed_evens[i] ^ composed_odds[i-1] for i in range(len(vals))]
     return o
+
+# Multiplies two polynomials using the FFT method
+def mul(field, domain, p1, p2):
+    assert len(p1) <= len(domain) and len(p2) <= len(domain)
+    values1 = fft(field, domain, p1)
+    values2 = fft(field, domain, p2)
+    values3 = [field.mul(v1, v2) for v1, v2 in zip(values1, values2)]
+    return invfft(field, domain, values3)
+
+# Generates the polynomial `p(x) = (x - xs[0]) * (x - xs[1]) * ...`
+# Requires a domain of 0.....2**k-1 that covers all the xs
+def zpoly(field, domain, xs):
+    assert len(xs) <= len(domain)//2
+    if len(xs) == 0:
+        # print([1], domain, xs)
+        return [1]
+    if len(xs) == 1:
+        # print([xs[0], 1], domain, xs)
+        return [xs[0], 1]
+    offset = domain[1]
+    casted_domain = [field.mul(x, offset ^ x) for x in domain][::2]
+    zL = zpoly(field, casted_domain, xs[::2])
+    zR = zpoly(field, casted_domain, xs[1::2])
+    o = mul(field, domain, zL, zR)
+    # print(o, domain, xs)
+    return o
+
+# Interpolates the polynomial where `p(xs[i]) = vals[i]`
+def interpolate(field, xs, vals):
+    domain_height = log2(max(xs)) + 1
+    assert domain_height*2 <= field.height
+    domain = list(range(2**domain_height))
+    assert len(vals) >= len(domain) // 2
+    # print("domain =",domain)
+    z = zpoly(field, domain, [x for x in domain if x not in xs])
+    # print("z = ", z)
+    z_at_domain = fft(field, domain, z)
+    # print("z_at_domain = ", z_at_domain)
+    p_times_z_at_domain = [0] * len(domain)
+    for v, d in zip(vals, xs):
+        p_times_z_at_domain[d] = field.mul(v, z_at_domain[d])
+    # print("p_times_z_at_domain = ", p_times_z_at_domain)
+    codomain = [i << domain_height for i in domain]
+    p_times_z = invfft(field, domain, p_times_z_at_domain)
+    # print("p_times_z = ", p_times_z)
+    p_times_z_at_codomain = fft(field, codomain, p_times_z)
+    # print("p_times_z_at_codomain = ", p_times_z_at_codomain)
+    z_at_codomain = fft(field, codomain, z)
+    # print("z_at_codomain = ", z_at_codomain)
+    if 0 in xs:
+        p_at_codomain = [field.div(x, y) for x,y in zip(p_times_z_at_codomain, z_at_codomain)]
+    else:
+        p_at_codomain = [field.div(p_times_z[1], z[1])] + [field.div(x, y) for x,y in zip(p_times_z_at_codomain[1:], z_at_codomain[1:])]
+    # print("p_at_codomain = ", p_at_codomain)
+    return invfft(field, codomain, p_at_codomain)
