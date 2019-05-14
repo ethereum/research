@@ -265,9 +265,8 @@ def mul(field, domain, p1, p2):
     return invfft(field, domain, values3)
 
 # Generates the polynomial `p(x) = (x - xs[0]) * (x - xs[1]) * ...`
-# Requires a domain of 0.....2**k-1 that covers all the xs
-def zpoly(field, domain, xs):
-    assert len(xs) <= len(domain)//2
+def zpoly(field, xs):
+    domain = list(range(2**log2(max(xs)) * 2))
     if len(xs) == 0:
         # print([1], domain, xs)
         return [1]
@@ -275,38 +274,47 @@ def zpoly(field, domain, xs):
         # print([xs[0], 1], domain, xs)
         return [xs[0], 1]
     offset = domain[1]
-    casted_domain = [field.mul(x, offset ^ x) for x in domain][::2]
-    zL = zpoly(field, casted_domain, xs[::2])
-    zR = zpoly(field, casted_domain, xs[1::2])
+    zL = zpoly(field, xs[::2])
+    zR = zpoly(field, xs[1::2])
     o = mul(field, domain, zL, zR)
     # print(o, domain, xs)
     return o
 
+# Returns q(x) = p(x + k)
+def shift(field, poly, k):
+    if len(poly) == 1:
+        return poly
+    # Largest mod_power=2**k such that mod_power >= len(poly)/2
+    mod_power = 1
+    while mod_power * 2 < len(poly):
+        mod_power *= 2
+    k_to_mod_power = field.exp(k, mod_power)
+    # Calculate low = poly % (x+k)**mod_power
+    # and high = poly // (x+k)**mod_power
+    # Note that (x+k)**n = x**n + k**n for power-of-two powers in binary fields
+    high = poly[mod_power:] + [0] * (2 * mod_power - len(poly))
+    low = [poly[i] ^ field.mul(poly[i + mod_power], k_to_mod_power) for i in range(mod_power)]
+    return shift(field, low, k) + shift(field, high, k)
+
 # Interpolates the polynomial where `p(xs[i]) = vals[i]`
 def interpolate(field, xs, vals):
-    domain_height = log2(max(xs)) + 1
-    assert domain_height*2 <= field.height
-    domain = list(range(2**domain_height))
-    assert len(vals) >= len(domain) // 2
-    # print("domain =",domain)
-    z = zpoly(field, domain, [x for x in domain if x not in xs])
+    domain_size = 2**(log2(max(xs)) + 1)
+    assert domain_size * 2 <= 2**field.height
+    domain = list(range(domain_size))
+    big_domain = list(range(domain_size * 2))
+    z = zpoly(field, [x for x in domain if x not in xs])
     # print("z = ", z)
-    z_at_domain = fft(field, domain, z)
-    # print("z_at_domain = ", z_at_domain)
-    p_times_z_at_domain = [0] * len(domain)
+    z_values = fft(field, big_domain, z)
+    # print("z_values = ", z_values)
+    p_times_z_values = [0] * len(domain)
     for v, d in zip(vals, xs):
-        p_times_z_at_domain[d] = field.mul(v, z_at_domain[d])
-    # print("p_times_z_at_domain = ", p_times_z_at_domain)
-    codomain = [i << domain_height for i in domain]
-    p_times_z = invfft(field, domain, p_times_z_at_domain)
+        p_times_z_values[d] = field.mul(v, z_values[d])
+    # print("p_times_z_values = ", p_times_z_values)
+    p_times_z = invfft(field, domain, p_times_z_values)
     # print("p_times_z = ", p_times_z)
-    p_times_z_at_codomain = fft(field, codomain, p_times_z)
-    # print("p_times_z_at_codomain = ", p_times_z_at_codomain)
-    z_at_codomain = fft(field, codomain, z)
-    # print("z_at_codomain = ", z_at_codomain)
-    if 0 in xs:
-        p_at_codomain = [field.div(x, y) for x,y in zip(p_times_z_at_codomain, z_at_codomain)]
-    else:
-        p_at_codomain = [field.div(p_times_z[1], z[1])] + [field.div(x, y) for x,y in zip(p_times_z_at_codomain[1:], z_at_codomain[1:])]
-    # print("p_at_codomain = ", p_at_codomain)
-    return invfft(field, codomain, p_at_codomain)
+    shifted_p_times_z_values = fft(field, big_domain, p_times_z)[domain_size:]
+    # print("shifted_p_times_z_values =", shifted_p_times_z_values)
+    shifted_p_values = [field.div(x, y) for x,y in zip(shifted_p_times_z_values, z_values[domain_size:])]
+    # print("shifted_p_values =", shifted_p_values)
+    shifted_p = invfft(field, domain, shifted_p_values)
+    return shift(field, shifted_p, domain_size)
