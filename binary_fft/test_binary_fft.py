@@ -3,7 +3,7 @@ import binary_fft
 bigf = binary_fft.BinaryField(1033)
 poly = [x**9 % 1024 for x in range(1024)]
 z = binary_fft.fft(bigf, range(1024), poly)
-z2 = binary_fft._simple_ft(bigf, poly)
+z2 = binary_fft._simple_ft(bigf, range(1024), poly)
 assert z == z2
 poly2 = binary_fft.invfft(bigf, range(1024), z)
 assert poly2 == poly

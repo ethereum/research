@@ -1,5 +1,9 @@
 def log2(x):
-    return 0 if x <= 1 else 1 + log2(x // 2)
+    o = 0
+    while x > 1:
+        x //= 2
+        o += 1
+    return o
 
 def raw_mul(a, b):
     if a*b == 0:
@@ -30,7 +34,7 @@ class BinaryField():
                 powers.append(raw_mod(raw_mul(powers[-1], base), self.modulus))
             powers.pop()
             if len(powers) == self.order:
-                self.cache = powers
+                self.cache = powers + powers
                 self.invcache = [None] * (self.order + 1)
                 for i, p in enumerate(powers):
                     self.invcache[p] = i
@@ -43,13 +47,13 @@ class BinaryField():
     sub = add
 
     def mul(self, x, y):
-        return 0 if x*y == 0 else self.cache[(self.invcache[x] + self.invcache[y]) % self.order]
+        return 0 if x*y == 0 else self.cache[self.invcache[x] + self.invcache[y]]
 
     def sqr(self, x):
         return 0 if x == 0 else self.cache[(self.invcache[x] * 2) % self.order]
 
     def div(self, x, y):
-        return 0 if x == 0 else self.cache[(self.invcache[x] - self.invcache[y]) % self.order]
+        return 0 if x == 0 else self.cache[self.invcache[x] + self.order - self.invcache[y]]
 
     def inv(self, x):
         assert x != 0
@@ -153,9 +157,8 @@ class BinaryField():
                     b[j] ^= self.mul(nums[i][j], yslice)
         return b
 
-def _simple_ft(field, vals):
-    assert len(vals) == 2**field.height
-    return [field.eval_poly_at(vals, i) for i in range(2**field.height)]
+def _simple_ft(field, domain, poly):
+    return [field.eval_poly_at(poly, i) for i in domain]
 
 # Returns `evens` and `odds` such that:
 # poly(x) = evens(x**2+kx) + x * odds(x**2+kx)
@@ -179,10 +182,10 @@ def cast(field, poly, k):
     # and high = poly // (x**2 - k*x)**half_mod_power
     # Note that (x**2 - k*x)**n = x**2n - k**n * x**n in binary fields
     low = poly + [0] * (mod_power * 2 - len(poly))
-    high = low[len(low)-half_mod_power:]
-    low = low[:len(low)-mod_power] + [low[i] ^ field.mul(low[i+half_mod_power], k_to_half_mod_power) for i in range(len(low)-mod_power, len(low)-half_mod_power)]
-    high = low[len(low)-half_mod_power:] + high
-    low = low[:len(low)-mod_power] + [low[i] ^ field.mul(low[i+half_mod_power], k_to_half_mod_power) for i in range(len(low)-mod_power, len(low)-half_mod_power)]
+    high = low[half_mod_power*3:]
+    low = low[:mod_power] + [low[i] ^ field.mul(low[i+half_mod_power], k_to_half_mod_power) for i in range(mod_power, half_mod_power*3)]
+    high = low[mod_power:] + high
+    low = low[:half_mod_power] + [low[i] ^ field.mul(low[i+half_mod_power], k_to_half_mod_power) for i in range(half_mod_power, mod_power)]
     # Recursively compute two half-size sub-problems, low and high
     low_cast = cast(field, low, k) 
     high_cast = cast(field, high, k)
@@ -191,6 +194,8 @@ def cast(field, poly, k):
 
 # Returns a polynomial p2 such that p2(x) = poly(x**2+kx)
 def compose(field, poly, k):
+    if len(poly) == 2:
+        return [poly[0], field.mul(poly[1], k), poly[1], 0]
     if len(poly) == 1:
         return poly + [0]
     # Largest mod_power=2**k such that mod_power >= len(poly)/2
@@ -200,19 +205,23 @@ def compose(field, poly, k):
     k_to_mod_power = field.exp(k, mod_power)
     # Recursively compute two half-size sub-problems, the bottom and top half
     # of the polynomial
-    low = compose(field, poly[:mod_power], k) + [0] * mod_power * 3
-    high = compose(field, poly[mod_power:], k) + [0] * mod_power * 3
+    low = compose(field, poly[:mod_power], k)
+    high = compose(field, poly[mod_power:], k)
     # Combine them together, multiplying the top one by (x**2-k*x)**n
     # Note that (x**2 - k*x)**n = x**2n - k**n * x**n in binary fields
-    return [low[i] ^ field.mul(high[i-mod_power], k_to_mod_power) ^ high[i-2*mod_power] for i in range(mod_power*4)]
+    middle = [field.mul(x, k_to_mod_power) for x in high]
+    filler = [0] * mod_power
+    return [l ^ m ^ h for l, m, h in zip(low + filler + filler, filler + middle + filler, filler + filler + high)]
 
 # Equivalent to [field.eval_poly_at(poly, x) for x in domain]
 # Special thanks to www.math.clemson.edu/~sgao/papers/GM10.pdf for insights
 # though this algorithm is not exactly identical to any algorithm in the paper
 def fft(field, domain, poly):
     # Base case: constant polynomials
-    if len(domain) == 1:
-        return [poly[0]]
+    # if len(domain) == 1:
+    #     return [poly[0]]
+    if len(domain) <= 8:
+        return _simple_ft(field, domain, poly)
     # Split the domain into two cosets A and B, where for x in A, x+offset is in B
     offset = domain[1]
     # Get evens, odds such that:
@@ -220,7 +229,7 @@ def fft(field, domain, poly):
     # poly(x+k) = evens(x**2+offset*x) + (x+k) * odds(x**2+offset*x)
     evens, odds = cast(field, poly, offset)
     # The smaller domain D = [x**2 - offset*x for x in A] = [x**2 - offset*x for x in B]
-    casted_domain = [field.mul(x, offset ^ x) for x in domain][::2]
+    casted_domain = [field.mul(x, offset ^ x) for x in domain[::2]]
     # Two half-size sub-problems over the smaller domain, recovering
     # evaluations of evens and odds over the smaller domain
     even_points = fft(field, casted_domain, evens)
@@ -235,11 +244,13 @@ def invfft(field, domain, vals):
     # Base case: constant polynomials
     if len(domain) == 1:
         return [vals[0]]
+    # if len(domain) <= 4:
+    #     return field.lagrange_interp(domain, vals)
     # Split the domain into two cosets A and B, where for x in A, x+offset is in B
     offset = domain[1]
     # Compute the evaluations of the evens and odds polynomials using the invariants:
     # poly(x+k) - poly(x) = k * odds(x**2+kx)
-    # poly(x)*(x+k) - poly(x+k)*x = k * evens(x**2+kx)
+    # poly(x)*(x+k) - poly(x+k)*x = k * evens(x**2+kx) | (l * (d+o) + d*r)
     L, R = vals[::2], vals[1::2]
     even_points = [field.div(field.mul(l, d ^ offset) ^ field.mul(r, d), offset) for d, l, r in zip(domain[::2], L, R)]
     odd_points = [field.div(l ^ r, offset) for d, l, r in zip(domain[::2], L, R)]
@@ -266,13 +277,13 @@ def mul(field, domain, p1, p2):
 
 # Generates the polynomial `p(x) = (x - xs[0]) * (x - xs[1]) * ...`
 def zpoly(field, xs):
-    domain = list(range(2**log2(max(xs)) * 2))
     if len(xs) == 0:
         # print([1], domain, xs)
         return [1]
     if len(xs) == 1:
         # print([xs[0], 1], domain, xs)
         return [xs[0], 1]
+    domain = list(range(2**log2(max(xs)) * 2))
     offset = domain[1]
     zL = zpoly(field, xs[::2])
     zR = zpoly(field, xs[1::2])
