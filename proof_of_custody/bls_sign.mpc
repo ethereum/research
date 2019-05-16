@@ -1,0 +1,393 @@
+import gmpy2
+
+q = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787
+curve_order = 52435875175126190479447740508185965837690552500527637822603658699938581184513
+
+secret_clear = 3**1000 % curve_order
+secret = sint(secret_clear)
+DOMAIN_RANDAO = 6
+period = 1
+
+# Point to be signed. In reality this is done using hash_to_G2,
+# but this operation is public so we just start with the point here
+hashed_point = [(641305096327961567433535537776053124906301564437992572457149650405077818161430934328338749927112767336000632546440, 2227527564527687988627298256112270200844634385611433467591915243976188164017673441101120618711022180014248431490403),
+ (2805406005066279390277602383084593318543790877278447616663335464833736615795417454207380314116860591695960209136190, 2953258333443865442963929566080259224639808701204719610288437362236287892092410251123863044145175821964870333429155),
+ (1112420472898395563568963595737537023599947949272098123743884693246395896074182491174492431010000685703971680899509, 3219379704600749240010798256308341064354148749322041662708184732298273108692196767916722914872674443406530967469360)]
+
+# Expected result
+s1_clear = 81681675576458296592962468591882928755428982678791722607038851948490729063334486091225670288310900000245446919497
+s2_clear = 2916627308348648697632072304536739276536969206688246345394492297082347834974240482267299733062954162022258929970924
+
+###########################
+#
+# Open python code
+#
+###########################
+
+def prime_field_inv(a, n):
+    """
+    Extended euclidean algorithm to find modular inverses for integers
+    """
+    if a == 0:
+        return 0
+    lm, hm = 1, 0
+    low, high = a % n, n
+    while low > 1:
+        r = high // low
+        nm, new = hm - lm * r, high - low * r
+        lm, low, hm, high = nm, new, lm, low
+    return lm % n
+
+
+# Utility methods for polynomial math
+def deg(p):
+    d = len(p) - 1
+    while p[d] == 0 and d:
+        d -= 1
+    return d
+
+class FQ2(object):
+    degree = 2
+    modulus_coeffs = (1, 0)
+    field_modulus = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787  # type: int
+    mc_tuples = None
+
+    def __init__(self,
+                 coeffs):
+        self.mc_tuples = [(i, c) for i, c in enumerate(self.modulus_coeffs) if c]
+
+
+        if len(coeffs) != len(self.modulus_coeffs):
+            raise Exception(
+                "coeffs and modulus_coeffs aren't of the same length"
+            )
+
+        self.coeffs = tuple(
+            coeff % self.field_modulus for coeff in coeffs
+        )  # type: Tuple[IntOrFQ, ...]
+
+        # The degree of the extension field
+        self.degree = len(self.modulus_coeffs)
+
+    def __add__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                "Expected an FQP object, but got object of type {}"
+                .format(type(other))
+            )
+
+        return type(self)([
+            int(x + y) % self.field_modulus
+            for x, y
+            in zip(self.coeffs, other.coeffs)
+        ])
+
+    def __sub__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                "Expected an FQP object, but got object of type {}"
+                .format(type(other))
+            )
+
+        return type(self)([
+            int(x - y) % self.field_modulus
+            for x, y
+            in zip(self.coeffs, other.coeffs)
+        ])
+
+    def __mul__(self, other):
+        if isinstance(other, int) or isinstance(other, long):
+            return type(self)([
+                int(c) * other % self.field_modulus
+                for c
+                in self.coeffs
+            ])
+        elif isinstance(other, FQ2):
+            b = [0] * (self.degree * 2 - 1)
+            inner_enumerate = list(enumerate(other.coeffs))
+            for i, eli in enumerate(self.coeffs):
+                for j, elj in inner_enumerate:
+                    b[i + j] += int(eli * elj)
+            # MID = len(self.coeffs) // 2
+            for exp in range(self.degree - 2, -1, -1):
+                top = b.pop()
+                for i, c in self.mc_tuples:
+                    b[exp + i] -= top * c
+            return type(self)([x % self.field_modulus for x in b])
+        else:
+            raise TypeError(
+                "Expected an int or FQP object, but got object of type {}"
+                .format(type(other))
+            )
+
+    def __rmul__(self, other):
+        return self * other
+
+    def __div__(self, other):
+        if isinstance(other, int):
+            return type(self)([
+                int(c) * prime_field_inv(other, self.field_modulus) % self.field_modulus
+                for c
+                in self.coeffs
+            ])
+        elif isinstance(other, type(self)):
+            return self * other.inv()
+        else:
+            raise TypeError(
+                "Expected an int or FQP object, but got object of type {}"
+                .format(type(other))
+            )
+
+    def __truediv__(self, other):
+        return self.__div__(other)
+
+    def __repr__(self):
+        return repr(self.coeffs)
+
+    def __eq__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                "Expected an FQP object, but got object of type {}"
+                .format(type(other))
+            )
+
+        for c1, c2 in zip(self.coeffs, other.coeffs):
+            if c1 != c2:
+                return False
+        return True
+
+    def __ne__(self, other):     # type: ignore # https://github.com/python/mypy/issues/2783 # noqa: E501
+        return not self == other
+
+    def __neg__(self):
+        return type(self)([-c for c in self.coeffs])
+
+    def inv(self):
+        # Using complex conjugation. Works only in this special case
+        return FQ2([self.coeffs[0], -self.coeffs[1]]) * \
+                    prime_field_inv(self.coeffs[0]*self.coeffs[0] +
+                                    self.coeffs[1]*self.coeffs[1], self.field_modulus)
+
+    @classmethod
+    def one(cls):
+        return cls([1] + [0] * (cls.degree - 1))
+
+    @classmethod
+    def zero(cls):
+        return cls([0] * cls.degree)
+
+
+# Elliptic curve doubling
+def double(pt):
+    x, y, z = pt
+    W = 3 * x * x
+    S = y * z
+    B = x * y * S
+    H = W * W - 8 * B
+    S_squared = S * S
+    newx = 2 * H * S
+    newy = W * (4 * B - H) - 8 * y * y * S_squared
+    newz = 8 * S * S_squared
+    return (newx, newy, newz)
+
+def add_constrounds(p1, p2):
+    one, zero = p1[0].one(), p1[0].zero()
+
+    # Note that this conditional does not work in the MPC!
+    # We avoid this by making sure we never add the neutral element,
+    # alternative we could fix this conditional but that will make the MPC
+    # slower
+    if p1[2] == zero or p2[2] == zero:
+        return p1 if p2[2] == zero else p2
+
+    x1, y1, z1 = p1
+    x2, y2, z2 = p2
+    U1 = y2 * z1
+    U2 = y1 * z2
+    V1 = x2 * z1
+    V2 = x1 * z2
+    U = U1 - U2
+    V = V1 - V2
+    V_squared = V * V
+    V_squared_times_V2 = V_squared * V2
+    V_cubed = V * V_squared
+    W = z1 * z2
+    A = U * U * W - V_cubed - 2 * V_squared_times_V2
+    newx = V * A
+    newy = U * (V_squared_times_V2 - A) - V_cubed * U2
+    newz = V_cubed * W
+    return (newx, newy, newz)
+
+def multiply_constrounds(pt, n):
+    cur = pt
+    r = pt
+    negstart = neg(r)
+    m = n
+    for i in range(255):
+        bit = m % 2
+        x = add_constrounds(r, (cur[0], cur[1], cur[2]))
+        r = [bit * y[0] + (1 - bit) * y[1] for y in zip(x, r)]
+        cur = double(cur)
+        m = m >> 1
+    return add_constrounds(r, negstart)
+
+def eq(p1, p2):
+    x1, y1, z1 = p1
+    x2, y2, z2 = p2
+    return x1 * z2 == x2 * z1 and y1 * z2 == y2 * z1
+
+def neg(pt):
+    x, y, z = pt
+    return (x, -y, z)
+
+def normalize(pt):
+    x, y, z = pt
+    return (x / z, y / z)
+
+hashed_point_FQ2 = [FQ2(x) for x in hashed_point]
+
+open_result = normalize(multiply_constrounds(hashed_point_FQ2, secret_clear))
+
+assert open_result[0].coeffs == (s1_clear, s2_clear)
+
+###########################
+#
+# Secret code
+#
+###########################
+
+class sFQ2(object):
+    degree = 2
+    modulus_coeffs = (1, 0)
+    field_modulus = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787  # type: int
+    mc_tuples = None
+
+    def __init__(self,
+                 coeffs):
+        self.mc_tuples = [(i, c) for i, c in enumerate(self.modulus_coeffs) if c]
+
+
+        if len(coeffs) != len(self.modulus_coeffs):
+            raise Exception(
+                "coeffs and modulus_coeffs aren't of the same length"
+            )
+        
+        assert type(coeffs[0]) == type(coeffs[1]) == sint or type(coeffs[0]) == type(coeffs[1]) == cint
+
+        self.coeffs = tuple(coeffs)
+
+        self.degree = len(self.modulus_coeffs)
+
+    def __add__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                "Expected an sFQP object, but got object of type {}"
+                .format(type(other))
+            )
+
+        return type(self)([
+            x + y
+            for x, y
+            in zip(self.coeffs, other.coeffs)
+        ])
+
+    def __sub__(self, other):
+        if not isinstance(other, type(self)):
+            raise TypeError(
+                "Expected an sFQP object, but got object of type {}"
+                .format(type(other))
+            )
+
+        return type(self)([
+            x - y
+            for x, y
+            in zip(self.coeffs, other.coeffs)
+        ])
+
+    def __mul__(self, other):
+        if isinstance(other, int) or isinstance(other, long) or isinstance(other, sint) or isinstance(other, cint):
+            return type(self)([
+                c * other
+                for c
+                in self.coeffs
+            ])
+        elif isinstance(other, sFQ2):
+            b = [0] * (self.degree * 2 - 1)
+            inner_enumerate = list(enumerate(other.coeffs))
+            for i, eli in enumerate(self.coeffs):
+                for j, elj in inner_enumerate:
+                    b[i + j] += eli * elj
+            # MID = len(self.coeffs) // 2
+            for exp in range(self.degree - 2, -1, -1):
+                top = b.pop()
+                for i, c in self.mc_tuples:
+                    b[exp + i] -= top * c
+            return type(self)([x for x in b])
+        else:
+            raise TypeError(
+                "Expected an int-like or sFQP object, but got object of type {}"
+                .format(type(other))
+            )
+
+    def __rmul__(self, other):
+        return self * other
+
+    def __div__(self, other):
+        if isinstance(other, int) or isinstance(other, long):
+            return type(self)([
+                c * prime_field_inv(other, self.field_modulus)
+                for c
+                in self.coeffs
+            ])
+        elif isinstance(other, sint) or isinstance(other, cint):
+            return type(self)([
+                c / other
+                for c
+                in self.coeffs
+            ])
+        elif isinstance(other, type(self)):
+            return self * other.inv()
+        else:
+            raise TypeError(
+                "Expected an int or sFQ2 object, but got object of type {}"
+                .format(type(other))
+            )
+
+    def __truediv__(self, other):
+        return self.__div__(other)
+
+    def __neg__(self):
+        return type(self)([-c for c in self.coeffs])
+
+    def inv(self):
+        # Using complex conjugation. Works only in this special case
+        return sFQ2([self.coeffs[0], -self.coeffs[1]]) / \
+                     (self.coeffs[0]*self.coeffs[0] +
+                     self.coeffs[1]*self.coeffs[1])
+
+    @classmethod
+    def one(cls):
+        return cls([cint(1)] + [cint(0)] * (cls.degree - 1))
+
+    @classmethod
+    def zero(cls):
+        return cls([cint(0)] * cls.degree)
+
+
+def reveal_point(pt):
+    print_ln()
+    for e in pt:
+        print_ln("(%s,%s)", e.coeffs[0].reveal(), e.coeffs[1].reveal())
+
+start_timer(0)
+
+hashed_point_sFQ2 = [sFQ2((cint(x[0]), cint(x[1]))) for x in hashed_point]
+res = multiply_constrounds(hashed_point_sFQ2, secret)
+a, b = normalize(res)
+
+print_ln("s1 = %s", a.coeffs[0].reveal())
+print_ln("Expected: %s", s1_clear)
+print_ln("s2 = %s", a.coeffs[1].reveal())
+print_ln("Expected: %s", s2_clear - q)
+
+stop_timer(0)
