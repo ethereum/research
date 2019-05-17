@@ -1,3 +1,4 @@
+# import fast_binary_fft as b
 import binary_fft as b
 f = b.BinaryField(65579)
 from hashlib import sha256

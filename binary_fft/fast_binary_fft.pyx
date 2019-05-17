@@ -1,23 +1,25 @@
-def log2(x):
-    o = 0
+from libcpp.vector cimport vector
+
+def is_power_of_2(int x):
+    return x > 0 and x&(x-1) == 0
+
+def log2(int x):
+    cdef int o = 0
     while x > 1:
         x //= 2
         o += 1
     return o
 
-def is_power_of_2(x):
-    return x > 0 and x&(x-1) == 0
-
-def raw_mul(a, b):
+def raw_mul(int a, int b):
     if a*b == 0:
         return 0
-    o = 0
+    cdef int o = 0
     for i in range(log2(b) + 1):
         if b & (1<<i):
             o ^= a<<i
     return o
 
-def raw_mod(a, b):
+def raw_mod(int a, int b):
     blog = log2(b)
     alog = log2(a)
     while alog >= blog:
@@ -26,8 +28,16 @@ def raw_mod(a, b):
         alog -= 1
     return a
 
-class BinaryField():
-    def __init__(self, modulus):
+cdef class BinaryField:
+
+    cdef int modulus
+    cdef int height
+    cdef int order
+    cdef vector[int] powers
+    cdef vector[int] cache
+    cdef vector[int] invcache
+
+    def __init__(self, int modulus):
         self.modulus = modulus
         self.height = log2(self.modulus)
         self.order = 2**self.height - 1
@@ -38,83 +48,83 @@ class BinaryField():
             powers.pop()
             if len(powers) == self.order:
                 self.cache = powers + powers
-                self.invcache = [None] * (self.order + 1)
+                self.invcache = [0] * (self.order + 1)
                 for i, p in enumerate(powers):
                     self.invcache[p] = i
                 return
         raise Exception("Bad modulus")
 
-    def add(self, x, y):
+    def add(self, int x, int y):
         return x ^ y
 
-    sub = add
+    def sub(self, int x, int y):
+        return x ^ y
 
-    def mul(self, x, y):
+    def mul(self, int x, int y):
         return 0 if x*y == 0 else self.cache[self.invcache[x] + self.invcache[y]]
 
-    def sqr(self, x):
+    def sqr(self, int x):
         return 0 if x == 0 else self.cache[(self.invcache[x] * 2) % self.order]
 
-    def div(self, x, y):
+    def div(self, int x, int y):
         return 0 if x == 0 else self.cache[self.invcache[x] + self.order - self.invcache[y]]
 
-    def inv(self, x):
+    def inv(self, int x):
         assert x != 0
         return self.cache[(self.order - self.invcache[x]) % self.order]
 
-    def exp(self, x, p):
+    def exp(self, int x, int p):
         return 1 if p == 0 else 0 if x == 0 else self.cache[(self.invcache[x] * p) % self.order]
 
-    def multi_inv(self, values):
-        partials = [1]
+    def multi_inv(self, vector[int] values):
+        cdef vector[int] partials = [1]
         for i in range(len(values)):
-            partials.append(self.mul(partials[-1], values[i] or 1))
-        inv = self.inv(partials[-1])
-        outputs = [0] * len(values)
+            partials.push_back(self.mul(partials[len(partials)-1], values[i] or 1))
+        cdef int inv = self.inv(partials[len(partials)-1])
+        cdef vector[int] outputs = [0] * len(values)
         for i in range(len(values), 0, -1):
             outputs[i-1] = self.mul(partials[i-1], inv) if values[i-1] else 0
             inv = self.mul(inv, values[i-1] or 1)
         return outputs
 
-    def div(self, x, y):
+    def div(self, int x, int y):
         return self.mul(x, self.inv(y))
 
     # Evaluate a polynomial at a point
-    def eval_poly_at(self, p, x):
-        y = 0
-        power_of_x = 1
+    def eval_poly_at(self, vector[int] p, int x):
+        cdef int y = 0
+        cdef int power_of_x = 1
         for i, p_coeff in enumerate(p):
             y ^= self.mul(power_of_x, p_coeff)
             power_of_x = self.mul(power_of_x, x)
         return y
         
     # Arithmetic for polynomials
-    def add_polys(self, a, b):
+    def add_polys(self, vector[int] a, vector[int] b):
         return [((a[i] if i < len(a) else 0) ^ (b[i] if i < len(b) else 0))
                 for i in range(max(len(a), len(b)))]
 
-    sub_polys = add_polys
-    
-    def mul_by_const(self, a, c):
+    def mul_by_const(self, vector[int] a, int c):
         return [self.mul(x, c) for x in a]
     
-    def mul_polys(self, a, b):
-        o = [0] * (len(a) + len(b) - 1)
+    def mul_polys(self, vector[int] a, vector[int] b):
+        cdef vector[int] o = [0] * (len(a) + len(b) - 1)
         for i, aval in enumerate(a):
             for j, bval in enumerate(b):
                 o[i+j] ^= self.mul(a[i], b[j])
         return o
     
-    def div_polys(self, a, b):
-        assert len(a) >= len(b)
-        a = [x for x in a]
-        o = []
-        apos = len(a) - 1
-        bpos = len(b) - 1
-        diff = apos - bpos
+    def div_polys(self, vector[int] _a, vector[int] b):
+        assert len(_a) >= len(b)
+        cdef vector[int] a = [x for x in _a]
+        cdef vector[int] o = []
+        cdef int apos = len(a) - 1
+        cdef int bpos = len(b) - 1
+        cdef int diff = apos - bpos
+        cdef int quot
         while diff >= 0:
             quot = self.div(a[apos], b[bpos])
-            o.insert(0, quot)
+            o = [quot] + o
             for i in range(bpos, -1, -1):
                 a[diff+i] ^= self.mul(b[i], quot)
             apos -= 1
@@ -122,10 +132,10 @@ class BinaryField():
         return o
 
     # Build a polynomial that returns 0 at all specified xs
-    def zpoly(self, xs):
-        root = [1]
+    def zpoly(self, vector[int] xs):
+        cdef vector[int] root = [1]
         for x in xs:
-            root.insert(0, 0)
+            root = [0] + root
             for j in range(len(root)-1):
                 root[j] ^= self.mul(root[j+1], x)
         return root
@@ -138,21 +148,22 @@ class BinaryField():
     #    y coordinate at that point and 0 at all other points provided.
     # 3. Add these polynomials together.
     
-    def lagrange_interp(self, xs, ys):
+    def lagrange_interp(self, vector[int] xs, vector[int] ys):
         # Generate master numerator polynomial, eg. (x - x1) * (x - x2) * ... * (x - xn)
-        root = self.zpoly(xs)
+        cdef vector[int] root = self.zpoly(xs)
         assert len(root) == len(ys) + 1
         # print(root)
         # Generate per-value numerator polynomials, eg. for x=x2,
         # (x - x1) * (x - x3) * ... * (x - xn), by dividing the master
         # polynomial back by each x coordinate
-        nums = [self.div_polys(root, [x, 1]) for x in xs]
+        cdef vector[vector[int]] nums = [self.div_polys(root, [x, 1]) for x in xs]
         # Generate denominators by evaluating numerator polys at each x
-        denoms = [self.eval_poly_at(nums[i], xs[i]) for i in range(len(xs))]
-        invdenoms = self.multi_inv(denoms)
+        cdef vector[int] denoms = [self.eval_poly_at(nums[i], xs[i]) for i in range(len(xs))]
+        cdef vector[int] invdenoms = self.multi_inv(denoms)
         # Generate output polynomial, which is the sum of the per-value numerator
         # polynomials rescaled to have the right y values
-        b = [0 for y in ys]
+        cdef vector[int] b = [0 for y in ys]
+        cdef int yslice
         for i in range(len(xs)):
             yslice = self.mul(ys[i], invdenoms[i])
             for j in range(len(ys)):
@@ -160,8 +171,9 @@ class BinaryField():
                     b[j] ^= self.mul(nums[i][j], yslice)
         return b
 
-def _simple_ft(field, domain, poly):
-    return [field.eval_poly_at(poly, i) for i in domain]
+def _simple_ft(field, vector[int] domain, vector[int] poly):
+    cdef vector[int] o = [field.eval_poly_at(poly, i) for i in domain]
+    return o
 
 # Returns `evens` and `odds` such that:
 # poly(x) = evens(x**2+kx) + x * odds(x**2+kx)
@@ -172,7 +184,7 @@ def _simple_ft(field, domain, poly):
 # poly(x+k) - poly(x) = k * odds(x**2+kx)
 # poly(x)*(x+k) - poly(x+k)*x = k * evens(x**2+kx)
 
-def cast(field, poly, k):
+def cast(field, poly, int k):
     if len(poly) <= 2:
         return ([poly[0]], [poly[1] if len(poly) == 2 else 0])
     assert is_power_of_2(len(poly))
@@ -238,11 +250,9 @@ def fft(field, domain, poly):
     even_points = fft(field, casted_domain, evens)
     odd_points = fft(field, casted_domain, odds)
     # Combine the evaluations of evens and odds into evaluations of poly
-    o = []
-    for i in range(len(domain)//2):
-        o.append(even_points[i] ^ field.mul(domain[i*2], odd_points[i]))
-        o.append(even_points[i] ^ field.mul(domain[i*2+1], odd_points[i]))
-    return o
+    L = [e ^ field.mul(d, o) for d,e,o in zip(domain[::2], even_points, odd_points)]
+    R = [e ^ field.mul(d, o) for d,e,o in zip(domain[1::2], even_points, odd_points)]
+    return [R[i//2] if i%2 else L[i//2] for i in range(len(domain))]
 
 # The inverse function of fft, does the steps backwards
 def invfft(field, domain, vals):
@@ -256,14 +266,11 @@ def invfft(field, domain, vals):
     # Compute the evaluations of the evens and odds polynomials using the invariants:
     # poly(x+k) - poly(x) = k * odds(x**2+kx)
     # poly(x)*(x+k) - poly(x+k)*x = k * evens(x**2+kx)
-    even_points = [0] * (len(vals)//2)
-    odd_points = [0] * (len(vals)//2)
-    for i in range(len(domain)//2):
-        p_of_x, p_of_x_plus_k = vals[i*2], vals[i*2+1]
-        x = domain[i*2]
-        even_points[i] = field.div(field.mul(p_of_x, x ^ offset) ^ field.mul(p_of_x_plus_k, x), offset)
-        odd_points[i] = field.div(p_of_x ^ p_of_x_plus_k, offset)
-    casted_domain = [field.mul(x, offset ^ x) for x in domain[::2]]
+    L, R = vals[::2], vals[1::2]
+    even_points = [field.div(field.mul(l, d ^ offset) ^ field.mul(r, d), offset) for d, l, r in zip(domain[::2], L, R)]
+    odd_points = [field.div(l ^ r, offset) for d, l, r in zip(domain[::2], L, R)]
+    # The smaller domain D = [x**2 - offset*x for x in A] = [x**2 - offset*x for x in B]
+    casted_domain = [field.mul(x, offset ^ x) for x in domain][::2]
     # Two half-size problems over the smaller domains, recovering
     # the polynomials evens and odds
     evens = invfft(field, casted_domain, even_points)
@@ -271,8 +278,8 @@ def invfft(field, domain, vals):
     # Given evens and odds where poly(x) = evens(x**2+offset*x) + x * odds(x**2+offset*x),
     # recover poly
     composed_evens = compose(field, evens, offset) + [0]
-    composed_odds = [0] + compose(field, odds, offset)
-    o = [composed_evens[i] ^ composed_odds[i] for i in range(len(vals))]
+    composed_odds = compose(field, odds, offset) + [0]
+    o = [composed_evens[i] ^ composed_odds[i-1] for i in range(len(vals))]
     return o
 
 # Multiplies two polynomials using the FFT method
