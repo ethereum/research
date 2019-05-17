@@ -291,7 +291,7 @@ def zpoly(field, xs):
     if len(xs) == 1:
         # print([xs[0], 1], domain, xs)
         return [xs[0], 1]
-    domain = list(range(2**log2(max(xs)) * 2))
+    domain = list(range(2**log2(max(xs)+1) * 2))
     offset = domain[1]
     zL = zpoly(field, xs[::2])
     zR = zpoly(field, xs[1::2])
