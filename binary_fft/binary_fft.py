@@ -275,6 +275,24 @@ def invfft(field, domain, vals):
     o = [composed_evens[i] ^ composed_odds[i] for i in range(len(vals))]
     return o
 
+# shift_polys[i][j] is the 2**j degree coefficient of the polynomial that evaluates to [1,1...1, 0,0....0] with 2**(i-1) ones and 2**(i-1) zeroes
+shift_polys = [[], [1], [32755, 32755], [52774, 60631, 8945], [38902, 5560, 44524, 12194], [55266, 46488, 60321, 5401, 40130], [21827, 32224, 51565, 15072, 8277, 64379], [59460, 15452, 60370, 24737, 20321, 35516, 39606], [42623, 56997, 25925, 15351, 16625, 47045, 38250, 17462], [7575, 27410, 32434, 22187, 28933, 15447, 37964, 38186, 4776], [39976, 61188, 42456, 2155, 6178, 34033, 52305, 14913, 2896, 48908], [6990, 12021, 36054, 16198, 17011, 14018, 58553, 13272, 25318, 5288, 21429], [16440, 34925, 14360, 22561, 43883, 36645, 7613, 26531, 8597, 59502, 61283, 53412]]
+
+def invfft2(field, vals):
+    if len(vals) == 1:
+        return [vals[0]]
+    L = invfft2(field, vals[:len(vals)//2])
+    R = shift(field, invfft2(field, vals[len(vals)//2:]), len(vals)//2)
+    o = [0] * len(vals)
+    for j, (l, r) in enumerate(zip(L, R)):
+        o[j] ^= l
+        for i, coeff in enumerate(shift_polys[log2(len(vals))]):
+            o[2**i+j] ^= field.mul(l ^ r, coeff)
+    # print(vals, o)
+    return o
+
+# def invfft(field, domain, vals): return invfft2(field, vals)
+
 # Multiplies two polynomials using the FFT method
 def mul(field, domain, p1, p2):
     assert len(p1) <= len(domain) and len(p2) <= len(domain)
@@ -304,16 +322,16 @@ def shift(field, poly, k):
     if len(poly) == 1:
         return poly
     # Largest mod_power=2**k such that mod_power >= len(poly)/2
-    mod_power = 1
-    while mod_power * 2 < len(poly):
-        mod_power *= 2
+    assert is_power_of_2(len(poly))
+    mod_power = len(poly)//2
     k_to_mod_power = field.exp(k, mod_power)
     # Calculate low = poly % (x+k)**mod_power
     # and high = poly // (x+k)**mod_power
     # Note that (x+k)**n = x**n + k**n for power-of-two powers in binary fields
-    high = poly[mod_power:] + [0] * (2 * mod_power - len(poly))
-    low = [poly[i] ^ field.mul(poly[i + mod_power], k_to_mod_power) for i in range(mod_power)]
-    return shift(field, low, k) + shift(field, high, k)
+    low_and_high = poly[::]
+    for i in range(mod_power):
+        low_and_high[i] ^= field.mul(low_and_high[i+mod_power], k_to_mod_power)
+    return shift(field, low_and_high[:mod_power], k) + shift(field, low_and_high[mod_power:], k)
 
 # Interpolates the polynomial where `p(xs[i]) = vals[i]`
 def interpolate(field, xs, vals):
