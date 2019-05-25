@@ -1,4 +1,4 @@
-from minimal_ssz import infer_type, is_basic, merkleize, pack_object, hash_tree_root, pack, is_power_of_two, ZERO_CHUNK, Vector
+from minimal_ssz import infer_type, is_basic, merkleize, pack_object, hash_tree_root, pack, is_power_of_two, ZERO_CHUNK, Vector, convert_to_list, is_top_level_dynamic, get_subtype_if_basic
 from hash_function import hash
 
 def last_power_of_two(x):
@@ -78,37 +78,37 @@ def filler(starting_position, chunk_count):
         at += skip
     return o
 
-def ssz_all(value, typ=None):
+def ssz_all(value, typ=None, root=1):
     if typ is None:
         typ = infer_type(value)
-    if is_basic(typ):
-        return {1: pack([value], typ)[0]}
+
+    value_as_list = convert_to_list(value)
     chunks = pack_object(value, typ)    
-    starting_tree_index = next_power_of_two(len(chunks))
-    if (isinstance(typ, list) and is_basic(typ[0])) or typ == 'bytes':
-        output = {starting_tree_index+i: chunks[i] for i in range(len(chunks))}
+
+    if is_top_level_dynamic(typ):
+        starting_tree_index = root * 2 * next_power_of_two(len(chunks))
+        output = {root*2+1: len(value_as_list).to_bytes(32, 'little')}
+    else:
+        starting_tree_index = root * next_power_of_two(len(chunks))
+        output = {}
+
+    if get_subtype_if_basic(typ):
+        for i, chunk in enumerate(chunks):
+            output[starting_tree_index+i] = chunk
         output = {**output, **filler(starting_tree_index, len(chunks))}
-    elif isinstance(typ, list):
-        output = {}
-        for i in range(len(value)):
-            output = {**output, **rebase(ssz_all(value[i]), starting_tree_index + i)}
-        output = {**output, **filler(starting_tree_index, len(value))}
     else:
-        output = {}
-        for i, field in enumerate(typ.fields.keys()):
-            output = {**output, **rebase(ssz_all(getattr(value, field)), starting_tree_index + i)}
-        output = {**output, **filler(starting_tree_index, len(typ.fields))}
-            
-    if (isinstance(typ, list) and len(typ) == 1) or typ == 'bytes':
-        o = {3: len(value).to_bytes(32, 'little'), **rebase(output, 2)}
-    else:
-        o = output
-    return o
+        for i, element in enumerate(value_as_list):
+            output = {**output, **ssz_all(element, root=starting_tree_index + i)}
+        output = {**output, **filler(starting_tree_index, len(value_as_list))}
+    return output
 
 def ssz_branch(value, path, typ=None):
     if typ is None:
         typ = infer_type(value)
+
+    value_as_list = convert_to_list(value)
     chunks = pack_object(value, typ)    
+
     if is_basic(typ):
         if len(path) > 0:
             raise Exception("Empty path required for non-basic type: {}".format(typ))
@@ -177,7 +177,6 @@ def get_all_generalized_indices(obj, root=1):
     else:
         raise Exception("Unknown type / path", typ, obj)
         
-
 def get_generalized_indices(obj, path, root=1):
     typ = infer_type(obj)
     # print(path, root, typ)

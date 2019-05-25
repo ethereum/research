@@ -36,7 +36,7 @@ object_keys = sorted(list(p.objects.keys()))[::-1]
 #    print(path, indices, descend(city, path), [p.objects.get(index, None) for index in indices])
 leaf_indices = sum([get_generalized_indices(city, path) for path in paths], [])
 proof_indices = get_proof_indices(leaf_indices)
-assert object_keys == proof_indices
+assert object_keys == proof_indices, (object_keys, proof_indices)
 # p = SSZPartial(infer_type(city), branch2)
 assert p.coords[0] == city.coords[0]
 assert p.coords[1] == city.coords[1]
@@ -51,4 +51,5 @@ assert str(p.people[7].name) == str(city.people[7].name)
 assert str(p.people[1]) == str(city.people[1])
 assert p.people[1].name.root() == hash_tree_root(city.people[1].name)
 assert p.root() == hash_tree_root(city)
+print(hash_tree_root(city))
 print("Tests passed")
