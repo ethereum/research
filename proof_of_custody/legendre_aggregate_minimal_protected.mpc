@@ -8,7 +8,7 @@ import gmpy2
 
 bytes_per_chunk = 512
 bits_per_chunk = bytes_per_chunk * 8
-subchunks_bytes = [52] * 2 + [51] * 8
+subchunks_bytes = [48] * 10 + [32] * 1
 subchunks_per_chunk = len(subchunks_bytes)
 q = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787
 
@@ -77,7 +77,7 @@ def legendre_aggregate_chunk_mpz(x, s1, s2):
     bits = []
     for i, subchunk in enumerate(subchunks):
         a = from_bytes(subchunk, "little")
-        bits.append(jacobi_bit_mpz((s1 if i % 2 == 0 else s2) + a, q))
+        bits.append(jacobi_bit_mpz((i + 1) * (s1 if i % 2 == 0 else s2) + a, q))
     return sum(bits) % 2
 
 def legendre_aggregate_mpz_first_round(x, s1, s2):
@@ -92,7 +92,7 @@ test_vector = generate_test_vector(num_of_chunks * bytes_per_chunk)
 open_result = legendre_aggregate_mpz(test_vector,gmpy2.mpz(s1_clear),gmpy2.mpz(s2_clear))
 open_result_first_round = legendre_aggregate_mpz_first_round(test_vector, gmpy2.mpz(s1_clear), gmpy2.mpz(s2_clear))
 #print([legendre_aggregate_chunk_mpz(chunk,gmpy2.mpz(s1_clear),gmpy2.mpz(s2_clear)) for chunk in chunkify(test_vector)])
-open_result_first_round_modq = from_bytes(open_result_first_round, "little") % q 
+open_result_first_round_modq = from_bytes(open_result_first_round, "little") % q - q
 #print(open_result_first_round_modq)
 
 ###########################
@@ -163,9 +163,9 @@ def g(i):
         for j in range(subchunks_per_chunk):
             index = (i * concurrent + k) * subchunks_per_chunk + j
             if j % 2 == 0:
-                factors.append(subchunks_reg[index] + s1)
+                factors.append(subchunks_reg[index] + (j + 1) * s1)
             else: 
-                factors.append(subchunks_reg[index] + s2)
+                factors.append(subchunks_reg[index] + (j + 1) * s2)
 
         prod = prod_reduce(factors)
         t, b = pre_squares[i * concurrent + k], pre_bits[i * concurrent + k]

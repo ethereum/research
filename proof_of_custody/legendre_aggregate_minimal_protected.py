@@ -5,7 +5,7 @@ from timeit import default_timer as timer
 import gmpy2
 bytes_per_chunk = 512
 bits_per_chunk = bytes_per_chunk * 8
-subchunks_bytes = [52] * 2 + [51] * 8
+subchunks_bytes = [48] * 10 + [32] * 1
 q = FQ2.field_modulus
 
 validator_privkey = 3**1000 % curve_order
@@ -73,7 +73,7 @@ def legendre_aggregate_chunk(x, s1, s2):
     bits = []
     for i, subchunk in enumerate(subchunks):
         a = int.from_bytes(subchunk, "little")
-        bits.append(jacobi_bit((s1 if i % 2 == 0 else s2) + a, q))
+        bits.append(jacobi_bit((i + 1) * (s1 if i % 2 == 0 else s2) + a, q))
     return sum(bits) % 2
 
 def legendre_aggregate(x, s1, s2):
@@ -88,7 +88,7 @@ def legendre_aggregate_chunk_mpz(x, s1, s2):
     bits = []
     for i, subchunk in enumerate(subchunks):
         a = int.from_bytes(subchunk, "little")
-        bits.append(jacobi_bit_mpz((s1 if i % 2 == 0 else s2) + a, q))
+        bits.append(jacobi_bit_mpz((i + 1) * (s1 if i % 2 == 0 else s2) + a, q))
     return sum(bits) % 2
 
 def legendre_aggregate_mpz(x, s1, s2):
@@ -100,8 +100,8 @@ def legendre_aggregate_chunk_mpz_premul(x, s1, s2):
     prod = gmpy2.mpz(1)
     for i, subchunk in enumerate(subchunks):
         a = int.from_bytes(subchunk, "little")
-        prod *= gmpy2.mpz((s1 if i % 2 == 0 else s2) + a)
-    return 1 - jacobi_bit_mpz(prod, q)
+        prod *= gmpy2.mpz((i + 1) * (s1 if i % 2 == 0 else s2) + a)
+    return 1 - jacobi_bit_mpz(prod, q) if len(subchunks) % 2 == 0 else jacobi_bit_mpz(prod, q)
 
 def legendre_aggregate_mpz_premul(x, s1, s2):
     bits = [legendre_aggregate_chunk_mpz_premul(chunk, s1, s2) for chunk in chunkify(x)]
