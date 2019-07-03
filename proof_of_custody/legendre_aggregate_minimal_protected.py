@@ -36,7 +36,7 @@ def bitarray_to_bytes(x):
         if i % 8 == 7:
             ret += c.to_bytes(1,"little")
             c = 0
-    if i % 8 != 7:
+    if len(x) % 8 != 0:
         c <<= - len(x) % 8
         ret += c.to_bytes(1,"little")
     return ret
