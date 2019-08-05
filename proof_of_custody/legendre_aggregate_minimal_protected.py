@@ -9,7 +9,7 @@ subchunks_bytes = [48] * 10 + [32] * 1
 q = FQ2.field_modulus
 
 validator_privkey = 3**1000 % curve_order
-DOMAIN_RANDAO = 6
+DOMAIN_RANDAO = (6).to_bytes(4, "little")
 
 #Placeholder: will be RANDAO at some epoch
 period = 1
@@ -99,8 +99,8 @@ def legendre_aggregate_chunk_mpz_premul(x, s1, s2):
     subchunks = subchunkify(x)
     prod = gmpy2.mpz(1)
     for i, subchunk in enumerate(subchunks):
-        a = int.from_bytes(subchunk, "little")
-        prod *= gmpy2.mpz((i + 1) * (s1 if i % 2 == 0 else s2) + a)
+        a = gmpy2.mpz(int.from_bytes(subchunk, "little"))
+        prod *= (i + 1) * (s1 if i % 2 == 0 else s2) + a
     return 1 - jacobi_bit_mpz(prod, q) if len(subchunks) % 2 == 0 else jacobi_bit_mpz(prod, q)
 
 def legendre_aggregate_mpz_premul(x, s1, s2):
@@ -119,15 +119,17 @@ x = test_vector(2**21)
 
 time2 = timer()
 
-legendre_aggregate(x,gmpy2.mpz(s1),gmpy2.mpz(s2))
+legendre_aggregate(x, gmpy2.mpz(s1), gmpy2.mpz(s2))
 
 time3 = timer()
 
-legendre_aggregate_mpz(x,gmpy2.mpz(s1),gmpy2.mpz(s2))
+for i in range(10):
+    legendre_aggregate_mpz(x, gmpy2.mpz(s1), gmpy2.mpz(s2))
 
 time4 = timer()
 
-legendre_aggregate_mpz_premul(x,gmpy2.mpz(s1),gmpy2.mpz(s2))
+for i in range(100):
+    legendre_aggregate_mpz_premul(x, gmpy2.mpz(s1), gmpy2.mpz(s2))
 
 time5 = timer()
 
@@ -137,5 +139,5 @@ assert [legendre_aggregate_chunk_mpz(chunk, s1, s2) for chunk in chunkify(x)] ==
 print("Time to sign = {0:.2f} s".format(time1 - time0))
 print("Time to create test vector = {0:.2f} s".format(time2 - time1))
 print("Time to Legendre aggregate (naive python) = {0:.2f} s".format(time3 - time2))
-print("Time to Legendre aggregate (GMP) = {0:.2f} s".format(time4 - time3))
-print("Time to Legendre aggregate (GMP premul) = {0:.2f} s".format(time5 - time4))
+print("Time to Legendre aggregate (GMP) = {0:.2f} s".format((time4 - time3) / 10 ))
+print("Time to Legendre aggregate (GMP premul) = {0:.2f} s".format((time5 - time4) / 100))
