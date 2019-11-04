@@ -1,0 +1,123 @@
+# Statistics (1000 evaluations):
+# Triples: 551.92 MB
+# Squares: 23.49 MB
+# Bits: 17.5 MB
+# Sacrifice: 396.13 MB
+# Online: 273.4 MB
+
+# Total: 1262.44 MB
+
+
+import gmpy2
+
+BYTES_PER_CUSTODY_CHUNK = 48
+BITS_PER_CUSTODY_CHUNK = BYTES_PER_CUSTODY_CHUNK * 8
+BLS12_381_Q = 4002409555221667393417789825735904156556882819939007885332058136124031650490837864442687629129015664037894272559787
+
+testvector_bytesize = 2**17
+
+num_of_chunks = (testvector_bytesize + BYTES_PER_CUSTODY_CHUNK - 1) / BYTES_PER_CUSTODY_CHUNK
+
+alpha = cint(2)
+
+s1_clear = 3255404220262740046417652208746411704578980753592186640768020706585433493494014147861104001884729179152672227896634
+s2_clear = 989137730843945030203669041638485163238380082626015814241097134392582946217747886662892888556074448115885258000025
+
+s1 = sint(s1_clear)
+s2 = sint(s2_clear)
+
+###########################
+#
+# Open python code
+#
+###########################
+
+
+def to_bytes(n, length, endianess='big'):
+    h = '%x' % n
+    s = ('0'*(len(h) % 2) + h).zfill(length*2).decode('hex')
+    return s if endianess == 'big' else s[::-1]
+
+def from_bytes(s, endianess='big'):
+    return int((s if endianess == 'big' else s[::-1]).encode('hex'), 16)
+
+def custody_chunkify(bytez):
+    bytez += b'\x00' * (-len(bytez) % BYTES_PER_CUSTODY_CHUNK)
+    return [bytez[i:i + BYTES_PER_CUSTODY_CHUNK]
+            for i in range(0, len(bytez), BYTES_PER_CUSTODY_CHUNK)]
+
+def generate_test_vector(bytelength):
+    ints = bytelength / 4
+    return b"".join(to_bytes(i, 4, "little") for i in range(ints))
+
+def legendre_bit_mpz(a, n):
+    return True if gmpy2.jacobi(a, n) >= 0 else False
+
+def get_polynomial_uhf_mpz(chunks, key):
+    r = 1
+    q = gmpy2.mpz(BLS12_381_Q)
+    for chunk in reversed(chunks):
+        r *= key
+        r += gmpy2.mpz(from_bytes(chunk, 'little'))
+        r %= q
+    return r
+
+def get_legendre_prf_mpz(data, key):
+    return legendre_bit_mpz(key + data, BLS12_381_Q)
+
+def get_legendre_uhf_mpz(data, key1, key2):
+    return get_legendre_prf_mpz(get_polynomial_uhf_mpz(custody_chunkify(data), key1), key2)
+
+test_vector = generate_test_vector(testvector_bytesize)
+open_result = get_legendre_uhf_mpz(test_vector, gmpy2.mpz(s1_clear), gmpy2.mpz(s2_clear))
+open_result_uhf = get_polynomial_uhf_mpz(custody_chunkify(test_vector), gmpy2.mpz(s1_clear))
+
+###########################
+#
+# Secret code
+#
+###########################
+
+def legendre_to_bit(l):
+    return (l + 1) / 2
+
+@for_range(1)
+def loop(xxx):
+    # Precompute
+    start_timer(0)
+
+    s, ss = sint.get_random_square()
+    pre_key_exponents = Array(num_of_chunks + 1, sint)
+    pre_key_exponents[0] = ss
+
+    for i in range(1, num_of_chunks + 1):
+        pre_key_exponents[i] = pre_key_exponents[i - 1] * s1
+
+    stop_timer(0)
+
+    # Evaluation
+    start_timer(1)
+
+    chunks = custody_chunkify(test_vector)
+    chunks_reg = Array(num_of_chunks, cint)
+    for i in range(num_of_chunks):
+        chunks_reg[i] = cint(from_bytes(chunks[i], "little"))
+
+    uhf_reg = Array(1, sint)
+    uhf_reg[0] = sint(0)
+    for i in range(num_of_chunks):
+        uhf_reg[0] += chunks_reg[i] * pre_key_exponents[i]
+    uhf_reg[0] += pre_key_exponents[num_of_chunks]
+
+    uhf_result = uhf_reg[0].reveal()
+    leg_result = legendre_to_bit(uhf_result.legendre())
+        
+    print_ln("Result: %s", leg_result)
+    print_ln("Expected: %s", open_result)
+
+    stop_timer(1)
+
+    ssinv = (cint(1) / ss).reveal()
+
+    print_ln("UHF Result: %s", uhf_result * ssinv)
+    print_ln("Expected: %s", cint(int(open_result_uhf)))
