@@ -21,11 +21,15 @@ def _fft(vals, modulus, roots_of_unity):
         o[i+len(L)] = (x-y_times_root) % modulus 
     return o
 
-def fft(vals, modulus, root_of_unity, inv=False):
+def expand_root_of_unity(root_of_unity, modulus):
     # Build up roots of unity
     rootz = [1, root_of_unity]
     while rootz[-1] != 1:
         rootz.append((rootz[-1] * root_of_unity) % modulus)
+    return rootz
+
+def fft(vals, modulus, root_of_unity, inv=False):
+    rootz = expand_root_of_unity(root_of_unity, modulus)
     # Fill in vals with zeroes if needed
     if len(rootz) > len(vals) + 1:
         vals = vals + [0] * (len(rootz) - len(vals) - 1)
@@ -37,6 +41,24 @@ def fft(vals, modulus, root_of_unity, inv=False):
     else:
         # Regular FFT
         return _fft(vals, modulus, rootz[:-1])
+
+# Evaluates f(x) for f in evaluation form
+def inv_fft_at_point(vals, modulus, root_of_unity, x):
+    if len(vals) == 1:
+        return vals[0]
+    # 1/2 in the field
+    half = (modulus + 1)//2
+    # 1/w
+    inv_root = pow(root_of_unity, len(vals)-1, modulus)
+    # f(-x) in evaluation form
+    f_of_minus_x_vals = vals[len(vals)//2:] + vals[:len(vals)//2]
+    # e(x) = (f(x) + f(-x)) / 2 in evaluation form
+    evens = [(f+g) * half % modulus for f,g in zip(vals, f_of_minus_x_vals)]
+    # o(x) = (f(x) - f(-x)) / 2 in evaluation form
+    odds = [(f-g) * half % modulus for f,g in zip(vals, f_of_minus_x_vals)]
+    # e(x^2) + coordinate * x * o(x^2) in evaluation form
+    comb = [(o * x * inv_root**i + e) % modulus for i, (o, e) in enumerate(zip(odds, evens))]
+    return inv_fft_at_point(comb[:len(comb)//2], modulus, root_of_unity ** 2 % modulus, x**2 % modulus)
 
 def mul_polys(a, b, modulus, root_of_unity):
     rootz = [1, root_of_unity]
