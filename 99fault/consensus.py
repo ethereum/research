@@ -2,37 +2,10 @@
 # on page 391 of https://people.eecs.berkeley.edu/~luca/cs174/byzantine.pdf
 
 import random
+from network import Network
 
 TIMEOUT = 10
 LATENCY = 5
-
-# Network simulator
-class Network():
-    def __init__(self):
-        self.queue = {}
-        self.time = 0
-
-    def add_node(self, node):
-        self.queue[node.id] = {-1: node}
-
-    def broadcast(self, msg, at=0):
-        for q in self.queue.keys():
-            self.send_to(msg, q, at)
-
-    def send_to(self, msg, id, at):
-        q = self.queue[id]
-        newtime = max(self.time, at) + random.randrange(LATENCY * 2 - 1) + 1
-        if newtime not in q:
-            q[newtime] = []
-        q[newtime].append(msg)
-
-    def tick(self):
-        self.time += 1
-        for q in self.queue.values():
-            if self.time in q:
-                for msg in q[self.time]:
-                    q[-1].on_receive(msg)
-
 # A node in the network (not including the "commander")
 class Node():
 
@@ -65,7 +38,7 @@ class Node():
         return max(self.seen.keys())
 
 def test():
-    n = Network()
+    n = Network(LATENCY * 2)
     nodes = [Node(n, i, i%4==0) for i in range(20)]
     for i in range(30):
         for _ in range(2):

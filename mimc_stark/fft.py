@@ -60,6 +60,40 @@ def inv_fft_at_point(vals, modulus, root_of_unity, x):
     comb = [(o * x * inv_root**i + e) % modulus for i, (o, e) in enumerate(zip(odds, evens))]
     return inv_fft_at_point(comb[:len(comb)//2], modulus, root_of_unity ** 2 % modulus, x**2 % modulus)
 
+def shift_domain(vals, modulus, root_of_unity, factor):
+    if len(vals) == 1:
+        return vals
+    # 1/2 in the field
+    half = (modulus + 1)//2
+    # 1/w
+    inv_factor = pow(factor, modulus - 2, modulus)
+    half_length = len(vals)//2
+    # f(-x) in evaluation form
+    f_of_minus_x_vals = vals[half_length:] + vals[:half_length]
+    # e(x) = (f(x) + f(-x)) / 2 in evaluation form
+    evens = [(f+g) * half % modulus for f,g in zip(vals, f_of_minus_x_vals)]
+    print('e', evens)
+    # o(x) = (f(x) - f(-x)) / 2 in evaluation form
+    odds = [(f-g) * half % modulus for f,g in zip(vals, f_of_minus_x_vals)]
+    print('o', odds)
+    shifted_evens = shift_domain(evens[:half_length], modulus, root_of_unity ** 2 % modulus, factor ** 2 % modulus)
+    print('se', shifted_evens)
+    shifted_odds = shift_domain(odds[:half_length], modulus, root_of_unity ** 2 % modulus, factor ** 2 % modulus)
+    print('so', shifted_odds)
+    return (
+        [(e + inv_factor * o) % modulus for e, o in zip(shifted_evens, shifted_odds)] + 
+        [(e - inv_factor * o) % modulus for e, o in zip(shifted_evens, shifted_odds)]
+    )
+
+def shift_poly(poly, modulus, factor):
+    factor_power = 1
+    inv_factor = pow(factor, modulus - 2, modulus)
+    o = []
+    for p in poly:
+        o.append(p * factor_power % modulus)
+        factor_power = factor_power * inv_factor % modulus
+    return o
+
 def mul_polys(a, b, modulus, root_of_unity):
     rootz = [1, root_of_unity]
     while rootz[-1] != 1:
