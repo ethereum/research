@@ -1,25 +1,31 @@
+import random, time, sys, math
+
 # For each subset in `subsets` (provided as a list of indices into `numbers`),
 # compute the sum of that subset of `numbers`. More efficient than the naive method.
 def multisubset(numbers, subsets, adder=lambda x,y: x+y, zero=0):
     numbers = numbers[::]
-    subsets = [{x for x in subset} for subset in subsets]
+    subsets = {i: {x for x in subset} for i, subset in enumerate(subsets)}
+    output = [zero for _ in range(len(subsets))]
+    
     for roundcount in range(9999999):
         # Compute counts of every pair of indices in the subset list
-        count = {}
-        for subset in subsets:
-            if subset:
-                for x in subset:
-                    for y in subset:
-                        if y > x:
-                            count[(x, y)] = count.get((x, y), 0) + 1
-
-        # Exit condition: all subsets have size 1, no pairs
-        if not count:
-            return [numbers[list(subset)[0]] if subset else zero for subset in subsets]
+        pair_count = {}
+        for index, subset in subsets.items():
+            for x in subset:
+                for y in subset:
+                    if y > x:
+                        pair_count[(x, y)] = pair_count.get((x, y), 0) + 1
 
         # Determine pairs with highest count. The cutoff parameter [:len(numbers)]
         # determines a tradeoff between group operation count and other forms of overhead
-        pairs_by_count = sorted([el for el in count.keys()], key=lambda el: count[el], reverse=True)[:len(numbers)]
+        pairs_by_count = sorted([el for el in pair_count.keys()], key=lambda el: pair_count[el], reverse=True)[:len(numbers)*int(math.log(len(numbers)))]
+
+        # Exit condition: all subsets have size 1, no pairs
+        if len(pairs_by_count) == 0:
+            for key, subset in subsets.items():
+                for index in subset:
+                    output[key] = adder(output[key], numbers[index])
+            return output
 
         # In each of the highest-count pairs, take the sum of the numbers at those indices,
         # and add the result as a new value, and modify `subsets` to include the new value
@@ -31,11 +37,15 @@ def multisubset(numbers, subsets, adder=lambda x,y: x+y, zero=0):
             used.add(maxx)
             used.add(maxy)
             numbers.append(adder(numbers[maxx], numbers[maxy]))
-            for subset in subsets:
+            for key, subset in list(subsets.items()):
                 if maxx in subset and maxy in subset:
                     subset.remove(maxx)
                     subset.remove(maxy)
-                    subset.add(len(numbers)-1)
+                    if not subset:
+                        output[key] = numbers[-1]
+                        del subsets[key]
+                    else:
+                        subset.add(len(numbers)-1)
 
 # Reduces a linear combination `numbers[0] * factors[0] + numbers[1] * factors[1] + ...`
 # into a multi-subset problem, and computes the result efficiently
@@ -59,12 +69,11 @@ def lincomb(numbers, factors, adder=lambda x,y: x+y, zero=0):
     return o
 
 # Tests go here
-import random
-
 def make_mock_adder():
     counter = [0]
     def adder(x, y):
-        counter[0] += 1
+        if x and y:
+            counter[0] += 1
         return x+y
     return adder, counter
 
@@ -88,4 +97,4 @@ def test_lincomb(numcount, bitlength=256):
     print("Optimization factor: %.2f" % ((bitlength * numcount + total_ones) / (bitlength * 2 + counter[0])))
 
 if __name__ == '__main__':
-    test_lincomb(80)
+    test_lincomb(int(sys.argv[1]) if len(sys.argv) >= 2 else 80)
