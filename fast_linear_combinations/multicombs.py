@@ -47,6 +47,37 @@ def multisubset(numbers, subsets, adder=lambda x,y: x+y, zero=0):
                     else:
                         subset.add(len(numbers)-1)
 
+# Alternative algorithm. Less optimal than the above, but much lower bit twiddling
+# overhead and much simpler.
+def multisubset2(numbers, subsets, adder=lambda x,y: x+y, zero=0):
+    # Split up the numbers into partitions
+    partition_size = 1 + int(math.log(len(subsets) + 1))
+    # Align number count to partition size (for simplicity)
+    numbers = numbers[::]
+    while len(numbers) % partition_size != 0:
+        numbers.append(zero)
+    # Compute power set for each partition (eg. a, b, c -> {0, a, b, a+b, c, a+c, b+c, a+b+c})
+    power_sets = []
+    for i in range(0, len(numbers), partition_size):
+        new_power_set = [zero]
+        for dimension, value in enumerate(numbers[i:i+partition_size]):
+            new_power_set += [adder(n, value) for n in new_power_set]
+        power_sets.append(new_power_set)
+    # Compute subset sums, using elements from power set for each range of values
+    # ie. with a single power set lookup you can get the sum of _all_ elements in
+    # the range partition_size*k...partition_size*(k+1) that are in that subset
+    subset_sums = []
+    for subset in subsets:
+        o = zero
+        for i in range(len(power_sets)):
+            index_in_power_set = 0
+            for j in range(partition_size):
+                if i * partition_size + j in subset:
+                    index_in_power_set += 2 ** j
+            o = adder(o, power_sets[i][index_in_power_set])
+        subset_sums.append(o)
+    return subset_sums
+
 # Reduces a linear combination `numbers[0] * factors[0] + numbers[1] * factors[1] + ...`
 # into a multi-subset problem, and computes the result efficiently
 def lincomb(numbers, factors, adder=lambda x,y: x+y, zero=0):
