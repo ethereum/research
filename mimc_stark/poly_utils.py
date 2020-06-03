@@ -90,6 +90,13 @@ class PrimeField():
     def mod_polys(self, a, b):
         return self.sub_polys(a, self.mul_polys(b, self.div_polys(a, b)))[:len(b)-1]
 
+    # Build a polynomial from a few coefficients
+    def sparse(self, coeff_dict):
+        o = [0] * (max(coeff_dict.keys()) + 1)
+        for k, v in coeff_dict.items():
+            o[k] = v % self.modulus
+        return o
+
     # Build a polynomial that returns 0 at all specified xs
     def zpoly(self, xs):
         root = [1]
