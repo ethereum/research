@@ -87,6 +87,9 @@ class PrimeField():
             diff -= 1
         return [x % self.modulus for x in o]
 
+    def mod_polys(self, a, b):
+        return self.sub_polys(a, self.mul_polys(b, self.div_polys(a, b)))[:len(b)-1]
+
     # Build a polynomial that returns 0 at all specified xs
     def zpoly(self, xs):
         root = [1]
