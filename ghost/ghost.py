@@ -64,7 +64,7 @@ def get_clear_winner(latest_votes, h):
         if anc is not None:
             total_vote_count += v
     for k, v in at_height.items():
-        if v >= total_vote_count // 2:
+        if v > total_vote_count // 2:
             return k
     return None
 
