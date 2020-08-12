@@ -98,7 +98,7 @@ def test():
     print("Generated data and commitment tree")
     print("Root: ", commitment_tree[0][0])
     print('-------------------')
-    coords = [729, 505]
+    coords = [729 % WIDTH ** DEPTH, 505 % WIDTH ** DEPTH]
     a = time.time()
     commitments, w = generate_proof(data_tree, commitment_tree, proof_tree, coords, setup)
     print("Generated proof in %.3f seconds" % (time.time() - a))

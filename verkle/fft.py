@@ -15,9 +15,11 @@ def _simple_ft(vals, modulus, roots_of_unity):
     return o
 
 def _fft(vals, modulus, roots_of_unity):
-    if len(vals) <= 4:
+    if len(vals) <= 4 and type(vals[0]) != tuple:
         #return vals
         return _simple_ft(vals, modulus, roots_of_unity)
+    elif len(vals) == 1 and type(vals[0]) == tuple:
+        return vals
     L = _fft(vals[::2], modulus, roots_of_unity[::2])
     R = _fft(vals[1::2], modulus, roots_of_unity[::2])
     o = [0 for i in vals]
