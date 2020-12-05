@@ -149,11 +149,20 @@ def check_proof_single(commitment, proof, x, y):
     """
     Check a proof for a Kate commitment for an evaluation f(x) = y
     """
-    check_2 = b.add(setup[1][1], b.multiply(b.neg(b.G2), x))
-    check_1 = b.add(commitment, b.multiply(b.neg(b.G1), y))
-    pairing_check = b.pairing(b.G2, b.neg(check_1), False)
-    pairing_check *= b.pairing(check_2, proof, False)
+    # Verify the pairing equation
+    #
+    # e([commitment - y], [1]) = e([proof],  [s - x])
+    #    equivalent to
+    # e([commitment - y]^(-1), [1]) * e([proof],  [s - x]) = 1_T
+    #
+
+    s_minus_x = b.add(setup[1][1], b.multiply(b.neg(b.G2), x))
+    proof_minus_y = b.add(commitment, b.multiply(b.neg(b.G1), y))
+
+    pairing_check = b.pairing(b.G2, b.neg(proof_minus_y), False)
+    pairing_check *= b.pairing(s_minus_x, proof, False)
     pairing = b.final_exponentiate(pairing_check)
+
     return pairing == b.FQ12.one()
 
 # Kate multiproofs on a coset
@@ -179,18 +188,25 @@ def check_proof_multi(commitment, proof, x, ys):
     interpolation_polynomial = fft(ys, MODULUS, root_of_unity, True)
     interpolation_polynomial = [div(c, pow(x, i, MODULUS)) for i, c in enumerate(interpolation_polynomial)]
 
-    check_2 = b.add(setup[1][n], b.multiply(b.neg(b.G2), pow(x, n, MODULUS)))
-    check_1 = b.add(commitment, b.neg(lincomb(setup[0][:len(interpolation_polynomial)], interpolation_polynomial,
-                                                b.add, b.Z1)))
-    pairing_check = b.pairing(b.G2, b.neg(check_1), False)
-    pairing_check *= b.pairing(check_2, proof, False)
+    # Verify the pairing equation
+    #
+    # e([commitment - interpolation_polynomial(s)], [1]) = e([proof],  [s^n - x^n])
+    #    equivalent to
+    # e([commitment - interpolation_polynomial]^(-1), [1]) * e([proof],  [s^n - x^n]) = 1_T
+    #
+
+    xn_minus_yn = b.add(setup[1][n], b.multiply(b.neg(b.G2), pow(x, n, MODULUS)))
+    commitment_minus_interpolation = b.add(commitment, b.neg(lincomb(
+        setup[0][:len(interpolation_polynomial)], interpolation_polynomial, b.add, b.Z1)))
+    pairing_check = b.pairing(b.G2, b.neg(commitment_minus_interpolation), False)
+    pairing_check *= b.pairing(xn_minus_yn, proof, False)
     pairing = b.final_exponentiate(pairing_check)
     return pairing == b.FQ12.one()
 
 if __name__ == "__main__":
     setup = generate_setup(1927409816240961209460912649124)
 
-    polynomial = [1,2,3,4,7,7,7,7, 13, 13, 13, 13, 13, 13, 13, 13]
+    polynomial = [1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13]
     commitment = commit_to_poly(polynomial)
     proof = compute_proof_single(polynomial, 17)
     value = eval_poly_at(polynomial,17)
