@@ -96,7 +96,35 @@ def fk20_single(polynomial):
     return fft(h, MODULUS, get_root_of_unity(n))
 
 
-def fk20_data_availabilty(polynomial):
+# Compute all n (single) proofs according to FK20 method
+def fk20_single_data_availability_optimized(polynomial):
+    """
+    Special version of the FK20 for the situation of data availability checks:
+    The upper half of the polynomial coefficients is always 0, so we do not need to extend to twice the size
+    for Toeplitz matrix multiplication
+    """
+    assert is_power_of_two(len(polynomial))
+    
+    n = len(polynomial) // 2
+    
+    assert all(x == 0 for x in polynomial[n:])
+    reduced_polynomial = polynomial[:n]
+    
+    x = setup[0][n - 2::-1] + [b.Z1]
+    xext_fft = toeplitz_part1(x)
+    
+    toeplitz_coefficients = reduced_polynomial[-1::] + [0] * (n + 1) + reduced_polynomial[1:-1]
+
+    # Compute the vector h from the paper using a Toeplitz matric multiplication
+    h = toeplitz_part2(toeplitz_coefficients, xext_fft)
+    
+    h = h + [b.Z1] * n
+
+    # The proofs are the DFT of the h vector
+    return fft(h, MODULUS, get_root_of_unity(2 * n))
+
+
+def data_availabilty_using_fk20(polynomial):
     """
     Computes all the KZG proofs for data availability checks. This involves sampling on the double domain
     and reordering according to reverse bit order
@@ -105,7 +133,7 @@ def fk20_data_availabilty(polynomial):
     n = len(polynomial)
     extended_polynomial = polynomial + [0] * n
 
-    all_proofs = fk20_single(extended_polynomial)
+    all_proofs = fk20_single_data_availability_optimized(extended_polynomial)
 
     return list_to_reverse_bit_order(all_proofs)
 
@@ -119,7 +147,7 @@ if __name__ == "__main__":
     commitment = commit_to_poly(polynomial)
 
     # Computing the proofs on the double 
-    all_proofs = fk20_data_availabilty(polynomial)
+    all_proofs = data_availabilty_using_fk20(polynomial)
     print("All KZG proofs computed")
 
     # Now check a random position
