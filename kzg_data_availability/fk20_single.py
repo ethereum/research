@@ -69,11 +69,16 @@ def toeplitz_part2(toeplitz_coefficients, xext_fft):
     root_of_unity = get_root_of_unity(len(xext_fft))
 
     toeplitz_coefficients_fft = fft(toeplitz_coefficients, MODULUS, root_of_unity, inv=False)
-    yext_fft = [b.multiply(v, w) for v, w in zip(xext_fft, toeplitz_coefficients_fft)]
+    hext_fft = [b.multiply(v, w) for v, w in zip(xext_fft, toeplitz_coefficients_fft)]
+
+    return hext_fft
+
+def toeplitz_part3(hext_fft):
+    root_of_unity = get_root_of_unity(len(hext_fft))
 
     # Transform back and return the first half of the vector
     # Only the top half is the Toeplitz product, the rest is padding
-    return fft(yext_fft, MODULUS, root_of_unity, inv=True)[:len(yext_fft) // 2]
+    return fft(hext_fft, MODULUS, root_of_unity, inv=True)[:len(hext_fft) // 2]
 
 
 def fk20_single(polynomial):
@@ -90,7 +95,7 @@ def fk20_single(polynomial):
     toeplitz_coefficients = polynomial[-1::] + [0] * (n + 1) + polynomial[1:-1]
 
     # Compute the vector h from the paper using a Toeplitz matric multiplication
-    h = toeplitz_part2(toeplitz_coefficients, xext_fft)
+    h = toeplitz_part3(toeplitz_part2(toeplitz_coefficients, xext_fft))
 
     # The proofs are the DFT of the h vector
     return fft(h, MODULUS, get_root_of_unity(n))
@@ -110,13 +115,15 @@ def fk20_single_data_availability_optimized(polynomial):
     assert all(x == 0 for x in polynomial[n:])
     reduced_polynomial = polynomial[:n]
     
+    # Preprocessing part -- this is independent from the polynomial coefficients and can be
+    # done before the polynomial is known, it only needs to be computed once
     x = setup[0][n - 2::-1] + [b.Z1]
     xext_fft = toeplitz_part1(x)
     
     toeplitz_coefficients = reduced_polynomial[-1::] + [0] * (n + 1) + reduced_polynomial[1:-1]
 
     # Compute the vector h from the paper using a Toeplitz matric multiplication
-    h = toeplitz_part2(toeplitz_coefficients, xext_fft)
+    h = toeplitz_part3(toeplitz_part2(toeplitz_coefficients, xext_fft))
     
     h = h + [b.Z1] * n
 

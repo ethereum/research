@@ -14,7 +14,7 @@ assert pow(PRIMITIVE_ROOT, MODULUS - 1, MODULUS) == 1
 # Helpers
 
 def is_power_of_two(x):
-    return x & (x-1) == 0
+    return x > 0 and x & (x-1) == 0
 
 
 def generate_setup(s):
