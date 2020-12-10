@@ -31,9 +31,8 @@ from kzg_proofs import (
 # completely determines the Toeplitz matrix and is called the "toeplitz_coefficients" below
 
 
-# The componation toeplitz_part2(toeplitz_coefficients, toeplitz_part1(x)) compute the matrix-vector
-# multiplication
-# T * x
+# The composition toeplitz_part3(toeplitz_part2(toeplitz_coefficients, toeplitz_part1(x)))
+# compute the matrix-vector multiplication T * x
 #
 # The algorithm here is written under the assumption x = G1 elements, T scalars
 #
@@ -81,7 +80,7 @@ def toeplitz_part3(hext_fft):
     return fft(hext_fft, MODULUS, root_of_unity, inv=True)[:len(hext_fft) // 2]
 
 
-def fk20_single(polynomial):
+def fk20_single(polynomial, setup):
     """
     Compute all n (single) proofs according to FK20 method
     """
@@ -102,7 +101,7 @@ def fk20_single(polynomial):
 
 
 # Compute all n (single) proofs according to FK20 method
-def fk20_single_data_availability_optimized(polynomial):
+def fk20_single_data_availability_optimized(polynomial, setup):
     """
     Special version of the FK20 for the situation of data availability checks:
     The upper half of the polynomial coefficients is always 0, so we do not need to extend to twice the size
@@ -131,7 +130,7 @@ def fk20_single_data_availability_optimized(polynomial):
     return fft(h, MODULUS, get_root_of_unity(2 * n))
 
 
-def data_availabilty_using_fk20(polynomial):
+def data_availabilty_using_fk20(polynomial, setup):
     """
     Computes all the KZG proofs for data availability checks. This involves sampling on the double domain
     and reordering according to reverse bit order
@@ -140,21 +139,21 @@ def data_availabilty_using_fk20(polynomial):
     n = len(polynomial)
     extended_polynomial = polynomial + [0] * n
 
-    all_proofs = fk20_single_data_availability_optimized(extended_polynomial)
+    all_proofs = fk20_single_data_availability_optimized(extended_polynomial, setup)
 
     return list_to_reverse_bit_order(all_proofs)
 
 
 if __name__ == "__main__":
-    setup = generate_setup(1927409816240961209460912649124)
-    kzg_proofs.setup = setup
-
     polynomial = [1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13]
     n = len(polynomial)
-    commitment = commit_to_poly(polynomial)
+
+    setup = generate_setup(1927409816240961209460912649124, n)
+
+    commitment = commit_to_poly(polynomial, setup)
 
     # Computing the proofs on the double 
-    all_proofs = data_availabilty_using_fk20(polynomial)
+    all_proofs = data_availabilty_using_fk20(polynomial, setup)
     print("All KZG proofs computed")
 
     # Now check a random position
@@ -164,5 +163,5 @@ if __name__ == "__main__":
     x = pow(root_of_unity, pos, MODULUS)
     y = eval_poly_at(polynomial, x)
     
-    assert check_proof_single(commitment, all_proofs[reverse_bit_order(pos, 2 * n)], x, y)
+    assert check_proof_single(commitment, all_proofs[reverse_bit_order(pos, 2 * n)], x, y, setup)
     print("Single point check passed")

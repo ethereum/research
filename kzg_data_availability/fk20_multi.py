@@ -23,7 +23,7 @@ from fk20_single import (
 # Toeplitz multiplication via http://www.netlib.org/utk/people/JackDongarra/etemplates/node384.html
 # Multi proof method
 
-def fk20_multi(polynomial, l):
+def fk20_multi(polynomial, l, setup):
     """
     For a polynomial of size n, let w be a n-th root of unity. Then this method will return
     k=n/l KZG proofs for the points
@@ -63,7 +63,7 @@ def fk20_multi(polynomial, l):
     return fft(h, MODULUS, get_root_of_unity(k))
 
 
-def fk20_multi_data_availability_optimized(polynomial, l):
+def fk20_multi_data_availability_optimized(polynomial, l, setup):
     """
     FK20 multi-proof method, optimized for dava availability where the top half of polynomial
     coefficients == 0
@@ -106,7 +106,7 @@ def fk20_multi_data_availability_optimized(polynomial, l):
     return fft(h, MODULUS, get_root_of_unity(2 * k))
 
 
-def data_availabilty_using_fk20_multi(polynomial, l):
+def data_availabilty_using_fk20_multi(polynomial, l, setup):
     """
     Computes all the KZG proofs for data availability checks. This involves sampling on the double domain
     and reordering according to reverse bit order
@@ -115,7 +115,7 @@ def data_availabilty_using_fk20_multi(polynomial, l):
     n = len(polynomial)
     extended_polynomial = polynomial + [0] * n
 
-    all_proofs = fk20_multi_data_availability_optimized(extended_polynomial, l)
+    all_proofs = fk20_multi_data_availability_optimized(extended_polynomial, l, setup)
 
     return list_to_reverse_bit_order(all_proofs)
 
@@ -137,16 +137,16 @@ def add_instrumentation():
 
 
 if __name__ == "__main__":
-    setup = generate_setup(1927409816240961209460912649124)
-    kzg_proofs.setup = setup
-
     polynomial = [1, 2, 3, 4, 7, 8, 9, 10, 13, 14, 1, 15, MODULUS - 1, 1000, MODULUS - 134, 33] * 32
     n = len(polynomial)
-    commitment = commit_to_poly(polynomial)
+
+    setup = generate_setup(1927409816240961209460912649124, n)
+
+    commitment = commit_to_poly(polynomial, setup)
 
     l = 16
     
-    all_proofs = data_availabilty_using_fk20_multi(polynomial, l)
+    all_proofs = data_availabilty_using_fk20_multi(polynomial, l, setup)
     print("All KZG proofs computed for data availability (supersampled by factor 2)")
     print("Required {0} G1 multiplications".format(multiplication_count))
     print(n, l, multiplication_count)
@@ -161,9 +161,9 @@ if __name__ == "__main__":
 
         subgroup_root_of_unity = get_root_of_unity(l)
         coset = [x * pow(subgroup_root_of_unity, i, MODULUS) for i in range(l)]
-        ys2 = [eval_poly_at(polynomial, z) for z in coset]        
+        ys2 = [eval_poly_at(polynomial, z) for z in coset]
         assert list_to_reverse_bit_order(ys) == ys2
 
-        assert check_proof_multi(commitment, all_proofs[pos], x, list_to_reverse_bit_order(ys))
+        assert check_proof_multi(commitment, all_proofs[pos], x, list_to_reverse_bit_order(ys), setup)
         print("Data availability sample check {0} passed".format(pos))
     

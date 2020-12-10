@@ -5,29 +5,36 @@ from multicombs import lincomb
 # Generatore for the field
 PRIMITIVE_ROOT = 5
 MODULUS = b.curve_order
-MAX_DEGREE = 2**10
 
 assert pow(PRIMITIVE_ROOT, (MODULUS - 1) // 2, MODULUS) != 1
 assert pow(PRIMITIVE_ROOT, MODULUS - 1, MODULUS) == 1
 
-
+#########################################################################################
+#
 # Helpers
+#
+#########################################################################################
 
 def is_power_of_two(x):
     return x > 0 and x & (x-1) == 0
 
 
-def generate_setup(s):
+def generate_setup(s, size):
     """
     # Generate trusted setup, in coefficient form.
     # For data availability we always need to compute the polynomials anyway, so it makes little sense to do things in Lagrange space
     """
     return (
-        [b.multiply(b.G1, pow(s, i, MODULUS)) for i in range(MAX_DEGREE + 1)],
-        [b.multiply(b.G2, pow(s, i, MODULUS)) for i in range(MAX_DEGREE + 1)],
+        [b.multiply(b.G1, pow(s, i, MODULUS)) for i in range(size + 1)],
+        [b.multiply(b.G2, pow(s, i, MODULUS)) for i in range(size + 1)],
     )
 
+#########################################################################################
+#
 # Field operations
+#
+#########################################################################################
+
 
 def get_root_of_unity(order):
     """
@@ -53,7 +60,11 @@ def inv(a):
 def div(x, y):
     return x * inv(y) % MODULUS
 
+#########################################################################################
+#
 # Polynomial operations
+#
+#########################################################################################
 
 def eval_poly_at(p, x):
     """
@@ -84,7 +95,12 @@ def div_polys(a, b):
         diff -= 1
     return [x % MODULUS for x in o]
 
+#########################################################################################
+#
 # Utils for reverse bit order
+#
+#########################################################################################
+
 
 def reverse_bit_order(n, order):
     """
@@ -102,8 +118,12 @@ def list_to_reverse_bit_order(l):
     return [l[reverse_bit_order(i, len(l))] for i in range(len(l))]
 
 
+#########################################################################################
+#
 # Converting between polynomials (in coefficient form) and data (in reverse bit order)
 # and extending data
+#
+#########################################################################################
 
 def get_polynomial(data):
     """
@@ -130,22 +150,26 @@ def get_extended_data(polynomial):
     root_of_unity = get_root_of_unity(len(extended_polynomial))
     return list_to_reverse_bit_order(fft(extended_polynomial, MODULUS, root_of_unity, False))
 
+#########################################################################################
+#
 # Kate single proofs
+#
+#########################################################################################
 
-def commit_to_poly(polynomial):
+def commit_to_poly(polynomial, setup):
     """
     Kate commitment to polynomial in coefficient form
     """
     return lincomb(setup[0][:len(polynomial)], polynomial, b.add, b.Z1)
 
-def compute_proof_single(polynomial, x):
+def compute_proof_single(polynomial, x, setup):
     """
     Compute Kate proof for polynomial in coefficient form at position x
     """
     quotient_polynomial = div_polys(polynomial, [-x, 1])
     return lincomb(setup[0][:len(quotient_polynomial)], quotient_polynomial, b.add, b.Z1)
 
-def check_proof_single(commitment, proof, x, y):
+def check_proof_single(commitment, proof, x, y, setup):
     """
     Check a proof for a Kate commitment for an evaluation f(x) = y
     """
@@ -165,9 +189,13 @@ def check_proof_single(commitment, proof, x, y):
 
     return pairing == b.FQ12.one()
 
+#########################################################################################
+#
 # Kate multiproofs on a coset
+#
+#########################################################################################
 
-def compute_proof_multi(polynomial, x, n):
+def compute_proof_multi(polynomial, x, n, setup):
     """
     Compute Kate proof for polynomial in coefficient form at positions x * w^y where w is
     an n-th root of unity (this is the proof for one data availability sample, which consists
@@ -176,7 +204,7 @@ def compute_proof_multi(polynomial, x, n):
     quotient_polynomial = div_polys(polynomial, [-pow(x, n, MODULUS)] + [0] * (n - 1) + [1])
     return lincomb(setup[0][:len(quotient_polynomial)], quotient_polynomial, b.add, b.Z1)
 
-def check_proof_multi(commitment, proof, x, ys):
+def check_proof_multi(commitment, proof, x, ys, setup):
     """
     Check a proof for a Kate commitment for an evaluation f(x w^i) = y_i
     """
@@ -204,19 +232,21 @@ def check_proof_multi(commitment, proof, x, ys):
     return pairing == b.FQ12.one()
 
 if __name__ == "__main__":
-    setup = generate_setup(1927409816240961209460912649124)
-
     polynomial = [1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13]
-    commitment = commit_to_poly(polynomial)
-    proof = compute_proof_single(polynomial, 17)
-    value = eval_poly_at(polynomial,17)
-    assert check_proof_single(commitment, proof, 17, value)
+    n = len(polynomial)
+
+    setup = generate_setup(1927409816240961209460912649124, n)
+
+    commitment = commit_to_poly(polynomial, setup)
+    proof = compute_proof_single(polynomial, 17, setup)
+    value = eval_poly_at(polynomial, 17)
+    assert check_proof_single(commitment, proof, 17, value, setup)
     print("Single point check passed")
 
     root_of_unity = get_root_of_unity(8)
     x = 5431
     coset = [x * pow(root_of_unity, i, MODULUS) for i in range(8)]
     ys = [eval_poly_at(polynomial, z) for z in coset]
-    proof = compute_proof_multi(polynomial, x, 8)
-    assert check_proof_multi(commitment, proof, x, ys)
+    proof = compute_proof_multi(polynomial, x, 8, setup)
+    assert check_proof_multi(commitment, proof, x, ys, setup)
     print("Coset check passed")
