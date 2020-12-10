@@ -57,8 +57,6 @@ def fk20_multi(polynomial, l, setup):
     
     h = toeplitz_part3(hext_fft)
 
-    h = h + [b.Z1] * k
-    
     # The proofs are the DFT of the h vector
     return fft(h, MODULUS, get_root_of_unity(k))
 
