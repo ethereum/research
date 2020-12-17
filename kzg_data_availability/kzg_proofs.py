@@ -181,9 +181,9 @@ def check_proof_single(commitment, proof, x, y, setup):
     #
 
     s_minus_x = b.add(setup[1][1], b.multiply(b.neg(b.G2), x))
-    proof_minus_y = b.add(commitment, b.multiply(b.neg(b.G1), y))
+    commitment_minus_y = b.add(commitment, b.multiply(b.neg(b.G1), y))
 
-    pairing_check = b.pairing(b.G2, b.neg(proof_minus_y), False)
+    pairing_check = b.pairing(b.G2, b.neg(commitment_minus_y), False)
     pairing_check *= b.pairing(s_minus_x, proof, False)
     pairing = b.final_exponentiate(pairing_check)
 
