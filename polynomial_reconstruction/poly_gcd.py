@@ -14,14 +14,20 @@ class PrimeFieldExtended(PrimeField):
         assert pow(primitive_root, (modulus - 1) // 2, modulus) != 1
         self.primitive_root = primitive_root
 
-    def mul_many_polys(self, ps):
-        n = next_power_of_two(sum(self.degree(p) for p in ps) + 1)
+    def mul_many_polys(self, ps, result_in_evaluation_form=False, size=0):
+        if result_in_evaluation_form:
+            n = size
+        else:
+            n = next_power_of_two(sum(self.degree(p) for p in ps) + 1)
         if (self.modulus - 1) % n == 0:
             root_of_unity = pow(self.primitive_root, (self.modulus - 1) // n, self.modulus)
             ps_fft = [fft(p, self.modulus, root_of_unity) for p in ps]
             r = [prod(l) for l in zip(*ps_fft)]
+            if result_in_evaluation_form:
+                return r
             return self.truncate_poly(fft(r, self.modulus, root_of_unity, inv=True))
         else:
+            assert not result_in_evaluation_form
             return reduce(lambda a, b: super().mul_polys(a, b), ps)
 
     def mul_polys(self, a, b):
