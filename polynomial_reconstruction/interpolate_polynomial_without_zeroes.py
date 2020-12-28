@@ -13,7 +13,7 @@ primefield = PrimeFieldExtended(MODULUS, PRIMITIVE_ROOT_OF_UNITY)
 assert pow(PRIMITIVE_ROOT_OF_UNITY, MODULUS - 1, MODULUS) == 1
 assert pow(PRIMITIVE_ROOT_OF_UNITY, (MODULUS - 1) // 2, MODULUS) != 1
 
-n = 2**15
+n = 2**14
 ROOT_OF_UNITY = pow(PRIMITIVE_ROOT_OF_UNITY, (MODULUS - 1)//n, MODULUS)
 DOMAIN = [pow(ROOT_OF_UNITY, i, MODULUS) for i in range(n)]
 
@@ -94,9 +94,9 @@ def interpolate_polynomial_without_zeroes(root_of_unity, samples):
 
 
 if __name__ == "__main__":
-    length = 16385
+    length = 8193
 
-    poly = [i % 10 for i in range(length)]
+    poly = [10**i % MODULUS for i in range(length)]
     data = fft(poly, MODULUS, ROOT_OF_UNITY)
     samples = data[:length] + [None] * (n - length)
 
