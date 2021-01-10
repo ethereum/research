@@ -29,6 +29,9 @@ def expand_root_of_unity(root_of_unity, modulus):
 
 def fft(vals, modulus, root_of_unity, inv=False):
     rootz = expand_root_of_unity(root_of_unity, modulus)
+    return fft_with_rootz(vals, modulus, rootz, inv)
+
+def fft_with_rootz(vals, modulus, rootz, inv=False):
     # Fill in vals with zeroes if needed
     if len(rootz) > len(vals) + 1:
         vals = vals + [0] * (len(rootz) - len(vals) - 1)

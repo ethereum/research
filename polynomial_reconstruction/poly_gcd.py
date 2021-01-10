@@ -1,5 +1,5 @@
 from poly_utils import PrimeField
-from fft import fft
+from fft import fft, fft_with_rootz, expand_root_of_unity
 from math import prod
 
 def next_power_of_two(x):
@@ -14,6 +14,30 @@ class PrimeFieldExtended(PrimeField):
         assert pow(primitive_root, (modulus - 1) // 2, modulus) != 1
         self.primitive_root = primitive_root
 
+    def prod(self, l):
+        out = 1
+        for v in l:
+            out *= v
+            out %= self.modulus
+        return out
+
+    def mul_many_polys_with_precomputed_domain(self, ps, domain_full, result_in_evaluation_form=False, size=0):
+        if result_in_evaluation_form:
+            n = size
+        else:
+            n = next_power_of_two(sum(self.degree(p) for p in ps) + 1)
+        if (self.modulus - 1) % n == 0:
+            stride = len(domain_full)//n
+            ps_fft = [fft_with_rootz(p, self.modulus, domain_full[::stride]) for p in ps]
+            r = [self.prod(l) for l in zip(*ps_fft)]
+            if result_in_evaluation_form:
+                return r
+            # stride = len(domain_full)//next_power_of_two(len(r))
+            return self.truncate_poly(fft_with_rootz(r, self.modulus, domain_full[::stride], inv=True))
+        else:
+            assert not result_in_evaluation_form
+            return reduce(lambda a, b: super().mul_polys(a, b), ps)
+
     def mul_many_polys(self, ps, result_in_evaluation_form=False, size=0):
         if result_in_evaluation_form:
             n = size
@@ -22,7 +46,7 @@ class PrimeFieldExtended(PrimeField):
         if (self.modulus - 1) % n == 0:
             root_of_unity = pow(self.primitive_root, (self.modulus - 1) // n, self.modulus)
             ps_fft = [fft(p, self.modulus, root_of_unity) for p in ps]
-            r = [prod(l) for l in zip(*ps_fft)]
+            r = [self.prod(l) for l in zip(*ps_fft)]
             if result_in_evaluation_form:
                 return r
             return self.truncate_poly(fft(r, self.modulus, root_of_unity, inv=True))
@@ -41,7 +65,7 @@ class PrimeFieldExtended(PrimeField):
                 assert pow(root_of_unity, n // 2, self.modulus) != 1
                 a_fft = fft(self.truncate_poly(a), self.modulus, root_of_unity)
                 b_fft = fft(self.truncate_poly(b), self.modulus, root_of_unity)
-                r = [x * y for x, y in zip(a_fft, b_fft)]
+                r = [(x * y) % self.modulus for x, y in zip(a_fft, b_fft)]
                 return self.truncate_poly(fft(r, self.modulus, root_of_unity, inv=True))
             else:
                 return super().mul_polys(a, b)
