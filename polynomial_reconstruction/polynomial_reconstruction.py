@@ -1,5 +1,5 @@
-from poly_gcd import PrimeFieldExtended
-from fft import fft, shift_poly, expand_root_of_unity
+from poly_gcd import PrimeFieldExtended, next_power_of_two
+from fft import fft, fft_with_rootz, shift_poly, expand_root_of_unity
 from random import randint
 from time import time
 import py_ecc.optimized_bls12_381 as b
@@ -63,6 +63,15 @@ def make_leaf(domain: list, indices: list) -> list:
             out[0] %= primefield.modulus
     return out
 
+def reduce_leaves(ps, domain_full):
+    n = next_power_of_two(sum(primefield.degree(p) for p in ps) + 1)
+    assert (primefield.modulus - 1) % n == 0
+    stride = len(domain_full)//n
+    ps_fft = [fft_with_rootz(p, primefield.modulus, domain_full[::stride]) for p in ps]
+    r = [primefield.prod(l) for l in zip(*ps_fft)]
+    assert len(r) == n
+    return fft_with_rootz(r, primefield.modulus, domain_full[::stride], inv=True)
+
 
 def zero_polynomial_via_multiplication(root_of_unity, zero_vector):
     reduction_factor = 4
@@ -83,13 +92,13 @@ def zero_polynomial_via_multiplication(root_of_unity, zero_vector):
         # split into two (almost) equal length polys when the length gets small
         if reduction_factor < len(ps) < 2 * reduction_factor:
             psnew = []
-            psnew.append(primefield.mul_many_polys_with_precomputed_domain(ps[:len(ps) // 2], domain))
-            psnew.append(primefield.mul_many_polys_with_precomputed_domain(ps[len(ps) // 2:], domain))
+            psnew.append(reduce_leaves(ps[:len(ps) // 2], domain))
+            psnew.append(reduce_leaves(ps[len(ps) // 2:], domain))
         else:
             psnew = []
             for i in range(0, len(ps), reduction_factor):
                 l = ps[i:min(len(ps), i+reduction_factor)]
-                psnew.append(primefield.mul_many_polys_with_precomputed_domain(l, domain))
+                psnew.append(reduce_leaves(l, domain))
         ps = psnew
 
     time_d = time()

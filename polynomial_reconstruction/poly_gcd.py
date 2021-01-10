@@ -1,6 +1,5 @@
 from poly_utils import PrimeField
-from fft import fft, fft_with_rootz, expand_root_of_unity
-from math import prod
+from fft import fft
 
 def next_power_of_two(x):
     return 2**((x - 1).bit_length())
@@ -20,23 +19,6 @@ class PrimeFieldExtended(PrimeField):
             out *= v
             out %= self.modulus
         return out
-
-    def mul_many_polys_with_precomputed_domain(self, ps, domain_full, result_in_evaluation_form=False, size=0):
-        if result_in_evaluation_form:
-            n = size
-        else:
-            n = next_power_of_two(sum(self.degree(p) for p in ps) + 1)
-        if (self.modulus - 1) % n == 0:
-            stride = len(domain_full)//n
-            ps_fft = [fft_with_rootz(p, self.modulus, domain_full[::stride]) for p in ps]
-            r = [self.prod(l) for l in zip(*ps_fft)]
-            if result_in_evaluation_form:
-                return r
-            # stride = len(domain_full)//next_power_of_two(len(r))
-            return self.truncate_poly(fft_with_rootz(r, self.modulus, domain_full[::stride], inv=True))
-        else:
-            assert not result_in_evaluation_form
-            return reduce(lambda a, b: super().mul_polys(a, b), ps)
 
     def mul_many_polys(self, ps, result_in_evaluation_form=False, size=0):
         if result_in_evaluation_form:
