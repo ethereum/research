@@ -64,11 +64,14 @@ def make_leaf(domain: list, indices: list) -> list:
     return out
 
 def reduce_leaves(ps, domain_full):
-    n = next_power_of_two(sum(primefield.degree(p) for p in ps) + 1)
+    n = next_power_of_two(sum(len(p) for p in ps))
     assert (primefield.modulus - 1) % n == 0
     stride = len(domain_full)//n
-    ps_fft = [fft_with_rootz(p, primefield.modulus, domain_full[::stride]) for p in ps]
-    r = [primefield.prod(l) for l in zip(*ps_fft)]
+    r = fft_with_rootz(ps[0], primefield.modulus, domain_full[::stride])
+    for p in ps[1:]:
+        p_fft = fft_with_rootz(p, primefield.modulus, domain_full[::stride])
+        for i in range(len(r)):
+            r[i] = (r[i] * p_fft[i]) % primefield.modulus
     assert len(r) == n
     return fft_with_rootz(r, primefield.modulus, domain_full[::stride], inv=True)
 
