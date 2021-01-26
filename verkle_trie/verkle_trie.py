@@ -212,10 +212,111 @@ def log_time_if_eligible(string, width, eligible):
         lasttime[0] = time()
 
 
-def make_proof(trie, keys, display_times=True):
+def make_kzg_multiproof(Cs, fs, indices, ys, display_times=True):
     """
-    Creates a proof for the 'keys' in the verkle trie given by 'trie' according to
-    https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg?both
+    Computes a KZG multiproof according to the schema described here:
+    https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg
+
+    zs[i] = DOMAIN[indexes[i]]
+    """
+
+    # Step 1: Construct g(X) polynomial in evaluation form
+    r = hash_to_int([hash(C) for C in Cs] + indices + ys)
+
+    log_time_if_eligible("   Hashed to r", 30, display_times)
+
+    g = [0 for i in range(WIDTH)]
+    power_of_r = 1
+    for f, index in zip(fs, indices):
+        quotient = kzg_utils.compute_inner_quotient_in_evaluation_form(f, index)
+        for i in range(WIDTH):
+            g[i] += power_of_r * quotient[i]
+
+        power_of_r = power_of_r * r % MODULUS
+
+    log_time_if_eligible("   Computed g polynomial", 30, display_times)
+
+    D = kzg_utils.compute_commitment_lagrange({i: v for i, v in enumerate(g)})
+
+    log_time_if_eligible("   Computed commitment D", 30, display_times)
+
+    # Step 2: Compute f in evaluation form
+    
+    t = hash_to_int([r, D])
+    
+    h = [0 for i in range(WIDTH)]
+    power_of_r = 1
+    
+    for f, index in zip(fs, indices):
+        denominator_inv = primefield.inv(t - DOMAIN[index])
+        for i in range(WIDTH):
+            h[i] += power_of_r * f[i] * denominator_inv % MODULUS
+            
+        power_of_r = power_of_r * r % MODULUS
+   
+    log_time_if_eligible("   Computed h polynomial", 30, display_times)
+
+    # Step 3: Evaluate and compute KZG proofs
+
+    y, pi = kzg_utils.evaluate_and_compute_kzg_proof(h, t)
+    w, rho = kzg_utils.evaluate_and_compute_kzg_proof(g, t)
+
+    log_time_if_eligible("   Computed KZG proofs", 30, display_times)
+
+    return D.compress(), y, w, pi.compress(), rho.compress()
+
+
+def check_kzg_multiproof(Cs, indices, ys, proof, display_times=True):
+    """
+    Verifies a KZG multiproof according to the schema described here:
+    https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg
+    """
+
+    D_serialized, y, w, pi_serialized, rho_serialized = proof
+    D = blst.P1(D_serialized)
+    pi = blst.P1(pi_serialized)
+    rho = blst.P1(rho_serialized)
+
+    # Step 1
+    r = hash_to_int([hash(C) for C in Cs] + indices + ys)
+
+    log_time_if_eligible("   Computed r hash", 30, display_times)
+    
+    # Step 2
+    t = hash_to_int([r, D])
+    E_coefficients = []
+    g_2_of_t = 0
+    power_of_r = 1
+
+    for index, y in zip(indices, ys):
+        E_coefficient = primefield.div(power_of_r, t - DOMAIN[index])
+        E_coefficients.append(E_coefficient)
+        g_2_of_t += E_coefficient * y % MODULUS
+            
+        power_of_r = power_of_r * r % MODULUS
+
+    log_time_if_eligible("   Computed g2 and e coeffs", 30, display_times)
+    
+    E = pippenger.pippenger_simple(Cs, E_coefficients)
+
+    log_time_if_eligible("   Computed E commitment", 30, display_times)
+
+    # Step 3 (Check KZG proofs)
+    if not w == (y - g_2_of_t) % MODULUS:
+        return False
+    if not kzg_utils.check_kzg_proof(D, t, w, rho):
+        return False
+    if not kzg_utils.check_kzg_proof(E, t, y, pi):
+        return False
+
+    log_time_if_eligible("   Checked KZG proofs", 30, display_times)
+
+    return True
+
+
+def make_verkle_proof(trie, keys, display_times=True):
+    """
+    Creates a proof for the 'keys' in the verkle trie given by 'trie'
     """
 
     start_logging_time_if_eligible("   Starting proof computation", display_times)
@@ -241,74 +342,28 @@ def make_proof(trie, keys, display_times=True):
     # Nodes sorted 
     nodes_sorted_by_index_and_subindex = list(map(lambda x: x[1], sorted(nodes_by_index_and_subindex.items())))
     
-    # The y_i
-    subindex_sorted_by_index_and_subindex = list(map(lambda x: x[0][1], sorted(nodes_by_index_and_subindex.items())))
+    indices = list(map(lambda x: x[0][1], sorted(nodes_by_index_and_subindex.items())))
     
-    # The z_i
-    subhash_sorted_by_index_and_subindex = list(map(lambda x: x[1][x[0][1]]["hash"], sorted(nodes_by_index_and_subindex.items())))
+    ys = list(map(lambda x: int.from_bytes(x[1][x[0][1]]["hash"], "little"), sorted(nodes_by_index_and_subindex.items())))
     
-    # Step 1: Construct g(X) polynomial in evaluation form
-    r = hash_to_int([x["hash"] for x in nodes_sorted_by_index_and_subindex] + 
-                    list(subindex_sorted_by_index_and_subindex) +
-                    list(subhash_sorted_by_index_and_subindex))
-
     log_time_if_eligible("   Sorted all commitments", 30, display_times)
 
-    g = [0 for i in range(WIDTH)]
-    power_of_r = 1
-    for node, subindex, subhash in zip(nodes_sorted_by_index_and_subindex,
-                                       subindex_sorted_by_index_and_subindex,
-                                       subhash_sorted_by_index_and_subindex):
-        
-        node_function = [int.from_bytes(node[i]["hash"], "little") if i in node else 0 for i in range(WIDTH)]
-        quotient = kzg_utils.compute_inner_quotient_in_evaluation_form(node_function, subindex)
-        for i in range(WIDTH):
-            g[i] += power_of_r * quotient[i]
+    fs = []
+    Cs = [x["commitment"] for x in nodes_sorted_by_index_and_subindex]
 
-        power_of_r = power_of_r * r % MODULUS
+    for node in nodes_sorted_by_index_and_subindex:
+        fs.append([int.from_bytes(node[i]["hash"], "little") if i in node else 0 for i in range(WIDTH)])
 
-    log_time_if_eligible("   Computed g polynomial", 30, display_times)
-
-    D = kzg_utils.compute_commitment_lagrange({i: v for i, v in enumerate(g)})
-
-    log_time_if_eligible("   Computed commitment D", 30, display_times)
-
-    # Step 2: Compute f in evaluation form
-    
-    t = hash_to_int([r, D])
-    
-    h = [0 for i in range(WIDTH)]
-    power_of_r = 1
-    
-    for node, subindex, subhash in zip(nodes_sorted_by_index_and_subindex,
-                                       subindex_sorted_by_index_and_subindex,
-                                       subhash_sorted_by_index_and_subindex):
-        denominator_inv = primefield.inv(t - DOMAIN[subindex])
-        for i in range(WIDTH):
-            if i in node:
-                node_value = int.from_bytes(node[i]["hash"], "little")
-                h[i] += power_of_r * node_value * denominator_inv % MODULUS
-            
-        power_of_r = power_of_r * r % MODULUS
-   
-    log_time_if_eligible("   Computed h polynomial", 30, display_times)
-
-    # Step 3: Evaluate and compute KZG proofs
-
-    y, pi = kzg_utils.evaluate_and_compute_kzg_proof(h, t)
-    w, rho = kzg_utils.evaluate_and_compute_kzg_proof(g, t)
-
-    log_time_if_eligible("   Computed KZG proofs", 30, display_times)
-
+    D, y, w, pi, rho = make_kzg_multiproof(Cs, fs, indices, ys, display_times)
 
     commitments_sorted_by_index_serialized = [x["commitment"].compress() for x in nodes_sorted_by_index[1:]]
     
     log_time_if_eligible("   Serialized commitments", 30, display_times)
 
-    return depths, commitments_sorted_by_index_serialized, D.compress(), y, w, pi.compress(), rho.compress()
+    return depths, commitments_sorted_by_index_serialized, D, y, w, pi, rho
 
 
-def check_proof(trie, keys, values, proof, display_times=True):
+def check_verkle_proof(trie, keys, values, proof, display_times=True):
     """
     Checks Verkle tree proof according to
     https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg?both
@@ -319,12 +374,9 @@ def check_proof(trie, keys, values, proof, display_times=True):
     # Unpack the proof
     depths, commitments_sorted_by_index_serialized, D_serialized, y, w, pi_serialized, rho_serialized = proof
     commitments_sorted_by_index = [blst.P1(trie)] + [blst.P1(x) for x in commitments_sorted_by_index_serialized]
-    D = blst.P1(D_serialized)
-    pi = blst.P1(pi_serialized)
-    rho = blst.P1(rho_serialized)
-    
-    indices = set()
-    indices_and_subindices = set()
+
+    all_indices = set()
+    all_indices_and_subindices = set()
     
     leaf_values_by_index_and_subindex = {}
 
@@ -332,78 +384,37 @@ def check_proof(trie, keys, values, proof, display_times=True):
     for key, value, depth in zip(keys, values, depths):
         verkle_indices = get_verkle_indices(key)
         for i in range(depth):
-            indices.add(verkle_indices[:i])
-            indices_and_subindices.add((verkle_indices[:i], verkle_indices[i]))
+            all_indices.add(verkle_indices[:i])
+            all_indices_and_subindices.add((verkle_indices[:i], verkle_indices[i]))
         leaf_values_by_index_and_subindex[(verkle_indices[:depth - 1], verkle_indices[depth - 1])] = hash([key, value])
     
-    indices = sorted(indices)
-    indices_and_subindices = sorted(indices_and_subindices)
+    all_indices = sorted(all_indices)
+    all_indices_and_subindices = sorted(all_indices_and_subindices)
 
     log_time_if_eligible("   Computed indices", 30, display_times)
 
-
     # Step 0: recreate the commitment list sorted by indices
-    commitments_by_index = {index: commitment for index, commitment in zip(indices, commitments_sorted_by_index)}
+    commitments_by_index = {index: commitment for index, commitment in zip(all_indices, commitments_sorted_by_index)}
     commitments_by_index_and_subindex = {index_and_subindex: commitments_by_index[index_and_subindex[0]]
-                                            for index_and_subindex in indices_and_subindices}
+                                            for index_and_subindex in all_indices_and_subindices}
 
     subhashes_by_index_and_subindex = {}
-    for index_and_subindex in indices_and_subindices:
+    for index_and_subindex in all_indices_and_subindices:
         full_subindex = index_and_subindex[0] + (index_and_subindex[1],)
         if full_subindex in commitments_by_index:
             subhashes_by_index_and_subindex[index_and_subindex] = hash(commitments_by_index[full_subindex])
         else:
             subhashes_by_index_and_subindex[index_and_subindex] = leaf_values_by_index_and_subindex[index_and_subindex]
     
-    commitments_sorted_by_index_and_subindex = list(map(lambda x: x[1], sorted(commitments_by_index_and_subindex.items())))
+    Cs = list(map(lambda x: x[1], sorted(commitments_by_index_and_subindex.items())))
     
-    subindex_sorted_by_index_and_subindex = list(map(lambda x: x[1], sorted(indices_and_subindices)))
+    indices = list(map(lambda x: x[1], sorted(all_indices_and_subindices)))
     
-    subhash_sorted_by_index_and_subindex = list(map(lambda x: x[1], sorted(subhashes_by_index_and_subindex.items())))
+    ys = list(map(lambda x: int.from_bytes(x[1], "little"), sorted(subhashes_by_index_and_subindex.items())))
 
     log_time_if_eligible("   Recreated commitment lists", 30, display_times)
 
-
-
-    # Step 1
-    r = hash_to_int(commitments_sorted_by_index_and_subindex + 
-                    subindex_sorted_by_index_and_subindex +
-                    subhash_sorted_by_index_and_subindex)
-
-    log_time_if_eligible("   Computed r hash", 30, display_times)
-
-    
-    # Step 2
-    t = hash_to_int([r, D])
-    E_coefficients = []
-    g_2_of_t = 0
-    power_of_r = 1
-
-    for subindex, subhash in zip(subindex_sorted_by_index_and_subindex, subhash_sorted_by_index_and_subindex):
-        subvalue = int.from_bytes(subhash, "little")
-        E_coefficient = primefield.div(power_of_r, t - DOMAIN[subindex])
-        E_coefficients.append(E_coefficient)
-        g_2_of_t += E_coefficient * subvalue % MODULUS
-            
-        power_of_r = power_of_r * r % MODULUS
-
-    log_time_if_eligible("   Computed g2 and e coeffs", 30, display_times)
-    
-    E = pippenger.pippenger_simple(commitments_sorted_by_index_and_subindex, E_coefficients)
-
-    log_time_if_eligible("   Computed E commitment", 30, display_times)
-
-    # Step 3 (Check KZG proofs)
-    if not w == (y - g_2_of_t) % MODULUS:
-        return False
-    if not kzg_utils.check_kzg_proof(D, t, w, rho):
-        return False
-    if not kzg_utils.check_kzg_proof(E, t, y, pi):
-        return False
-
-    log_time_if_eligible("   Checked KZG proofs", 30, display_times)
-
-    return True
+    return check_kzg_multiproof(Cs, indices, ys, [D_serialized, y, w, pi_serialized, rho_serialized], display_times)
 
 
 if __name__ == "__main__":
@@ -434,7 +445,7 @@ if __name__ == "__main__":
     keys_in_proof = all_keys[:number_of_keys_in_proof]
 
     time_c = time()
-    proof = make_proof(root, keys_in_proof)
+    proof = make_verkle_proof(root, keys_in_proof)
     time_d = time()
     
     proof_size = get_proof_size(proof)
@@ -442,7 +453,7 @@ if __name__ == "__main__":
     print("Computed proof for {0} keys (size = {1} bytes) in {2:.2f} s".format(number_of_keys_in_proof, proof_size, time_d - time_c))
 
     time_e = time()
-    check_proof(root["commitment"].compress(), keys_in_proof, [values[key] for key in keys_in_proof], proof)
+    check_verkle_proof(root["commitment"].compress(), keys_in_proof, [values[key] for key in keys_in_proof], proof)
     time_f = time()
 
     print("Checked proof in {0:.2f} s".format(time_f - time_e))
