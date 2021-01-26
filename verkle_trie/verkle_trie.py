@@ -203,13 +203,13 @@ lasttime = [0]
 def start_logging_time_if_eligible(string, eligible):
     if eligible:
         print(string)
-        lasttime[0] = time.time()
+        lasttime[0] = time()
 
         
 def log_time_if_eligible(string, width, eligible):
     if eligible:
-        print(string + ' ' * max(1, width - len(string)) + "{0:7.3f} s".format(time.time() - lasttime[0]))
-        lasttime[0] = time.time()
+        print(string + ' ' * max(1, width - len(string)) + "{0:7.3f} s".format(time() - lasttime[0]))
+        lasttime[0] = time()
 
 
 def make_proof(trie, keys, display_times=True):
