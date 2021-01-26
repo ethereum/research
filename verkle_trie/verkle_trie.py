@@ -197,6 +197,20 @@ def get_proof_size(proof):
     size += 48 + 32 + 32 + 48 + 48
     return size
 
+lasttime = [0]
+
+
+def start_logging_time_if_eligible(string, eligible):
+    if eligible:
+        print(string)
+        lasttime[0] = time.time()
+
+        
+def log_time_if_eligible(string, width, eligible):
+    if eligible:
+        print(string + ' ' * max(1, width - len(string)) + "{0:7.3f} s".format(time.time() - lasttime[0]))
+        lasttime[0] = time.time()
+
 
 def make_proof(trie, keys, display_times=True):
     """
@@ -204,9 +218,7 @@ def make_proof(trie, keys, display_times=True):
     https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg?both
     """
 
-    if display_times:
-        print("   Starting proof computation")
-        lasttime = time()
+    start_logging_time_if_eligible("   Starting proof computation", display_times)
 
     # Step 0: Find all keys in the trie
     nodes_by_index = {}
@@ -221,9 +233,7 @@ def make_proof(trie, keys, display_times=True):
             nodes_by_index[index] = node
             nodes_by_index_and_subindex[(index, subindex)] = node
 
-    if display_times:
-        print("   Computed key paths         {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Computed key paths", 30, display_times)
     
     # All commitments, but without any duplications. These are for sending over the wire as part of the proof
     nodes_sorted_by_index = list(map(lambda x: x[1], sorted(nodes_by_index.items())))
@@ -242,9 +252,7 @@ def make_proof(trie, keys, display_times=True):
                     list(subindex_sorted_by_index_and_subindex) +
                     list(subhash_sorted_by_index_and_subindex))
 
-    if display_times:
-        print("   Sorted all commitments     {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Sorted all commitments", 30, display_times)
 
     g = [0 for i in range(WIDTH)]
     power_of_r = 1
@@ -259,15 +267,11 @@ def make_proof(trie, keys, display_times=True):
 
         power_of_r = power_of_r * r % MODULUS
 
-    if display_times:
-        print("   Computed g polynomial      {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Computed g polynomial", 30, display_times)
 
     D = kzg_utils.compute_commitment_lagrange({i: v for i, v in enumerate(g)})
 
-    if display_times:
-        print("   Computed commitment D      {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Computed commitment D", 30, display_times)
 
     # Step 2: Compute f in evaluation form
     
@@ -286,26 +290,20 @@ def make_proof(trie, keys, display_times=True):
                 h[i] += power_of_r * node_value * denominator_inv % MODULUS
             
         power_of_r = power_of_r * r % MODULUS
-    
-    if display_times:
-        print("   Computed h polynomial      {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+   
+    log_time_if_eligible("   Computed h polynomial", 30, display_times)
 
     # Step 3: Evaluate and compute KZG proofs
 
     y, pi = kzg_utils.evaluate_and_compute_kzg_proof(h, t)
     w, rho = kzg_utils.evaluate_and_compute_kzg_proof(g, t)
 
-    if display_times:
-        print("   Computed KZG proofs        {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Computed KZG proofs", 30, display_times)
 
 
     commitments_sorted_by_index_serialized = [x["commitment"].compress() for x in nodes_sorted_by_index[1:]]
     
-    if display_times:
-        print("   Serialized commitments     {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Serialized commitments", 30, display_times)
 
     return depths, commitments_sorted_by_index_serialized, D.compress(), y, w, pi.compress(), rho.compress()
 
@@ -316,9 +314,7 @@ def check_proof(trie, keys, values, proof, display_times=True):
     https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg?both
     """
 
-    if display_times:
-        print("   Starting proof check")
-        lasttime = time()
+    start_logging_time_if_eligible("   Starting proof check", display_times)
 
     # Unpack the proof
     depths, commitments_sorted_by_index_serialized, D_serialized, y, w, pi_serialized, rho_serialized = proof
@@ -343,9 +339,8 @@ def check_proof(trie, keys, values, proof, display_times=True):
     indices = sorted(indices)
     indices_and_subindices = sorted(indices_and_subindices)
 
-    if display_times:
-        print("   Computed indices           {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Computed indices", 30, display_times)
+
 
     # Step 0: recreate the commitment list sorted by indices
     commitments_by_index = {index: commitment for index, commitment in zip(indices, commitments_sorted_by_index)}
@@ -366,9 +361,8 @@ def check_proof(trie, keys, values, proof, display_times=True):
     
     subhash_sorted_by_index_and_subindex = list(map(lambda x: x[1], sorted(subhashes_by_index_and_subindex.items())))
 
-    if display_times:
-        print("   Recreated commitment lists {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Recreated commitment lists", 30, display_times)
+
 
 
     # Step 1
@@ -376,9 +370,8 @@ def check_proof(trie, keys, values, proof, display_times=True):
                     subindex_sorted_by_index_and_subindex +
                     subhash_sorted_by_index_and_subindex)
 
-    if display_times:
-        print("   Computed r hash            {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Computed r hash", 30, display_times)
+
     
     # Step 2
     t = hash_to_int([r, D])
@@ -394,15 +387,11 @@ def check_proof(trie, keys, values, proof, display_times=True):
             
         power_of_r = power_of_r * r % MODULUS
 
-    if display_times:
-        print("   Computed g2 and E coefs    {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Computed g2 and e coeffs", 30, display_times)
     
     E = pippenger.pippenger_simple(commitments_sorted_by_index_and_subindex, E_coefficients)
 
-    if display_times:
-        print("   Computed E commitment      {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Computed E commitment", 30, display_times)
 
     # Step 3 (Check KZG proofs)
     if not w == (y - g_2_of_t) % MODULUS:
@@ -412,9 +401,7 @@ def check_proof(trie, keys, values, proof, display_times=True):
     if not kzg_utils.check_kzg_proof(E, t, y, pi):
         return False
 
-    if display_times:
-        print("   Checked KZG proofs         {0:7.3f} s".format(time() - lasttime))
-        lasttime = time()
+    log_time_if_eligible("   Checked KZG proofs", 30, display_times)
 
     return True
 
