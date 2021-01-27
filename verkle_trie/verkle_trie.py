@@ -34,7 +34,10 @@ ROOT_OF_UNITY = pow(PRIMITIVE_ROOT, (MODULUS - 1) // WIDTH, MODULUS)
 DOMAIN = [pow(ROOT_OF_UNITY, i, MODULUS) for i in range(WIDTH)]
 
 # Number of key-value pairs to insert
-n = 2**15
+NUMBER_INITIAL_KEYS = 2**15
+
+# Number of keys to insert after computing initial tree
+NUMBER_ADDITIONAL_KEYS = 512
 
 def generate_setup(size, secret):
     """
@@ -100,12 +103,62 @@ def insert_verkle_node(root, key, value):
         else:
             current_node[index] = {"node_type": "leaf", "key": key, "value": value}
             return
-    if current_node["key"] == "key":
+    if current_node["key"] == key:
         current_node["value"] = value
     else:
-        previous_node[index] = {"node_type": "inner", "commitment": blst.P1_generator().mult(0)}
+        previous_node[index] = {"node_type": "inner", "commitment": blst.G1().mult(0)}
         insert_verkle_node(root, key, value)
         insert_verkle_node(root, current_node["key"], current_node["value"])
+
+
+def update_verkle_node(root, key, value):
+    """
+    Update or insert node and update all commitments and hashes
+    """
+    current_node = root
+    indices = iter(get_verkle_indices(key))
+    index = None
+    path = []
+
+    new_node = {"node_type": "leaf", "key": key, "value": value}
+    add_node_hash(new_node)
+
+    while True:
+        index = next(indices)
+        path.append((index, current_node))
+        if index in current_node:
+            if current_node[index]["node_type"] == "leaf":
+                old_node = current_node[index]
+                if current_node[index]["key"] == key:
+                    current_node[index] = new_node
+                    value_change = (MODULUS + int.from_bytes(new_node["hash"], "little")
+                                    - int.from_bytes(old_node["hash"], "little")) % MODULUS
+                    break
+                else:
+                    new_inner_node = {"node_type": "inner"}
+                    new_index = next(indices)
+                    new_inner_node[new_index] = new_node
+                    old_index = get_verkle_indices(old_node["key"])[len(path)]
+                    new_inner_node[old_index] = old_node
+                    add_node_hash(new_inner_node)
+                    current_node[index] = new_inner_node
+                    value_change = (MODULUS + int.from_bytes(new_inner_node["hash"], "little")
+                                    - int.from_bytes(old_node["hash"], "little")) % MODULUS
+                    break
+            current_node = current_node[index]
+        else:
+            current_node[index] = new_node
+            value_change = int.from_bytes(new_node["hash"], "little") % MODULUS
+            break
+    
+    # Update all the parent commitments along 'path'
+    for index, node in reversed(path):
+        node["commitment"].add(SETUP["g1_lagrange"][index].dup().mult(value_change))
+        old_hash = node["hash"]
+        new_hash = hash(node["commitment"])
+        node["hash"] = new_hash
+        value_change = (MODULUS + int.from_bytes(new_hash, "little")
+                        - int.from_bytes(old_hash, "little")) % MODULUS
 
 
 def add_node_hash(node):
@@ -419,23 +472,33 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
 
 if __name__ == "__main__":
     # Build a random verkle trie
-    root = {"node_type": "inner", "commitment": blst.P1_generator().mult(0)}
+    root = {"node_type": "inner", "commitment": blst.G1().mult(0)}
 
     values = {}
 
-    for i in range(n):
+    for i in range(NUMBER_INITIAL_KEYS):
         key = randint(0, 2**256-1).to_bytes(32, "little")
         value = randint(0, 2**256-1).to_bytes(32, "little")
         insert_verkle_node(root, key, value)
         values[key] = value
         
-    print("Inserted {0} elements for an average depth of {1:.2f}".format(n, get_average_depth(root)))
+    print("Inserted {0} elements for an average depth of {1:.2f}".format(NUMBER_INITIAL_KEYS, get_average_depth(root)))
 
     time_a = time()
     add_node_hash(root)
     time_b = time()
 
     print("Computed verkle root in {0:.2f} s".format(time_b - time_a))
+
+    time_x = time()
+    for i in range(NUMBER_ADDITIONAL_KEYS):
+        key = randint(0, 2**256-1).to_bytes(32, "little")
+        value = randint(0, 2**256-1).to_bytes(32, "little")
+        update_verkle_node(root, key, value)
+        values[key] = value
+    time_y = time()
+        
+    print("Additionally inserted {0} elements in {1:.2f} s".format(NUMBER_ADDITIONAL_KEYS, time_y - time_x))
 
     number_of_keys_in_proof = 5000
 
