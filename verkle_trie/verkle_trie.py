@@ -482,13 +482,13 @@ if __name__ == "__main__":
         insert_verkle_node(root, key, value)
         values[key] = value
         
-    print("Inserted {0} elements for an average depth of {1:.2f}".format(NUMBER_INITIAL_KEYS, get_average_depth(root)))
+    print("Inserted {0} elements for an average depth of {1:.3f}".format(NUMBER_INITIAL_KEYS, get_average_depth(root)))
 
     time_a = time()
     add_node_hash(root)
     time_b = time()
 
-    print("Computed verkle root in {0:.2f} s".format(time_b - time_a))
+    print("Computed verkle root in {0:.3f} s".format(time_b - time_a))
 
     time_x = time()
     for i in range(NUMBER_ADDITIONAL_KEYS):
@@ -498,7 +498,7 @@ if __name__ == "__main__":
         values[key] = value
     time_y = time()
         
-    print("Additionally inserted {0} elements in {1:.2f} s".format(NUMBER_ADDITIONAL_KEYS, time_y - time_x))
+    print("Additionally inserted {0} elements in {1:.3f} s".format(NUMBER_ADDITIONAL_KEYS, time_y - time_x))
 
     number_of_keys_in_proof = 5000
 
@@ -513,10 +513,10 @@ if __name__ == "__main__":
     
     proof_size = get_proof_size(proof)
     
-    print("Computed proof for {0} keys (size = {1} bytes) in {2:.2f} s".format(number_of_keys_in_proof, proof_size, time_d - time_c))
+    print("Computed proof for {0} keys (size = {1} bytes) in {2:.3f} s".format(number_of_keys_in_proof, proof_size, time_d - time_c))
 
     time_e = time()
     check_verkle_proof(root["commitment"].compress(), keys_in_proof, [values[key] for key in keys_in_proof], proof)
     time_f = time()
 
-    print("Checked proof in {0:.2f} s".format(time_f - time_e))
+    print("Checked proof in {0:.3f} s".format(time_f - time_e))
