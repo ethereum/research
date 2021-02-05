@@ -332,10 +332,10 @@ def find_node_with_path(root, key):
     
 
 def get_proof_size(proof):
-    depths, commitments_sorted_by_index_serialized, D_serialized, y, w, pi_serialized, rho_serialized = proof
+    depths, commitments_sorted_by_index_serialized, D_serialized, y, sigma_serialized = proof
     size = len(depths) # assume 8 bit integer to represent the depth
     size += 48 * len(commitments_sorted_by_index_serialized)
-    size += 48 + 32 + 32 + 48 + 48
+    size += 48 + 32 + 48
     return size
 
 lasttime = [0]
@@ -402,9 +402,16 @@ def make_kzg_multiproof(Cs, fs, indices, ys, display_times=True):
     y, pi = kzg_utils.evaluate_and_compute_kzg_proof(h, t)
     w, rho = kzg_utils.evaluate_and_compute_kzg_proof(g, t)
 
+
+    # Compress both proofs into one
+
+    E = kzg_utils.compute_commitment_lagrange({i: v for i, v in enumerate(h)})
+    q = hash_to_int([E, D, y, w])
+    sigma = pi.dup().add(rho.dup().mult(q))
+
     log_time_if_eligible("   Computed KZG proofs", 30, display_times)
 
-    return D.compress(), y, w, pi.compress(), rho.compress()
+    return D.compress(), y, sigma.compress()
 
 
 def check_kzg_multiproof(Cs, indices, ys, proof, display_times=True):
@@ -413,10 +420,9 @@ def check_kzg_multiproof(Cs, indices, ys, proof, display_times=True):
     https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg
     """
 
-    D_serialized, y, w, pi_serialized, rho_serialized = proof
+    D_serialized, y, sigma_serialized = proof
     D = blst.P1(D_serialized)
-    pi = blst.P1(pi_serialized)
-    rho = blst.P1(rho_serialized)
+    sigma = blst.P1(sigma_serialized)
 
     # Step 1
     r = hash_to_int([hash(C) for C in Cs] + indices + ys)
@@ -443,11 +449,11 @@ def check_kzg_multiproof(Cs, indices, ys, proof, display_times=True):
     log_time_if_eligible("   Computed E commitment", 30, display_times)
 
     # Step 3 (Check KZG proofs)
-    if not w == (y - g_2_of_t) % MODULUS:
-        return False
-    if not kzg_utils.check_kzg_proof(D, t, w, rho):
-        return False
-    if not kzg_utils.check_kzg_proof(E, t, y, pi):
+    w = (y - g_2_of_t) % MODULUS
+
+    q = hash_to_int([E, D, y, w])
+
+    if not kzg_utils.check_kzg_proof(E.dup().add(D.dup().mult(q)), t, y + q * w, sigma):
         return False
 
     log_time_if_eligible("   Checked KZG proofs", 30, display_times)
@@ -495,13 +501,13 @@ def make_verkle_proof(trie, keys, display_times=True):
     for node in nodes_sorted_by_index_and_subindex:
         fs.append([int.from_bytes(node[i]["hash"], "little") if i in node else 0 for i in range(WIDTH)])
 
-    D, y, w, pi, rho = make_kzg_multiproof(Cs, fs, indices, ys, display_times)
+    D, y, sigma = make_kzg_multiproof(Cs, fs, indices, ys, display_times)
 
     commitments_sorted_by_index_serialized = [x["commitment"].compress() for x in nodes_sorted_by_index[1:]]
     
     log_time_if_eligible("   Serialized commitments", 30, display_times)
 
-    return depths, commitments_sorted_by_index_serialized, D, y, w, pi, rho
+    return depths, commitments_sorted_by_index_serialized, D, y, sigma
 
 
 def check_verkle_proof(trie, keys, values, proof, display_times=True):
@@ -513,7 +519,7 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
     start_logging_time_if_eligible("   Starting proof check", display_times)
 
     # Unpack the proof
-    depths, commitments_sorted_by_index_serialized, D_serialized, y, w, pi_serialized, rho_serialized = proof
+    depths, commitments_sorted_by_index_serialized, D_serialized, y, sigma_serialized = proof
     commitments_sorted_by_index = [blst.P1(trie)] + [blst.P1(x) for x in commitments_sorted_by_index_serialized]
 
     all_indices = set()
@@ -555,7 +561,7 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
 
     log_time_if_eligible("   Recreated commitment lists", 30, display_times)
 
-    return check_kzg_multiproof(Cs, indices, ys, [D_serialized, y, w, pi_serialized, rho_serialized], display_times)
+    return check_kzg_multiproof(Cs, indices, ys, [D_serialized, y, sigma_serialized], display_times)
 
 
 if __name__ == "__main__":
