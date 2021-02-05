@@ -39,6 +39,12 @@ NUMBER_INITIAL_KEYS = 2**15
 # Number of keys to insert after computing initial tree
 NUMBER_ADDITIONAL_KEYS = 512
 
+# Number of keys to delete
+NUMBER_DELETED_KEYS = 512
+
+# Number of key/values pair in proof
+NUMBER_KEYS_PROOF = 5000
+
 def generate_setup(size, secret):
     """
     Generates a setup in the G1 group and G2 group, as well as the Lagrange polynomials in G1 (via FFT)
@@ -161,6 +167,60 @@ def update_verkle_node(root, key, value):
                         - int.from_bytes(old_hash, "little")) % MODULUS
 
 
+def get_only_child(node):
+    """
+    Returns the only child of a node which has only one child. Returns 'None' if node has 0 or >1 children
+    """
+    child_count = 0
+    only_child = None
+    for key in node:
+        if isinstance(key, int):
+            child_count += 1
+            only_child = node[key]
+    return only_child if child_count == 1 else None
+
+
+def delete_verkle_node(root, key):
+    """
+    Delete node and update all commitments and hashes
+    """
+    current_node = root
+    indices = iter(get_verkle_indices(key))
+    index = None
+    path = []
+
+    while True:
+        index = next(indices)
+        path.append((index, current_node))
+        assert index in current_node, "Tried to delete non-existent key"
+        if current_node[index]["node_type"] == "leaf":
+            deleted_node = current_node[index]
+            assert deleted_node["key"] == key, "Tried to delete non-existent key"
+            del current_node[index]
+            value_change = (MODULUS - int.from_bytes(deleted_node["hash"], "little")) % MODULUS
+            break
+        current_node = current_node[index]
+    
+    # Update all the parent commitments along 'path'
+    replacement_node = None
+    for index, node in reversed(path):
+        if replacement_node != None:
+            node[index] = replacement_node
+            replacement_node = None
+        only_child = get_only_child(node)
+        if only_child != None and only_child["node_type"] == "leaf" and node != root:
+            replacement_node = only_child
+            value_change = (MODULUS + int.from_bytes(only_child["hash"], "little")
+                            - int.from_bytes(node["hash"], "little")) % MODULUS
+        else:            
+            node["commitment"].add(SETUP["g1_lagrange"][index].dup().mult(value_change))
+            old_hash = node["hash"]
+            new_hash = hash(node["commitment"])
+            node["hash"] = new_hash
+            value_change = (MODULUS + int.from_bytes(new_hash, "little")
+                            - int.from_bytes(old_hash, "little")) % MODULUS
+
+
 def add_node_hash(node):
     """
     Recursively adds all missing commitments and hashes to a verkle trie structure.
@@ -195,6 +255,34 @@ def get_total_depth(root):
         return total_depth, num_nodes
     else:
         return 0, 1
+
+
+def check_valid_tree(root, is_trie_root=True):
+    """
+    Checks that the tree is valid
+    """
+    if root["node_type"] == "inner":
+        if not is_trie_root:
+            only_child = get_only_child(root)
+            if only_child is not None:
+                assert only_child["node_type"] == "inner"
+    
+        lagrange_polynomials = []
+        values = {}
+        for i in range(WIDTH):
+            if i in root:
+                if "hash" not in root[i]:
+                    add_node_hash(node[i])
+                values[i] = int.from_bytes(root[i]["hash"], "little")
+        commitment = kzg_utils.compute_commitment_lagrange(values)
+        assert root["commitment"].is_equal(commitment)
+        assert root["hash"] == hash(commitment.compress())
+
+        for i in range(WIDTH):
+            if i in root:
+                check_valid_tree(root[i], False)
+    else:
+        assert root["hash"] == hash([root["key"], root["value"]])
 
 
 def get_average_depth(trie):
@@ -490,6 +578,12 @@ if __name__ == "__main__":
 
     print("Computed verkle root in {0:.3f} s".format(time_b - time_a))
 
+    time_a = time()
+    check_valid_tree(root)
+    time_b = time()
+    
+    print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a))
+
     time_x = time()
     for i in range(NUMBER_ADDITIONAL_KEYS):
         key = randint(0, 2**256-1).to_bytes(32, "little")
@@ -499,24 +593,51 @@ if __name__ == "__main__":
     time_y = time()
         
     print("Additionally inserted {0} elements in {1:.3f} s".format(NUMBER_ADDITIONAL_KEYS, time_y - time_x))
+    print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root)[1], get_average_depth(root)))
 
-    number_of_keys_in_proof = 5000
+    time_a = time()
+    check_valid_tree(root)
+    time_b = time()
+    
+    print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a))
 
     all_keys = list(values.keys())
     shuffle(all_keys)
 
-    keys_in_proof = all_keys[:number_of_keys_in_proof]
+    keys_to_delete = all_keys[:NUMBER_DELETED_KEYS]
 
-    time_c = time()
+    time_a = time()
+    for key in keys_to_delete:
+        delete_verkle_node(root, key)
+        del values[key]
+    time_b = time()
+    
+    print("Deleted {0} elements in {1:.3f} s".format(NUMBER_DELETED_KEYS, time_b - time_a))
+    print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root)[1], get_average_depth(root)))
+
+
+    time_a = time()
+    check_valid_tree(root)
+    time_b = time()
+    
+    print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a))
+
+
+    all_keys = list(values.keys())
+    shuffle(all_keys)
+
+    keys_in_proof = all_keys[:NUMBER_KEYS_PROOF]
+
+    time_a = time()
     proof = make_verkle_proof(root, keys_in_proof)
-    time_d = time()
+    time_b = time()
     
     proof_size = get_proof_size(proof)
     
-    print("Computed proof for {0} keys (size = {1} bytes) in {2:.3f} s".format(number_of_keys_in_proof, proof_size, time_d - time_c))
+    print("Computed proof for {0} keys (size = {1} bytes) in {2:.3f} s".format(NUMBER_KEYS_PROOF, proof_size, time_b - time_a))
 
-    time_e = time()
+    time_a = time()
     check_verkle_proof(root["commitment"].compress(), keys_in_proof, [values[key] for key in keys_in_proof], proof)
-    time_f = time()
+    time_b = time()
 
-    print("Checked proof in {0:.3f} s".format(time_f - time_e))
+    print("Checked proof in {0:.3f} s".format(time_b - time_a))
