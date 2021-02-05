@@ -37,7 +37,7 @@ DOMAIN = [pow(ROOT_OF_UNITY, i, MODULUS) for i in range(WIDTH)]
 NUMBER_INITIAL_KEYS = 2**15
 
 # Number of keys to insert after computing initial tree
-NUMBER_ADDITIONAL_KEYS = 512
+NUMBER_ADDED_KEYS = 512
 
 # Number of keys to delete
 NUMBER_DELETED_KEYS = 512
@@ -591,14 +591,14 @@ if __name__ == "__main__":
     print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a))
 
     time_x = time()
-    for i in range(NUMBER_ADDITIONAL_KEYS):
+    for i in range(NUMBER_ADDED_KEYS):
         key = randint(0, 2**256-1).to_bytes(32, "little")
         value = randint(0, 2**256-1).to_bytes(32, "little")
         update_verkle_node(root, key, value)
         values[key] = value
     time_y = time()
         
-    print("Additionally inserted {0} elements in {1:.3f} s".format(NUMBER_ADDITIONAL_KEYS, time_y - time_x))
+    print("Additionally inserted {0} elements in {1:.3f} s".format(NUMBER_ADDED_KEYS, time_y - time_x))
     print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root)[1], get_average_depth(root)))
 
     time_a = time()
