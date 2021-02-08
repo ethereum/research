@@ -6,6 +6,7 @@ from poly_utils import PrimeField
 from time import time
 from kzg_utils import KzgUtils
 from fft import fft
+import sys
 
 #
 # Proof of concept implementation for verkle tries
@@ -54,8 +55,6 @@ def generate_setup(size, secret):
     g1_lagrange = fft(g1_setup, MODULUS, ROOT_OF_UNITY, inv=True)
     return {"g1": g1_setup, "g2": g2_setup, "g1_lagrange": g1_lagrange}
 
-SETUP = generate_setup(WIDTH, 8927347823478352432985)
-kzg_utils = KzgUtils(MODULUS, WIDTH, DOMAIN, SETUP, primefield)
 
 def get_verkle_indices(key):
     """
@@ -143,8 +142,10 @@ def update_verkle_node(root, key, value):
                 else:
                     new_inner_node = {"node_type": "inner"}
                     new_index = next(indices)
-                    new_inner_node[new_index] = new_node
                     old_index = get_verkle_indices(old_node["key"])[len(path)]
+                    # TODO! Handle old_index == new_index
+                    assert old_index != new_index
+                    new_inner_node[new_index] = new_node
                     new_inner_node[old_index] = old_node
                     add_node_hash(new_inner_node)
                     current_node[index] = new_inner_node
@@ -343,13 +344,13 @@ lasttime = [0]
 
 def start_logging_time_if_eligible(string, eligible):
     if eligible:
-        print(string)
+        print(string, file=sys.stderr)
         lasttime[0] = time()
 
         
 def log_time_if_eligible(string, width, eligible):
     if eligible:
-        print(string + ' ' * max(1, width - len(string)) + "{0:7.3f} s".format(time() - lasttime[0]))
+        print(string + ' ' * max(1, width - len(string)) + "{0:7.3f} s".format(time() - lasttime[0]), file=sys.stderr)
         lasttime[0] = time()
 
 
@@ -565,6 +566,23 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        WIDTH_BITS = int(sys.argv[1])
+        WIDTH = 2 ** WIDTH_BITS
+        ROOT_OF_UNITY = pow(PRIMITIVE_ROOT, (MODULUS - 1) // WIDTH, MODULUS)
+        DOMAIN = [pow(ROOT_OF_UNITY, i, MODULUS) for i in range(WIDTH)]
+
+        NUMBER_INITIAL_KEYS = int(sys.argv[2])
+
+        NUMBER_KEYS_PROOF = int(sys.argv[3])
+
+        NUMBER_DELETED_KEYS = 0
+        NUMBER_ADDED_KEYS = 0
+    
+    SETUP = generate_setup(WIDTH, 8927347823478352432985)
+    kzg_utils = KzgUtils(MODULUS, WIDTH, DOMAIN, SETUP, primefield)
+
+
     # Build a random verkle trie
     root = {"node_type": "inner", "commitment": blst.G1().mult(0)}
 
@@ -575,58 +593,64 @@ if __name__ == "__main__":
         value = randint(0, 2**256-1).to_bytes(32, "little")
         insert_verkle_node(root, key, value)
         values[key] = value
+    
+    average_depth = get_average_depth(root)
         
-    print("Inserted {0} elements for an average depth of {1:.3f}".format(NUMBER_INITIAL_KEYS, get_average_depth(root)))
+    print("Inserted {0} elements for an average depth of {1:.3f}".format(NUMBER_INITIAL_KEYS, average_depth), file=sys.stderr)
 
     time_a = time()
     add_node_hash(root)
     time_b = time()
 
-    print("Computed verkle root in {0:.3f} s".format(time_b - time_a))
+    print("Computed verkle root in {0:.3f} s".format(time_b - time_a), file=sys.stderr)
 
-    time_a = time()
-    check_valid_tree(root)
-    time_b = time()
-    
-    print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a))
+    if NUMBER_ADDED_KEYS > 0:
 
-    time_x = time()
-    for i in range(NUMBER_ADDED_KEYS):
-        key = randint(0, 2**256-1).to_bytes(32, "little")
-        value = randint(0, 2**256-1).to_bytes(32, "little")
-        update_verkle_node(root, key, value)
-        values[key] = value
-    time_y = time()
+        time_a = time()
+        check_valid_tree(root)
+        time_b = time()
         
-    print("Additionally inserted {0} elements in {1:.3f} s".format(NUMBER_ADDED_KEYS, time_y - time_x))
-    print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root)[1], get_average_depth(root)))
+        print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a), file=sys.stderr)
 
-    time_a = time()
-    check_valid_tree(root)
-    time_b = time()
+        time_x = time()
+        for i in range(NUMBER_ADDED_KEYS):
+            key = randint(0, 2**256-1).to_bytes(32, "little")
+            value = randint(0, 2**256-1).to_bytes(32, "little")
+            update_verkle_node(root, key, value)
+            values[key] = value
+        time_y = time()
+            
+        print("Additionally inserted {0} elements in {1:.3f} s".format(NUMBER_ADDED_KEYS, time_y - time_x), file=sys.stderr)
+        print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root)[1], get_average_depth(root)), file=sys.stderr)
+
+        time_a = time()
+        check_valid_tree(root)
+        time_b = time()
+        
+        print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a), file=sys.stderr)
     
-    print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a))
+    if NUMBER_DELETED_KEYS > 0:
 
-    all_keys = list(values.keys())
-    shuffle(all_keys)
+        all_keys = list(values.keys())
+        shuffle(all_keys)
 
-    keys_to_delete = all_keys[:NUMBER_DELETED_KEYS]
+        keys_to_delete = all_keys[:NUMBER_DELETED_KEYS]
 
-    time_a = time()
-    for key in keys_to_delete:
-        delete_verkle_node(root, key)
-        del values[key]
-    time_b = time()
-    
-    print("Deleted {0} elements in {1:.3f} s".format(NUMBER_DELETED_KEYS, time_b - time_a))
-    print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root)[1], get_average_depth(root)))
+        time_a = time()
+        for key in keys_to_delete:
+            delete_verkle_node(root, key)
+            del values[key]
+        time_b = time()
+        
+        print("Deleted {0} elements in {1:.3f} s".format(NUMBER_DELETED_KEYS, time_b - time_a), file=sys.stderr)
+        print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root)[1], get_average_depth(root)), file=sys.stderr)
 
 
-    time_a = time()
-    check_valid_tree(root)
-    time_b = time()
-    
-    print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a))
+        time_a = time()
+        check_valid_tree(root)
+        time_b = time()
+        
+        print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a), file=sys.stderr)
 
 
     all_keys = list(values.keys())
@@ -639,11 +663,15 @@ if __name__ == "__main__":
     time_b = time()
     
     proof_size = get_proof_size(proof)
+    proof_time = time_b - time_a
     
-    print("Computed proof for {0} keys (size = {1} bytes) in {2:.3f} s".format(NUMBER_KEYS_PROOF, proof_size, time_b - time_a))
+    print("Computed proof for {0} keys (size = {1} bytes) in {2:.3f} s".format(NUMBER_KEYS_PROOF, proof_size, time_b - time_a), file=sys.stderr)
 
     time_a = time()
     check_verkle_proof(root["commitment"].compress(), keys_in_proof, [values[key] for key in keys_in_proof], proof)
     time_b = time()
+    check_time = time_b - time_a
 
-    print("Checked proof in {0:.3f} s".format(time_b - time_a))
+    print("Checked proof in {0:.3f} s".format(time_b - time_a), file=sys.stderr)
+
+    print("{0}\t{1}\t{2}\t{3}\t{4}\t{5}\t{6}\t{7}".format(WIDTH_BITS, WIDTH, NUMBER_INITIAL_KEYS, NUMBER_KEYS_PROOF, average_depth, proof_size, proof_time, check_time))
