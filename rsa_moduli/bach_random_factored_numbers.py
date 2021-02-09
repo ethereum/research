@@ -10,6 +10,8 @@ import primefac
 output = mp.Queue()
 random_state = gmpy2.random_state()
 
+threshold_bits = 60
+
 def lg(x):
     return gmpy2.log(x) / gmpy2.log(2)
 
@@ -58,7 +60,7 @@ def process_f(N):
             return p, alpha
 
 def process_r(N):
-    if N < 1e18:
+    if N < 2**threshold_bits:
         x = gmpy2.mpz_random(random_state, (N + 1) // 2) + N // 2 + 1
         return x, factor_N(x)
     while True:
