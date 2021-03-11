@@ -82,7 +82,7 @@ def multisubset2(numbers, subsets, adder=lambda x,y: x+y, zero=0):
 # into a multi-subset problem, and computes the result efficiently
 def lincomb(numbers, factors, adder=lambda x,y: x+y, zero=0):
     # Maximum bit length of a number; how many subsets we need to make
-    maxbitlen = max(len(bin(f))-2 for f in factors)
+    maxbitlen = max((len(bin(f))-2 for f in factors), default=0)
     # Compute the subsets: the ith subset contains the numbers whose corresponding factor
     # has a 1 at the ith bit
     subsets = [{i for i in range(len(numbers)) if factors[i] & (1 << j)} for j in range(maxbitlen+1)]
