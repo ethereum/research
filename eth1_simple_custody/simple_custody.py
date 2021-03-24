@@ -1,6 +1,5 @@
 import blst
 import hashlib
-from random import randint, shuffle
 from poly_utils import PrimeField
 from time import time
 import sys
