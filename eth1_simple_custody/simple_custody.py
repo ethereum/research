@@ -114,31 +114,24 @@ def generate_setup(N, secret):
 def compute_proof(setup, secret_key, custody_value):
     values = [secret_key + C_CONSTANTS[i] * custody_value + D_CONSTANTS[i] for i in range(N)]
     square_roots = [mod_sqrt(value) for value in values]
-    a = primefield.lagrange_interp(list(range(N)), square_roots)
-    A = lincomb_naive(setup["g1_lagrange"], [secret_key] * N)
-    D = lincomb_naive(setup["g1"][:N], a)
-    E = lincomb_naive(setup["g2"][:N], a, start_value=blst.G2().mult(0))
+    d = primefield.lagrange_interp(list(range(N)), square_roots)
+    D = lincomb_naive(setup["g1"][:N], d)
+    E = lincomb_naive(setup["g2"][:N], d, start_value=blst.G2().mult(0))
 
-    q = primefield.div_polys(primefield.mul_polys(a, a), primefield.zero_poly(list(range(N))))
+    q = primefield.div_polys(primefield.mul_polys(d, d), primefield.zero_poly(list(range(N))))
     Pi = lincomb_naive(setup["g1"][:N - 1], q)
-    return A.compress(), D.compress(), E.compress(), Pi.compress()
+    return D.compress(), E.compress(), Pi.compress()
 
 def check_proof_simple(setup, public_key_serialized, custody_value, proof):
-    A_serialized, D_serialized, E_serialized, Pi_serialized = proof
-    A = blst.P1(A_serialized)
+    D_serialized, E_serialized, Pi_serialized = proof
     D = blst.P1(D_serialized)
     E = blst.P2(E_serialized)
     Pi = blst.P1(Pi_serialized)
     public_key = blst.P1(public_key_serialized)
 
-    pairing = blst.PT(blst.G2().neg().to_affine(), A.to_affine())
-    pairing.mul(blst.PT(setup["g2_one"].to_affine(), public_key.to_affine()))
-    if not pairing.final_exp().is_one():
-        return False
-
     b_values = [C_CONSTANTS[i] * custody_value + D_CONSTANTS[i] for i in range(N)]
     B = lincomb_naive(setup["g1_lagrange"], b_values)
-    C = A.dup().add(B)
+    C = public_key.dup().add(B)
 
     pairing = blst.PT(blst.G2().to_affine(), D.to_affine())
     pairing.mul(blst.PT(E.to_affine(), blst.G1().neg().to_affine()))
@@ -155,8 +148,7 @@ def check_proof_simple(setup, public_key_serialized, custody_value, proof):
 
 
 def check_proof_combined(setup, public_key_serialized, custody_value, proof):
-    A_serialized, D_serialized, E_serialized, Pi_serialized = proof
-    A = blst.P1(A_serialized)
+    D_serialized, E_serialized, Pi_serialized = proof
     D = blst.P1(D_serialized)
     E = blst.P2(E_serialized)
     Pi = blst.P1(Pi_serialized)
@@ -168,13 +160,12 @@ def check_proof_combined(setup, public_key_serialized, custody_value, proof):
 
     b_values = [C_CONSTANTS[i] * custody_value + D_CONSTANTS[i] for i in range(N)]
     B = lincomb_naive(setup["g1_lagrange"], b_values)
-    C = A.dup().add(B)
+    C = public_key.dup().add(B)
 
-    pairing = blst.PT(blst.G2().neg().to_affine(), A.dup().mult(r2).add(D.dup().mult(r).add(C.dup())).to_affine())
-    pairing.mul(blst.PT(setup["g2_one"].to_affine(), public_key.dup().mult(r2).to_affine()))
-    pairing.mul(blst.PT(E.dup().mult(r).to_affine(), blst.G1().to_affine()))
-    pairing.mul(blst.PT(E.to_affine(), D.to_affine()))
-    pairing.mul(blst.PT(setup["g2_zero"].to_affine(), Pi.dup().neg().to_affine()))
+    pairing = blst.PT(blst.G2().mult(r).add(E).to_affine(), D.dup().neg().to_affine())
+    pairing.mul(blst.PT(E.to_affine(), blst.G1().mult(r).to_affine()))
+    pairing.mul(blst.PT(blst.G2().to_affine(), C.to_affine()))
+    pairing.mul(blst.PT(setup["g2_zero"].to_affine(), Pi.to_affine()))
 
     return pairing.final_exp().is_one()
 
