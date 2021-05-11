@@ -19,7 +19,7 @@ import sys
 MODULUS = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
 
 # Primitive root for the field
-PRIMITIVE_ROOT = 5
+PRIMITIVE_ROOT = 7
 
 assert pow(PRIMITIVE_ROOT, (MODULUS - 1) // 2, MODULUS) != 1
 assert pow(PRIMITIVE_ROOT, MODULUS - 1, MODULUS) == 1
