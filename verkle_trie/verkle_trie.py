@@ -363,7 +363,7 @@ def make_kzg_multiproof(Cs, fs, indices, ys, display_times=True):
     """
 
     # Step 1: Construct g(X) polynomial in evaluation form
-    r = hash_to_int([hash(C) for C in Cs] + indices + ys) % MODULUS
+    r = hash_to_int([hash(C) for C in Cs] + ys + [kzg_utils.DOMAIN[i] for i in indices]) % MODULUS
 
     log_time_if_eligible("   Hashed to r", 30, display_times)
 
@@ -426,7 +426,7 @@ def check_kzg_multiproof(Cs, indices, ys, proof, display_times=True):
     sigma = blst.P1(sigma_serialized)
 
     # Step 1
-    r = hash_to_int([hash(C) for C in Cs] + indices + ys)
+    r = hash_to_int([hash(C) for C in Cs] + ys + [kzg_utils.DOMAIN[i] for i in indices]) % MODULUS
 
     log_time_if_eligible("   Computed r hash", 30, display_times)
     
