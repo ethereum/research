@@ -9,9 +9,9 @@ class PrimeField():
         assert pow(2, MODULUS, MODULUS) == 2
         self.WIDTH = WIDTH
         self.MODULUS = MODULUS
-        self.DOMAIN = range(WIDTH)
+        self.DOMAIN = list(range(WIDTH))
 
-        self.A = self.zpoly(DOMAIN)
+        self.A = self.zpoly(self.DOMAIN)
         self.Aprime = self.formal_derivative(self.A)
 
         # i-th Lagrange polynomial
@@ -22,7 +22,7 @@ class PrimeField():
 
         # Aprime on the DOMAIN, inverted
         self.Aprime_DOMAIN_inv = []
-        for i, x in enumerate(DOMAIN):
+        for i, x in enumerate(self.DOMAIN):
             self.Aprime_DOMAIN.append(self.eval_poly_at(self.Aprime, x))
             self.Aprime_DOMAIN_inv.append(self.inv(self.Aprime_DOMAIN[-1]))
             self.lagrange_polys.append(self.mul_polys([self.Aprime_DOMAIN_inv[-1]], 
@@ -62,8 +62,10 @@ class PrimeField():
         y = f[index]
         for i in range(self.WIDTH):
             if i != index:
-                q[i] = (f[i] - y) * self.inverses[index - i] * self.Aprime_DOMAIN[index] * self.Aprime_DOMAIN_inv[i] % self.MODULUS
-                q[index] += - self.DOMAIN[(i - index) % self.WIDTH] * q[i] % self.MODULUS
+                q[i] = (f[i] - y) * self.INVERSES[i - index] % self.MODULUS
+                q[index] += (f[i] - y) * self.INVERSES[index - i] * self.Aprime_DOMAIN[index] * self.Aprime_DOMAIN_inv[i] % self.MODULUS
+
+        q[index] %= self.MODULUS
 
         return q
 
@@ -75,7 +77,7 @@ class PrimeField():
         """
         q = [0] * self.WIDTH
         for i in range(self.WIDTH):
-            q[i] = self.primefield.div(f[i] - y, self.DOMAIN[i] - z)
+            q[i] = self.div(f[i] - y, self.DOMAIN[i] - z)
 
         return q
 
@@ -282,7 +284,7 @@ class PrimeField():
 
 
 if __name__ == "__main__":
-    primefield = PrimeField(11, [0,1,2,3])
+    primefield = PrimeField(11, 4)
     for i, x in enumerate(primefield.DOMAIN):
         assert primefield.eval_poly_at(primefield.lagrange_polys[i], x) == 1
         for y in primefield.DOMAIN[:i] + primefield.DOMAIN[i+1:]:
@@ -295,4 +297,18 @@ if __name__ == "__main__":
 
     poly_eval_quotient = primefield.compute_inner_quotient_in_evaluation_form(poly_eval, 2)
 
-    poly_quotient = primefield.div_polys([poly[0] - poly_eval[2]] + poly[1:], [-3, 1])
+    poly_quotient = primefield.div_polys([poly[0] - poly_eval[2]] + poly[1:], [-2, 1])
+
+    poly_quotient_eval = [primefield.eval_poly_at(poly_quotient, x) for x in primefield.DOMAIN]
+
+    assert poly_eval_quotient == poly_quotient_eval
+
+    y = primefield.eval_poly_at(poly, 7)
+
+    poly_eval_quotient2 = primefield.compute_outer_quotient_in_evaluation_form(poly_eval, 7, y)
+    
+    poly_quotient2 = primefield.div_polys([poly[0] - y] + poly[1:], [-7, 1])
+
+    poly_quotient_eval2 = [primefield.eval_poly_at(poly_quotient2, x) for x in primefield.DOMAIN]
+
+    assert poly_eval_quotient2 == poly_quotient_eval2
