@@ -43,9 +43,31 @@ class PrimeField():
         f(z) = A(z) *  sum_(i=0)^(WIDTH-1)  f(DOMAIN[i]) / A'(DOMAIN[i]) * 1 / (z - DOMAIN[i])
         """
         r = 0
-        for x, i in enumerate(self.DOMAIN):
-            r += self.div(f[i], self.Aprime_DOMAIN[i] * (z - x) )
-        r = r * self.eval_poly_at(self.A, z) % self.MODULUS
+        Az = self.eval_poly_at(self.A, z)
+
+        inverses = self.multi_inv([z - x for x in self.DOMAIN])
+
+        for i, x in enumerate(inverses):
+            r += f[i] * self.Aprime_DOMAIN_inv[i] * x % self.MODULUS
+
+        
+        r = r * Az % self.MODULUS
+
+        return r
+
+
+    def barycentric_formula_constants(self, z):
+        """
+        Gives the constant used in the barycentric formula when evaluating a polynomial at z
+        b_i = A(z) / A'(DOMAIN[i]) * 1 / (z - DOMAIN[i])
+        """
+        r = []
+        Az = self.eval_poly_at(self.A, z)
+
+        inverses = self.multi_inv([z - x for x in self.DOMAIN])
+
+        for i, x in enumerate(inverses):
+            r.append(Az * self.Aprime_DOMAIN_inv[i] * x % self.MODULUS)
 
         return r
 
@@ -290,8 +312,9 @@ if __name__ == "__main__":
         for y in primefield.DOMAIN[:i] + primefield.DOMAIN[i+1:]:
             assert primefield.eval_poly_at(primefield.lagrange_polys[i], y) == 0
 
-    poly = [3, 4, 3, 2]
+    poly = [1, 2]
     poly_eval = [primefield.eval_poly_at(poly, x) for x in primefield.DOMAIN]
+
 
     assert primefield.eval_poly_at(poly, 5) == primefield.evaluate_polynomial_in_evaluation_form(poly_eval, 5)
 
