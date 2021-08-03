@@ -1,6 +1,8 @@
 import blst
 import pippenger
 from poly_utils import PrimeField
+import hashlib
+import time
 
 #
 # Utilities for dealing with polynomials in evaluation form
@@ -17,102 +19,225 @@ from poly_utils import PrimeField
 # commit to a a polynomial in evaluation form.
 #
 
+def hash(x):
+    if isinstance(x, bytes):
+        return hashlib.sha256(x).digest()
+    elif isinstance(x, blst.P1):
+        return hash(x.compress())
+    b = b""
+    for a in x:
+        if isinstance(a, bytes):
+            b += a
+        elif isinstance(a, int):
+            b += a.to_bytes(32, "little")
+        elif isinstance(a, blst.P1):
+            b += hash(a.compress())
+    return hash(b)
+
+
+
+
 class IPAUtils():
 
     """
     Class that defines helper function for IPA proofs in evaluation form (Lagrange basis)
     """
-    def __init__(self, BASIS, primefield):
+    def __init__(self, BASIS_G, BASIS_Q, primefield):
         self.MODULUS = primefield.MODULUS
-        self.BASIS = BASIS
+        self.BASIS_G = BASIS_G
+        self.BASIS_Q = BASIS_Q
         self.WIDTH = primefield.WIDTH
         self.DOMAIN = primefield.DOMAIN
         self.primefield = primefield
 
-        self.BASIS_LAGRANGE = []
-        for i in range(primefield.WIDTH):
-            g = blst.G1().mult(0)
-            for b, e in zip(BASIS, primefield.lagrange_polys[i]):
-                g.add(b.dup().mult(e))
+        #self.BASIS_LAGRANGE = []
+        #for i in range(primefield.WIDTH):
+        #    g = blst.G1().mult(0)
+        #    for b, e in zip(BASIS_G, primefield.lagrange_polys[i]):
+        #        g.add(b.dup().mult(e))
 
-            self.BASIS_LAGRANGE.append(g)
+        #    self.BASIS_LAGRANGE.append(g)
 
 
-    def pedersen_commit_coef(self, f):
-        """
-        Returns a Pedersen commitment to the function f (defined by its coefficients)
-        """
-        return pippenger.pippenger_simple(self.BASIS, f)
+    def hash_to_field(self, x):
+        return int.from_bytes(hash(x), "little") % self.MODULUS
 
-    def pedersen_commit_lagrange(self, f_eval):
+    def pedersen_commit(self, a):
         """
-        Returns a Pedersen commitment to the function f, defined by its evaluation on DOMAIN
+        Returns a Pedersen commitment to the vector a (defined by its coefficients)
         """
-        return pippenger.pippenger_simple(self.BASIS_LAGRANGE, f_eval)
+        return pippenger.pippenger_simple(self.BASIS_G, a)
+
+    def pedersen_commit_basis(self, a, basis):
+        """
+        Returns a Pedersen commitment to the vector a (defined by its coefficients)
+        """
+        return pippenger.pippenger_simple(basis, a)
+
+    
+    def f_g_coefs(self, xinv_vec):
+        f_g_coefs = []
+
+        for i in range(len(self.DOMAIN)):
+            binary = [int(x) for x in bin(i)[2:].rjust(len(xinv_vec), '0')]
+            coef = 1
+            for xinv, b in zip(xinv_vec, binary):
+                if b == 1:
+                    coef = coef * xinv % self.MODULUS
+            f_g_coefs.append(coef)
+
+        return f_g_coefs
 
 
     def check_ipa_proof(self, C, z, y, proof):
         """
-        Check the KZG proof 
-        e(C - [y], [1]) = e(pi, [s - z])
-        which is equivalent to
-        e(C - [y], [1]) * e(-pi, [s - z]) == 1
+        Check the IPA proof for a commitment to a Polynomial in evaluation form
         """
-        pairing = blst.PT(blst.G2().to_affine(), C.dup().add(blst.G1().mult(y).neg()).to_affine())
-        pairing.mul(blst.PT(self.SETUP["g2"][1].dup().add(blst.G2().mult(z).neg()).to_affine(), pi.dup().neg().to_affine()))
+        n = len(self.DOMAIN)
+        m = n // 2
 
-        return pairing.final_exp().is_one()
+        b = self.primefield.barycentric_formula_constants(z)
+
+        w = self.hash_to_field([C, z, y])
+        q = self.BASIS_Q.dup().mult(w)
+
+        current_commitment = C.dup().add(q.dup().mult(y))
+        current_basis = self.BASIS_G
 
 
-    def evaluate_and_compute_ipa_proof(self, f, z):
+
+
+        i = 0
+        xs = []
+        xinvs = []
+
+        while n > 1:
+            C_L, C_R = [blst.P1(C) for C in proof[i]]
+
+            x = self.hash_to_field([C_L, C_R])
+            xinv = self.primefield.inv(x)
+            xs.append(x)
+            xinvs.append(xinv)
+
+            current_commitment = current_commitment.dup().add(C_L.dup().mult(x)).add(C_R.dup().mult(xinv))
+
+            n = m
+            m = n // 2
+            i = i + 1
+
+        f_g_coefs = self.f_g_coefs(xinvs)
+        g_l = pippenger.pippenger_simple(self.BASIS_G, f_g_coefs)
+
+        b_l = self.inner_product(b, f_g_coefs)
+
+        a_l = proof[-1][0]
+
+        a_l_times_b_l = a_l * b_l % self.MODULUS
+
+        computed_commitment = g_l.mult(a_l).add(q.mult(a_l_times_b_l))
+
+        return current_commitment.is_equal(computed_commitment)
+
+    def inner_product(self, a, b):
+        return sum(x * y % self.MODULUS for x, y in zip(a, b)) % self.MODULUS
+
+
+    def evaluate_and_compute_ipa_proof(self, C, f_eval, z):
         """
         Evaluates a function f (given in evaluation form) at a point z (which can be in the DOMAIN or not)
         and gives y = f(z) as well as an IPA proof that this is the correct result
         """
 
-        assert len(f) == len(self.DOMAIN)
+        assert len(f_eval) == len(self.DOMAIN)
 
-        if z in self.DOMAIN:
-            index = self.DOMAIN.index(z)
-            y = f[index]
-        else:
-            y = self.evaluate_polynomial_in_evaluation_form(f, z)
-        
         n = len(self.DOMAIN)
         m = n // 2
 
-        a = []
+        a = f_eval[:]
+        b = self.primefield.barycentric_formula_constants(z)
+        y = self.inner_product(a, b)
 
         proof = []
 
+        w = self.hash_to_field([C, z, y])
+        q = self.BASIS_Q.dup().mult(w)
+
+        current_basis = self.BASIS_G
+
+        time_a = time.time()
+
         while n > 1:
+            # Reduction step
 
-        
+            a_L = a[:m]
+            a_R = a[m:]
+            b_L = b[:m]
+            b_R = b[m:]
+            z_L = self.inner_product(a_R, b_L)
+            z_R = self.inner_product(a_L, b_R)
+            C_L = self.pedersen_commit_basis(a_R, current_basis[:m]).add(q.dup().mult(z_L))
+            C_R = self.pedersen_commit_basis(a_L, current_basis[m:]).add(q.dup().mult(z_R))
 
-        return y, pippenger.pippenger_simple(self.SETUP["g1_lagrange"], q)
+            proof.append([C_L.compress(), C_R.compress()])
+
+            x = self.hash_to_field([C_L, C_R])
+            xinv = self.primefield.inv(x)
+
+            # Compute updates for next round
+            a = [(v + x * w) % self.MODULUS for v, w in zip(a_L, a_R)]
+            b = [(v + xinv * w) % self.MODULUS for v, w in zip(b_L, b_R)]
+
+            current_basis = [v.dup().add(w.dup().mult(xinv)) for v, w in zip(current_basis[:m], current_basis[m:])]
+            n = m
+            m = n // 2
 
 
-    def compute_commitment_lagrange(self, values):
-        """
-        Computes a commitment for a function given in evaluation form.
-        'values' is a dictionary and can have missing indices, which improves efficiency.
-        """
-        commitment = pippenger.pippenger_simple([self.SETUP["g1_lagrange"][i] for i in values.keys()], values.values())
-        return commitment
+        time_b = time.time()
+        print((time_b - time_a)*1000)
+
+        # Final step
+        proof.append([a[0]])
+
+        return y, proof
 
 if __name__ == "__main__":
     MODULUS = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
-    WIDTH = 4
+    WIDTH = 256
 
-    BASIS = [blst.P1().hash_to(i.to_bytes(32, "little")) for i in range(WIDTH)]
+    time_a = time.time()
+    BASIS_G = [blst.P1().hash_to(i.to_bytes(32, "little")) for i in range(WIDTH)]
+    BASIS_Q = blst.P1().hash_to((256).to_bytes(32, "little"))
+    time_b = time.time()
 
+    print("Basis computed in {:.2f} ms".format((time_b - time_a)*1000))
+
+    time_a = time.time()
     primefield = PrimeField(MODULUS, WIDTH)
-    ipautils = IPAUtils(BASIS, primefield)
+    time_b = time.time()
 
-    poly = [3, 4, 3, 2]
+    print("Lagrange precomputes in {:.2f} ms".format((time_b - time_a)*1000))
+
+
+    ipautils = IPAUtils(BASIS_G, BASIS_Q, primefield)
+
+
+    poly = [3, 4, 3, 2, 1, 3, 3, 3]*32
     poly_eval = [primefield.eval_poly_at(poly, x) for x in primefield.DOMAIN]
 
-    commit = ipautils.pedersen_commit_coef(poly)
-    commit_eval = ipautils.pedersen_commit_lagrange(poly_eval)
+    time_a = time.time()
+    C = ipautils.pedersen_commit(poly_eval)
+    time_b = time.time()
 
-    assert commit.is_equal(commit_eval)
+    print("Pedersen commitment computed in {:.2f} ms".format((time_b - time_a)*1000))
+
+    time_a = time.time()
+    y, proof = ipautils.evaluate_and_compute_ipa_proof(C, poly_eval, 17)
+    time_b = time.time()
+
+    print("Evaluation and proof computed in {:.2f} ms".format((time_b - time_a)*1000))
+
+    time_a = time.time()
+    assert ipautils.check_ipa_proof(C, 17, y, proof)
+    time_b = time.time()
+
+    print("Proof verified in {:.2f} ms".format((time_b - time_a)*1000))
