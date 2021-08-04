@@ -4,56 +4,45 @@ import hashlib
 from random import randint, shuffle
 from poly_utils import PrimeField
 from time import time
-from kzg_utils import KzgUtils
-from fft import fft
+from ipa_utils import IPAUtils, hash
 import sys
 
 #
 # Proof of concept implementation for verkle tries
 #
 # All polynomials in this implementation are represented in evaluation form, i.e. by their values
-# on DOMAIN. See kzg_utils.py for more explanation
+# on primefield.DOMAIN. 
 #
 
 # BLS12_381 curve modulus
 MODULUS = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
 
-# Primitive root for the field
-PRIMITIVE_ROOT = 5
-
-assert pow(PRIMITIVE_ROOT, (MODULUS - 1) // 2, MODULUS) != 1
-assert pow(PRIMITIVE_ROOT, MODULUS - 1, MODULUS) == 1
-
-primefield = PrimeField(MODULUS)
-
 # Verkle trie parameters
 KEY_LENGTH = 256 # bits
-WIDTH_BITS = 10
+WIDTH_BITS = 8
 WIDTH = 2**WIDTH_BITS
 
-ROOT_OF_UNITY = pow(PRIMITIVE_ROOT, (MODULUS - 1) // WIDTH, MODULUS)
-DOMAIN = [pow(ROOT_OF_UNITY, i, MODULUS) for i in range(WIDTH)]
+primefield = PrimeField(MODULUS, WIDTH)
 
 # Number of key-value pairs to insert
 NUMBER_INITIAL_KEYS = 2**15
 
 # Number of keys to insert after computing initial tree
-NUMBER_ADDED_KEYS = 512
+NUMBER_ADDED_KEYS = 0
 
 # Number of keys to delete
-NUMBER_DELETED_KEYS = 512
+NUMBER_DELETED_KEYS = 0
 
 # Number of key/values pair in proof
 NUMBER_KEYS_PROOF = 5000
 
-def generate_setup(size, secret):
+def generate_basis(size):
     """
-    Generates a setup in the G1 group and G2 group, as well as the Lagrange polynomials in G1 (via FFT)
+    Generates a basis for Pedersen commitments
     """
-    g1_setup = [blst.G1().mult(pow(secret, i, MODULUS)) for i in range(size)]
-    g2_setup = [blst.G2().mult(pow(secret, i, MODULUS)) for i in range(size)]
-    g1_lagrange = fft(g1_setup, MODULUS, ROOT_OF_UNITY, inv=True)
-    return {"g1": g1_setup, "g2": g2_setup, "g1_lagrange": g1_lagrange}
+    BASIS_G = [blst.P1().hash_to(i.to_bytes(32, "little")) for i in range(WIDTH)]
+    BASIS_Q = blst.P1().hash_to((256).to_bytes(32, "little"))
+    return {"G": BASIS_G, "Q": BASIS_Q}
 
 
 def get_verkle_indices(key):
@@ -70,26 +59,6 @@ def get_verkle_indices(key):
         x //= WIDTH
         indices.append(index)
     return tuple(reversed(indices))
-
-
-def hash(x):
-    if isinstance(x, bytes):
-        return hashlib.sha256(x).digest()
-    elif isinstance(x, blst.P1):
-        return hash(x.compress())
-    b = b""
-    for a in x:
-        if isinstance(a, bytes):
-            b += a
-        elif isinstance(a, int):
-            b += a.to_bytes(32, "little")
-        elif isinstance(a, blst.P1):
-            b += hash(a.compress())
-    return hash(b)
-
-
-def hash_to_int(x):
-    return int.from_bytes(hash(x), "little")
 
 
 def insert_verkle_node(root, key, value):
@@ -160,7 +129,7 @@ def update_verkle_node(root, key, value):
     
     # Update all the parent commitments along 'path'
     for index, node in reversed(path):
-        node["commitment"].add(SETUP["g1_lagrange"][index].dup().mult(value_change))
+        node["commitment"].add(BASIS["G"][index].dup().mult(value_change))
         old_hash = node["hash"]
         new_hash = hash(node["commitment"])
         node["hash"] = new_hash
@@ -214,7 +183,7 @@ def delete_verkle_node(root, key):
             value_change = (MODULUS + int.from_bytes(only_child["hash"], "little")
                             - int.from_bytes(node["hash"], "little")) % MODULUS
         else:            
-            node["commitment"].add(SETUP["g1_lagrange"][index].dup().mult(value_change))
+            node["commitment"].add(BASIS["G"][index].dup().mult(value_change))
             old_hash = node["hash"]
             new_hash = hash(node["commitment"])
             node["hash"] = new_hash
@@ -236,7 +205,7 @@ def add_node_hash(node):
                 if "hash" not in node[i]:
                     add_node_hash(node[i])
                 values[i] = int.from_bytes(node[i]["hash"], "little")
-        commitment = kzg_utils.compute_commitment_lagrange(values)
+        commitment = ipa_utils.pedersen_commit_sparse(values)
         node["commitment"] = commitment
         node["hash"] = hash(commitment.compress())
 
@@ -275,7 +244,7 @@ def check_valid_tree(root, is_trie_root=True):
                 if "hash" not in root[i]:
                     add_node_hash(node[i])
                 values[i] = int.from_bytes(root[i]["hash"], "little")
-        commitment = kzg_utils.compute_commitment_lagrange(values)
+        commitment = ipa_utils.pedersen_commit_sparse(values)
         assert root["commitment"].is_equal(commitment)
         assert root["hash"] == hash(commitment.compress())
 
@@ -333,10 +302,10 @@ def find_node_with_path(root, key):
     
 
 def get_proof_size(proof):
-    depths, commitments_sorted_by_index_serialized, D_serialized, y, sigma_serialized = proof
+    depths, commitments_sorted_by_index_serialized, D_serialized, ipa_proof = proof
     size = len(depths) # assume 8 bit integer to represent the depth
     size += 48 * len(commitments_sorted_by_index_serialized)
-    size += 48 + 32 + 48
+    size += 48 + (len(ipa_proof) - 1) * 2 * 48 + 32
     return size
 
 lasttime = [0]
@@ -354,23 +323,23 @@ def log_time_if_eligible(string, width, eligible):
         lasttime[0] = time()
 
 
-def make_kzg_multiproof(Cs, fs, indices, ys, display_times=True):
+def make_ipa_multiproof(Cs, fs, indices, ys, display_times=True):
     """
-    Computes a KZG multiproof according to the schema described here:
-    https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg
+    Computes an IPA multiproof according to the schema described here:
+    https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html
 
-    zs[i] = DOMAIN[indexes[i]]
+    zs[i] = primefield.DOMAIN[indexes[i]]
     """
 
     # Step 1: Construct g(X) polynomial in evaluation form
-    r = hash_to_int([hash(C) for C in Cs] + indices + ys) % MODULUS
+    r = ipa_utils.hash_to_field([hash(C) for C in Cs] + indices + ys) % MODULUS
 
     log_time_if_eligible("   Hashed to r", 30, display_times)
 
     g = [0 for i in range(WIDTH)]
     power_of_r = 1
     for f, index in zip(fs, indices):
-        quotient = kzg_utils.compute_inner_quotient_in_evaluation_form(f, index)
+        quotient = primefield.compute_inner_quotient_in_evaluation_form(f, index)
         for i in range(WIDTH):
             g[i] += power_of_r * quotient[i]
 
@@ -378,19 +347,19 @@ def make_kzg_multiproof(Cs, fs, indices, ys, display_times=True):
 
     log_time_if_eligible("   Computed g polynomial", 30, display_times)
 
-    D = kzg_utils.compute_commitment_lagrange({i: v for i, v in enumerate(g)})
+    D = ipa_utils.pedersen_commit(g)
 
     log_time_if_eligible("   Computed commitment D", 30, display_times)
 
-    # Step 2: Compute f in evaluation form
+    # Step 2: Compute h in evaluation form
     
-    t = hash_to_int([r, D]) % MODULUS
+    t = ipa_utils.hash_to_field([r, D]) % MODULUS
     
     h = [0 for i in range(WIDTH)]
     power_of_r = 1
     
     for f, index in zip(fs, indices):
-        denominator_inv = primefield.inv(t - DOMAIN[index])
+        denominator_inv = primefield.inv(t - primefield.DOMAIN[index])
         for i in range(WIDTH):
             h[i] += power_of_r * f[i] * denominator_inv % MODULUS
             
@@ -398,46 +367,42 @@ def make_kzg_multiproof(Cs, fs, indices, ys, display_times=True):
    
     log_time_if_eligible("   Computed h polynomial", 30, display_times)
 
-    # Step 3: Evaluate and compute KZG proofs
+    h_minus_g = [(h[i] - g[i]) % primefield.MODULUS for i in range(WIDTH)]
 
-    y, pi = kzg_utils.evaluate_and_compute_kzg_proof(h, t)
-    w, rho = kzg_utils.evaluate_and_compute_kzg_proof(g, t)
+    # Step 3: Evaluate and compute IPA proofs
 
+    E = ipa_utils.pedersen_commit(h)
 
-    # Compress both proofs into one
+    y, ipa_proof = ipa_utils.evaluate_and_compute_ipa_proof(E.dup().add(D.dup().neg()), h_minus_g, t)
 
-    E = kzg_utils.compute_commitment_lagrange({i: v for i, v in enumerate(h)})
-    q = hash_to_int([E, D, y, w])
-    sigma = pi.dup().add(rho.dup().mult(q))
+    log_time_if_eligible("   Computed IPA proof", 30, display_times)
 
-    log_time_if_eligible("   Computed KZG proofs", 30, display_times)
-
-    return D.compress(), y, sigma.compress()
+    return D.compress(), ipa_proof
 
 
-def check_kzg_multiproof(Cs, indices, ys, proof, display_times=True):
+def check_ipa_multiproof(Cs, indices, ys, proof, display_times=True):
     """
-    Verifies a KZG multiproof according to the schema described here:
-    https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg
+    Verifies an IPA multiproof according to the schema described here:
+    https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html
     """
 
-    D_serialized, y, sigma_serialized = proof
+    D_serialized, ipa_proof = proof
+
     D = blst.P1(D_serialized)
-    sigma = blst.P1(sigma_serialized)
 
     # Step 1
-    r = hash_to_int([hash(C) for C in Cs] + indices + ys)
+    r = ipa_utils.hash_to_field([hash(C) for C in Cs] + indices + ys)
 
     log_time_if_eligible("   Computed r hash", 30, display_times)
     
     # Step 2
-    t = hash_to_int([r, D])
+    t = ipa_utils.hash_to_field([r, D])
     E_coefficients = []
     g_2_of_t = 0
     power_of_r = 1
 
     for index, y in zip(indices, ys):
-        E_coefficient = primefield.div(power_of_r, t - DOMAIN[index])
+        E_coefficient = primefield.div(power_of_r, t - primefield.DOMAIN[index])
         E_coefficients.append(E_coefficient)
         g_2_of_t += E_coefficient * y % MODULUS
             
@@ -449,15 +414,13 @@ def check_kzg_multiproof(Cs, indices, ys, proof, display_times=True):
 
     log_time_if_eligible("   Computed E commitment", 30, display_times)
 
-    # Step 3 (Check KZG proofs)
-    w = (y - g_2_of_t) % MODULUS
+    # Step 3 (Check IPA proofs)
+    y = g_2_of_t % primefield.MODULUS
 
-    q = hash_to_int([E, D, y, w])
-
-    if not kzg_utils.check_kzg_proof(E.dup().add(D.dup().mult(q)), t, y + q * w, sigma):
+    if not ipa_utils.check_ipa_proof(E.dup().add(D.dup().neg()), t, y, ipa_proof):
         return False
 
-    log_time_if_eligible("   Checked KZG proofs", 30, display_times)
+    log_time_if_eligible("   Checked IPA proof", 30, display_times)
 
     return True
 
@@ -502,13 +465,13 @@ def make_verkle_proof(trie, keys, display_times=True):
     for node in nodes_sorted_by_index_and_subindex:
         fs.append([int.from_bytes(node[i]["hash"], "little") if i in node else 0 for i in range(WIDTH)])
 
-    D, y, sigma = make_kzg_multiproof(Cs, fs, indices, ys, display_times)
+    D, ipa_proof = make_ipa_multiproof(Cs, fs, indices, ys, display_times)
 
     commitments_sorted_by_index_serialized = [x["commitment"].compress() for x in nodes_sorted_by_index[1:]]
     
     log_time_if_eligible("   Serialized commitments", 30, display_times)
 
-    return depths, commitments_sorted_by_index_serialized, D, y, sigma
+    return depths, commitments_sorted_by_index_serialized, D, ipa_proof
 
 
 def check_verkle_proof(trie, keys, values, proof, display_times=True):
@@ -520,7 +483,7 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
     start_logging_time_if_eligible("   Starting proof check", display_times)
 
     # Unpack the proof
-    depths, commitments_sorted_by_index_serialized, D_serialized, y, sigma_serialized = proof
+    depths, commitments_sorted_by_index_serialized, D_serialized, ipa_proof = proof
     commitments_sorted_by_index = [blst.P1(trie)] + [blst.P1(x) for x in commitments_sorted_by_index_serialized]
 
     all_indices = set()
@@ -562,7 +525,7 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
 
     log_time_if_eligible("   Recreated commitment lists", 30, display_times)
 
-    return check_kzg_multiproof(Cs, indices, ys, [D_serialized, y, sigma_serialized], display_times)
+    return check_ipa_multiproof(Cs, indices, ys, [D_serialized, ipa_proof], display_times)
 
 
 if __name__ == "__main__":
@@ -570,7 +533,7 @@ if __name__ == "__main__":
         WIDTH_BITS = int(sys.argv[1])
         WIDTH = 2 ** WIDTH_BITS
         ROOT_OF_UNITY = pow(PRIMITIVE_ROOT, (MODULUS - 1) // WIDTH, MODULUS)
-        DOMAIN = [pow(ROOT_OF_UNITY, i, MODULUS) for i in range(WIDTH)]
+        primefield.DOMAIN = [pow(ROOT_OF_UNITY, i, MODULUS) for i in range(WIDTH)]
 
         NUMBER_INITIAL_KEYS = int(sys.argv[2])
 
@@ -579,8 +542,8 @@ if __name__ == "__main__":
         NUMBER_DELETED_KEYS = 0
         NUMBER_ADDED_KEYS = 0
     
-    SETUP = generate_setup(WIDTH, 8927347823478352432985)
-    kzg_utils = KzgUtils(MODULUS, WIDTH, DOMAIN, SETUP, primefield)
+    BASIS = generate_basis(WIDTH)
+    ipa_utils = IPAUtils(BASIS["G"], BASIS["Q"], primefield)
 
 
     # Build a random verkle trie
