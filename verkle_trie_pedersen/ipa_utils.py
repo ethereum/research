@@ -8,15 +8,12 @@ import time
 # Utilities for dealing with polynomials in evaluation form
 #
 # A polynomial in evaluation for is defined by its values on DOMAIN,
-# where DOMAIN is [omega**0, omega**1, omega**2, ..., omega**(WIDTH-1)]
-# where omega is a WIDTH root of unity, i.e. omega**WIDTH % MODULUS == 1 
+# where DOMAIN is [0, 1, 2, ...]
 #
 # Any polynomial of degree < WIDTH can be represented uniquely in this form,
 # and many operations (such as multiplication and exact division) are more
 # efficient.
 #
-# By precomputing the basis in Lagrange basis, we can also easily
-# commit to a a polynomial in evaluation form.
 #
 
 def hash(x):
@@ -34,14 +31,11 @@ def hash(x):
             b += hash(a.compress())
     return hash(b)
 
-
-
-
 class IPAUtils():
+    """
+    Class that defines helper functions for IPA proofs in evaluation form (Lagrange basis)
+    """
 
-    """
-    Class that defines helper function for IPA proofs in evaluation form (Lagrange basis)
-    """
     def __init__(self, BASIS_G, BASIS_Q, primefield):
         self.MODULUS = primefield.MODULUS
         self.BASIS_G = BASIS_G
@@ -67,6 +61,12 @@ class IPAUtils():
         Returns a Pedersen commitment to the vector a (defined by its coefficients)
         """
         return pippenger.pippenger_simple(self.BASIS_G, a)
+
+    def pedersen_commit_sparse(self, values):
+        """
+        Returns a Pedersen commitment to the vector a (defined by its coefficients)
+        """
+        return pippenger.pippenger_simple([self.BASIS_G[i] for i in values.keys()], values.values())
 
     def pedersen_commit_basis(self, a, basis):
         """
@@ -103,9 +103,6 @@ class IPAUtils():
 
         current_commitment = C.dup().add(q.dup().mult(y))
         current_basis = self.BASIS_G
-
-
-
 
         i = 0
         xs = []
@@ -164,8 +161,6 @@ class IPAUtils():
 
         current_basis = self.BASIS_G
 
-        time_a = time.time()
-
         while n > 1:
             # Reduction step
 
@@ -190,10 +185,6 @@ class IPAUtils():
             current_basis = [v.dup().add(w.dup().mult(xinv)) for v, w in zip(current_basis[:m], current_basis[m:])]
             n = m
             m = n // 2
-
-
-        time_b = time.time()
-        print((time_b - time_a)*1000)
 
         # Final step
         proof.append([a[0]])

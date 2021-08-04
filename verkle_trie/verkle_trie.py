@@ -357,7 +357,7 @@ def log_time_if_eligible(string, width, eligible):
 def make_kzg_multiproof(Cs, fs, indices, ys, display_times=True):
     """
     Computes a KZG multiproof according to the schema described here:
-    https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg
+    https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html
 
     zs[i] = DOMAIN[indexes[i]]
     """
@@ -382,7 +382,7 @@ def make_kzg_multiproof(Cs, fs, indices, ys, display_times=True):
 
     log_time_if_eligible("   Computed commitment D", 30, display_times)
 
-    # Step 2: Compute f in evaluation form
+    # Step 2: Compute h in evaluation form
     
     t = hash_to_int([r, D]) % MODULUS
     
@@ -418,7 +418,7 @@ def make_kzg_multiproof(Cs, fs, indices, ys, display_times=True):
 def check_kzg_multiproof(Cs, indices, ys, proof, display_times=True):
     """
     Verifies a KZG multiproof according to the schema described here:
-    https://notes.ethereum.org/nrQqhVpQRi6acQckwm1Ryg
+    https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html
     """
 
     D_serialized, y, sigma_serialized = proof
