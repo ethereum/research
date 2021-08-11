@@ -28,7 +28,7 @@ primefield = PrimeField(MODULUS)
 
 # Verkle trie parameters
 KEY_LENGTH = 256 # bits
-WIDTH_BITS = 10
+WIDTH_BITS = 8
 WIDTH = 2**WIDTH_BITS
 
 ROOT_OF_UNITY = pow(PRIMITIVE_ROOT, (MODULUS - 1) // WIDTH, MODULUS)

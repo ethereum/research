@@ -1,5 +1,4 @@
-import pippenger
-import blst
+from bandersnatch import Point, Scalar
 import hashlib
 from random import randint, shuffle
 from poly_utils import PrimeField
@@ -14,8 +13,8 @@ import sys
 # on primefield.DOMAIN. 
 #
 
-# BLS12_381 curve modulus
-MODULUS = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
+# Bandersnatch curve modulus
+MODULUS = 13108968793781547619861935127046491459309155893440570251786403306729687672801
 
 # Verkle trie parameters
 KEY_LENGTH = 256 # bits
@@ -28,10 +27,10 @@ primefield = PrimeField(MODULUS, WIDTH)
 NUMBER_INITIAL_KEYS = 2**15
 
 # Number of keys to insert after computing initial tree
-NUMBER_ADDED_KEYS = 0
+NUMBER_ADDED_KEYS = 512
 
 # Number of keys to delete
-NUMBER_DELETED_KEYS = 0
+NUMBER_DELETED_KEYS = 512
 
 # Number of key/values pair in proof
 NUMBER_KEYS_PROOF = 5000
@@ -40,8 +39,8 @@ def generate_basis(size):
     """
     Generates a basis for Pedersen commitments
     """
-    BASIS_G = [blst.P1().hash_to(i.to_bytes(32, "little")) for i in range(WIDTH)]
-    BASIS_Q = blst.P1().hash_to((256).to_bytes(32, "little"))
+    BASIS_G = [Point(generator=True) for i in range(WIDTH)]
+    BASIS_Q = Point(generator=True)
     return {"G": BASIS_G, "Q": BASIS_Q}
 
 
@@ -80,7 +79,7 @@ def insert_verkle_node(root, key, value):
     if current_node["key"] == key:
         current_node["value"] = value
     else:
-        previous_node[index] = {"node_type": "inner", "commitment": blst.G1().mult(0)}
+        previous_node[index] = {"node_type": "inner", "commitment": Point().mul(0)}
         insert_verkle_node(root, key, value)
         insert_verkle_node(root, current_node["key"], current_node["value"])
 
@@ -112,12 +111,26 @@ def update_verkle_node(root, key, value):
                     new_inner_node = {"node_type": "inner"}
                     new_index = next(indices)
                     old_index = get_verkle_indices(old_node["key"])[len(path)]
-                    # TODO! Handle old_index == new_index
-                    assert old_index != new_index
-                    new_inner_node[new_index] = new_node
-                    new_inner_node[old_index] = old_node
-                    add_node_hash(new_inner_node)
                     current_node[index] = new_inner_node
+
+                    inserted_path = []
+                    current_node = new_inner_node
+                    while old_index == new_index:
+                        index = new_index
+                        next_inner_node = {"node_type": "inner"}
+                        current_node[index] = next_inner_node
+                        inserted_path.append((index, current_node))
+                        new_index = next(indices)
+                        old_index = get_verkle_indices(old_node["key"])[len(path) + len(inserted_path)]
+                        current_node = next_inner_node
+
+                    current_node[new_index] = new_node
+                    current_node[old_index] = old_node
+                    add_node_hash(current_node)
+
+                    for index, node in reversed(inserted_path):
+                        add_node_hash(node)
+
                     value_change = (MODULUS + int.from_bytes(new_inner_node["hash"], "little")
                                     - int.from_bytes(old_node["hash"], "little")) % MODULUS
                     break
@@ -129,7 +142,7 @@ def update_verkle_node(root, key, value):
     
     # Update all the parent commitments along 'path'
     for index, node in reversed(path):
-        node["commitment"].add(BASIS["G"][index].dup().mult(value_change))
+        node["commitment"].add(BASIS["G"][index].dup().mul(value_change))
         old_hash = node["hash"]
         new_hash = hash(node["commitment"])
         node["hash"] = new_hash
@@ -183,7 +196,7 @@ def delete_verkle_node(root, key):
             value_change = (MODULUS + int.from_bytes(only_child["hash"], "little")
                             - int.from_bytes(node["hash"], "little")) % MODULUS
         else:            
-            node["commitment"].add(BASIS["G"][index].dup().mult(value_change))
+            node["commitment"].add(BASIS["G"][index].dup().mul(value_change))
             old_hash = node["hash"]
             new_hash = hash(node["commitment"])
             node["hash"] = new_hash
@@ -204,10 +217,10 @@ def add_node_hash(node):
             if i in node:
                 if "hash" not in node[i]:
                     add_node_hash(node[i])
-                values[i] = int.from_bytes(node[i]["hash"], "little")
+                values[i] = int.from_bytes(node[i]["hash"], "little") % MODULUS
         commitment = ipa_utils.pedersen_commit_sparse(values)
         node["commitment"] = commitment
-        node["hash"] = hash(commitment.compress())
+        node["hash"] = hash(commitment.serialize())
 
 
 def get_total_depth(root):
@@ -243,10 +256,10 @@ def check_valid_tree(root, is_trie_root=True):
             if i in root:
                 if "hash" not in root[i]:
                     add_node_hash(node[i])
-                values[i] = int.from_bytes(root[i]["hash"], "little")
+                values[i] = int.from_bytes(root[i]["hash"], "little") % MODULUS
         commitment = ipa_utils.pedersen_commit_sparse(values)
-        assert root["commitment"].is_equal(commitment)
-        assert root["hash"] == hash(commitment.compress())
+        assert root["commitment"] == commitment
+        assert root["hash"] == hash(commitment.serialize())
 
         for i in range(WIDTH):
             if i in root:
@@ -304,9 +317,10 @@ def find_node_with_path(root, key):
 def get_proof_size(proof):
     depths, commitments_sorted_by_index_serialized, D_serialized, ipa_proof = proof
     size = len(depths) # assume 8 bit integer to represent the depth
-    size += 48 * len(commitments_sorted_by_index_serialized)
-    size += 48 + (len(ipa_proof) - 1) * 2 * 48 + 32
+    size += 32 * len(commitments_sorted_by_index_serialized)
+    size += 32 + (len(ipa_proof) - 1) * 2 * 32 + 32
     return size
+
 
 lasttime = [0]
 
@@ -344,6 +358,9 @@ def make_ipa_multiproof(Cs, fs, indices, ys, display_times=True):
             g[i] += power_of_r * quotient[i]
 
         power_of_r = power_of_r * r % MODULUS
+    
+    for i in range(len(g)):
+        g[i] %= MODULUS
 
     log_time_if_eligible("   Computed g polynomial", 30, display_times)
 
@@ -365,6 +382,9 @@ def make_ipa_multiproof(Cs, fs, indices, ys, display_times=True):
             
         power_of_r = power_of_r * r % MODULUS
    
+    for i in range(len(h)):
+        h[i] %= MODULUS
+
     log_time_if_eligible("   Computed h polynomial", 30, display_times)
 
     h_minus_g = [(h[i] - g[i]) % primefield.MODULUS for i in range(WIDTH)]
@@ -373,11 +393,11 @@ def make_ipa_multiproof(Cs, fs, indices, ys, display_times=True):
 
     E = ipa_utils.pedersen_commit(h)
 
-    y, ipa_proof = ipa_utils.evaluate_and_compute_ipa_proof(E.dup().add(D.dup().neg()), h_minus_g, t)
+    y, ipa_proof = ipa_utils.evaluate_and_compute_ipa_proof(E.dup().add(D.dup().mul(MODULUS-1)), h_minus_g, t)
 
     log_time_if_eligible("   Computed IPA proof", 30, display_times)
 
-    return D.compress(), ipa_proof
+    return D.serialize(), ipa_proof
 
 
 def check_ipa_multiproof(Cs, indices, ys, proof, display_times=True):
@@ -388,7 +408,7 @@ def check_ipa_multiproof(Cs, indices, ys, proof, display_times=True):
 
     D_serialized, ipa_proof = proof
 
-    D = blst.P1(D_serialized)
+    D = Point().deserialize(D_serialized)
 
     # Step 1
     r = ipa_utils.hash_to_field([hash(C) for C in Cs] + indices + ys)
@@ -410,14 +430,14 @@ def check_ipa_multiproof(Cs, indices, ys, proof, display_times=True):
 
     log_time_if_eligible("   Computed g2 and e coeffs", 30, display_times)
     
-    E = pippenger.pippenger_simple(Cs, E_coefficients)
+    E = Point().msm(Cs, E_coefficients)
 
     log_time_if_eligible("   Computed E commitment", 30, display_times)
 
     # Step 3 (Check IPA proofs)
     y = g_2_of_t % primefield.MODULUS
 
-    if not ipa_utils.check_ipa_proof(E.dup().add(D.dup().neg()), t, y, ipa_proof):
+    if not ipa_utils.check_ipa_proof(E.dup().add(D.dup().mul(MODULUS-1)), t, y, ipa_proof):
         return False
 
     log_time_if_eligible("   Checked IPA proof", 30, display_times)
@@ -467,7 +487,7 @@ def make_verkle_proof(trie, keys, display_times=True):
 
     D, ipa_proof = make_ipa_multiproof(Cs, fs, indices, ys, display_times)
 
-    commitments_sorted_by_index_serialized = [x["commitment"].compress() for x in nodes_sorted_by_index[1:]]
+    commitments_sorted_by_index_serialized = [x["commitment"].serialize() for x in nodes_sorted_by_index[1:]]
     
     log_time_if_eligible("   Serialized commitments", 30, display_times)
 
@@ -484,7 +504,7 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
 
     # Unpack the proof
     depths, commitments_sorted_by_index_serialized, D_serialized, ipa_proof = proof
-    commitments_sorted_by_index = [blst.P1(trie)] + [blst.P1(x) for x in commitments_sorted_by_index_serialized]
+    commitments_sorted_by_index = [Point().deserialize(trie)] + [Point().deserialize(x) for x in commitments_sorted_by_index_serialized]
 
     all_indices = set()
     all_indices_and_subindices = set()
@@ -547,7 +567,7 @@ if __name__ == "__main__":
 
 
     # Build a random verkle trie
-    root = {"node_type": "inner", "commitment": blst.G1().mult(0)}
+    root = {"node_type": "inner", "commitment": Point().mul(0)}
 
     values = {}
 
@@ -631,7 +651,7 @@ if __name__ == "__main__":
     print("Computed proof for {0} keys (size = {1} bytes) in {2:.3f} s".format(NUMBER_KEYS_PROOF, proof_size, time_b - time_a), file=sys.stderr)
 
     time_a = time()
-    check_verkle_proof(root["commitment"].compress(), keys_in_proof, [values[key] for key in keys_in_proof], proof)
+    check_verkle_proof(root["commitment"].serialize(), keys_in_proof, [values[key] for key in keys_in_proof], proof)
     time_b = time()
     check_time = time_b - time_a
 
