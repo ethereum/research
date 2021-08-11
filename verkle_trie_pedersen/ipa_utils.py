@@ -1,5 +1,4 @@
-import blst
-import pippenger
+from bandersnatch import Point, Scalar
 from poly_utils import PrimeField
 import hashlib
 import time
@@ -19,16 +18,16 @@ import time
 def hash(x):
     if isinstance(x, bytes):
         return hashlib.sha256(x).digest()
-    elif isinstance(x, blst.P1):
-        return hash(x.compress())
+    elif isinstance(x, Point):
+        return hash(x.serialize())
     b = b""
     for a in x:
         if isinstance(a, bytes):
             b += a
         elif isinstance(a, int):
             b += a.to_bytes(32, "little")
-        elif isinstance(a, blst.P1):
-            b += hash(a.compress())
+        elif isinstance(a, Point):
+            b += hash(a.serialize())
     return hash(b)
 
 class IPAUtils():
@@ -44,35 +43,30 @@ class IPAUtils():
         self.DOMAIN = primefield.DOMAIN
         self.primefield = primefield
 
-        #self.BASIS_LAGRANGE = []
-        #for i in range(primefield.WIDTH):
-        #    g = blst.G1().mult(0)
-        #    for b, e in zip(BASIS_G, primefield.lagrange_polys[i]):
-        #        g.add(b.dup().mult(e))
-
-        #    self.BASIS_LAGRANGE.append(g)
-
 
     def hash_to_field(self, x):
         return int.from_bytes(hash(x), "little") % self.MODULUS
+
 
     def pedersen_commit(self, a):
         """
         Returns a Pedersen commitment to the vector a (defined by its coefficients)
         """
-        return pippenger.pippenger_simple(self.BASIS_G, a)
+        return Point().msm(self.BASIS_G, [Scalar().from_int(x) for x in a])
+
 
     def pedersen_commit_sparse(self, values):
         """
         Returns a Pedersen commitment to the vector a (defined by its coefficients)
         """
-        return pippenger.pippenger_simple([self.BASIS_G[i] for i in values.keys()], values.values())
+        return Point().msm([self.BASIS_G[i] for i in values.keys()], [Scalar().from_int(x) for x in values.values()])
+
 
     def pedersen_commit_basis(self, a, basis):
         """
         Returns a Pedersen commitment to the vector a (defined by its coefficients)
         """
-        return pippenger.pippenger_simple(basis, a)
+        return Point().msm(basis, [Scalar().from_int(x) for x in a])
 
     
     def f_g_coefs(self, xinv_vec):
@@ -99,9 +93,9 @@ class IPAUtils():
         b = self.primefield.barycentric_formula_constants(z)
 
         w = self.hash_to_field([C, z, y])
-        q = self.BASIS_Q.dup().mult(w)
+        q = self.BASIS_Q.dup().glv(w)
 
-        current_commitment = C.dup().add(q.dup().mult(y))
+        current_commitment = C.dup().add(q.dup().glv(y))
         current_basis = self.BASIS_G
 
         i = 0
@@ -109,21 +103,21 @@ class IPAUtils():
         xinvs = []
 
         while n > 1:
-            C_L, C_R = [blst.P1(C) for C in proof[i]]
+            C_L, C_R = [Point().deserialize(C) for C in proof[i]]
 
             x = self.hash_to_field([C_L, C_R])
             xinv = self.primefield.inv(x)
             xs.append(x)
             xinvs.append(xinv)
 
-            current_commitment = current_commitment.dup().add(C_L.dup().mult(x)).add(C_R.dup().mult(xinv))
+            current_commitment = current_commitment.dup().add(C_L.dup().glv(x)).add(C_R.dup().glv(xinv))
 
             n = m
             m = n // 2
             i = i + 1
 
         f_g_coefs = self.f_g_coefs(xinvs)
-        g_l = pippenger.pippenger_simple(self.BASIS_G, f_g_coefs)
+        g_l = Point().msm(self.BASIS_G, f_g_coefs)
 
         b_l = self.inner_product(b, f_g_coefs)
 
@@ -131,9 +125,10 @@ class IPAUtils():
 
         a_l_times_b_l = a_l * b_l % self.MODULUS
 
-        computed_commitment = g_l.mult(a_l).add(q.mult(a_l_times_b_l))
+        computed_commitment = g_l.glv(a_l).add(q.glv(a_l_times_b_l))
 
-        return current_commitment.is_equal(computed_commitment)
+        return current_commitment == computed_commitment
+
 
     def inner_product(self, a, b):
         return sum(x * y % self.MODULUS for x, y in zip(a, b)) % self.MODULUS
@@ -157,7 +152,7 @@ class IPAUtils():
         proof = []
 
         w = self.hash_to_field([C, z, y])
-        q = self.BASIS_Q.dup().mult(w)
+        q = self.BASIS_Q.dup().glv(w)
 
         current_basis = self.BASIS_G
 
@@ -170,10 +165,10 @@ class IPAUtils():
             b_R = b[m:]
             z_L = self.inner_product(a_R, b_L)
             z_R = self.inner_product(a_L, b_R)
-            C_L = self.pedersen_commit_basis(a_R, current_basis[:m]).add(q.dup().mult(z_L))
-            C_R = self.pedersen_commit_basis(a_L, current_basis[m:]).add(q.dup().mult(z_R))
+            C_L = self.pedersen_commit_basis(a_R, current_basis[:m]).add(q.dup().glv(z_L))
+            C_R = self.pedersen_commit_basis(a_L, current_basis[m:]).add(q.dup().glv(z_R))
 
-            proof.append([C_L.compress(), C_R.compress()])
+            proof.append([C_L.serialize(), C_R.serialize()])
 
             x = self.hash_to_field([C_L, C_R])
             xinv = self.primefield.inv(x)
@@ -182,7 +177,7 @@ class IPAUtils():
             a = [(v + x * w) % self.MODULUS for v, w in zip(a_L, a_R)]
             b = [(v + xinv * w) % self.MODULUS for v, w in zip(b_L, b_R)]
 
-            current_basis = [v.dup().add(w.dup().mult(xinv)) for v, w in zip(current_basis[:m], current_basis[m:])]
+            current_basis = [v.dup().add(w.dup().glv(xinv)) for v, w in zip(current_basis[:m], current_basis[m:])]
             n = m
             m = n // 2
 
@@ -192,12 +187,12 @@ class IPAUtils():
         return y, proof
 
 if __name__ == "__main__":
-    MODULUS = 0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001
+    MODULUS = 13108968793781547619861935127046491459309155893440570251786403306729687672801
     WIDTH = 256
 
     time_a = time.time()
-    BASIS_G = [blst.P1().hash_to(i.to_bytes(32, "little")) for i in range(WIDTH)]
-    BASIS_Q = blst.P1().hash_to((256).to_bytes(32, "little"))
+    BASIS_G = [Point(generator=True) for i in range(WIDTH)]
+    BASIS_Q = Point(generator=True)
     time_b = time.time()
 
     print("Basis computed in {:.2f} ms".format((time_b - time_a)*1000))
@@ -208,9 +203,7 @@ if __name__ == "__main__":
 
     print("Lagrange precomputes in {:.2f} ms".format((time_b - time_a)*1000))
 
-
     ipautils = IPAUtils(BASIS_G, BASIS_Q, primefield)
-
 
     poly = [3, 4, 3, 2, 1, 3, 3, 3]*32
     poly_eval = [primefield.eval_poly_at(poly, x) for x in primefield.DOMAIN]
