@@ -39,6 +39,8 @@ def generate_basis(size):
     """
     Generates a basis for Pedersen commitments
     """
+    # TODO: Currently random points that differ on every run.
+    # Implement reproducable basis generation once hash_to_curve is provided
     BASIS_G = [Point(generator=True) for i in range(WIDTH)]
     BASIS_Q = Point(generator=True)
     return {"G": BASIS_G, "Q": BASIS_Q}
@@ -104,8 +106,7 @@ def update_verkle_node(root, key, value):
                 old_node = current_node[index]
                 if current_node[index]["key"] == key:
                     current_node[index] = new_node
-                    value_change = (MODULUS + int.from_bytes(new_node["hash"], "little")
-                                    - int.from_bytes(old_node["hash"], "little")) % MODULUS
+                    value_change = (MODULUS + new_node["hash"] - old_node["hash"]) % MODULUS
                     break
                 else:
                     new_inner_node = {"node_type": "inner"}
@@ -131,23 +132,21 @@ def update_verkle_node(root, key, value):
                     for index, node in reversed(inserted_path):
                         add_node_hash(node)
 
-                    value_change = (MODULUS + int.from_bytes(new_inner_node["hash"], "little")
-                                    - int.from_bytes(old_node["hash"], "little")) % MODULUS
+                    value_change = (MODULUS + new_inner_node["hash"] - old_node["hash"]) % MODULUS
                     break
             current_node = current_node[index]
         else:
             current_node[index] = new_node
-            value_change = int.from_bytes(new_node["hash"], "little") % MODULUS
+            value_change = new_node["hash"]
             break
     
     # Update all the parent commitments along 'path'
     for index, node in reversed(path):
         node["commitment"].add(BASIS["G"][index].dup().mul(value_change))
         old_hash = node["hash"]
-        new_hash = hash(node["commitment"])
+        new_hash = int.from_bytes(node["commitment"].serialize(), "little") % MODULUS
         node["hash"] = new_hash
-        value_change = (MODULUS + int.from_bytes(new_hash, "little")
-                        - int.from_bytes(old_hash, "little")) % MODULUS
+        value_change = (MODULUS + new_hash - old_hash) % MODULUS
 
 
 def get_only_child(node):
@@ -180,7 +179,7 @@ def delete_verkle_node(root, key):
             deleted_node = current_node[index]
             assert deleted_node["key"] == key, "Tried to delete non-existent key"
             del current_node[index]
-            value_change = (MODULUS - int.from_bytes(deleted_node["hash"], "little")) % MODULUS
+            value_change = (MODULUS - deleted_node["hash"]) % MODULUS
             break
         current_node = current_node[index]
     
@@ -193,15 +192,13 @@ def delete_verkle_node(root, key):
         only_child = get_only_child(node)
         if only_child != None and only_child["node_type"] == "leaf" and node != root:
             replacement_node = only_child
-            value_change = (MODULUS + int.from_bytes(only_child["hash"], "little")
-                            - int.from_bytes(node["hash"], "little")) % MODULUS
+            value_change = (MODULUS + only_child["hash"] - node["hash"]) % MODULUS
         else:            
             node["commitment"].add(BASIS["G"][index].dup().mul(value_change))
             old_hash = node["hash"]
-            new_hash = hash(node["commitment"])
+            new_hash = int.from_bytes(node["commitment"].serialize(), "little") % MODULUS
             node["hash"] = new_hash
-            value_change = (MODULUS + int.from_bytes(new_hash, "little")
-                            - int.from_bytes(old_hash, "little")) % MODULUS
+            value_change = (MODULUS + new_hash - old_hash) % MODULUS
 
 
 def add_node_hash(node):
@@ -209,7 +206,12 @@ def add_node_hash(node):
     Recursively adds all missing commitments and hashes to a verkle trie structure.
     """
     if node["node_type"] == "leaf":
-        node["hash"] = hash([node["key"], node["value"]])
+        commitment = ipa_utils.pedersen_commit_sparse({0: 1, 
+                                                       1: int.from_bytes(node["key"][:31], "little"),
+                                                       2: int.from_bytes(node["value"][:16], "little"), 
+                                                       3: int.from_bytes(node["value"][16:], "little")})
+        node["commitment"] = commitment
+        node["hash"] = int.from_bytes(commitment.serialize(), "little") % MODULUS
     if node["node_type"] == "inner":
         lagrange_polynomials = []
         values = {}
@@ -217,10 +219,10 @@ def add_node_hash(node):
             if i in node:
                 if "hash" not in node[i]:
                     add_node_hash(node[i])
-                values[i] = int.from_bytes(node[i]["hash"], "little") % MODULUS
+                values[i] = node[i]["hash"]
         commitment = ipa_utils.pedersen_commit_sparse(values)
         node["commitment"] = commitment
-        node["hash"] = hash(commitment.serialize())
+        node["hash"] = int.from_bytes(commitment.serialize(), "little") % MODULUS
 
 
 def get_total_depth(root):
@@ -256,16 +258,21 @@ def check_valid_tree(root, is_trie_root=True):
             if i in root:
                 if "hash" not in root[i]:
                     add_node_hash(node[i])
-                values[i] = int.from_bytes(root[i]["hash"], "little") % MODULUS
+                values[i] = root[i]["hash"]
         commitment = ipa_utils.pedersen_commit_sparse(values)
         assert root["commitment"] == commitment
-        assert root["hash"] == hash(commitment.serialize())
+        assert root["hash"] == int.from_bytes(commitment.serialize(), "little") % MODULUS
 
         for i in range(WIDTH):
             if i in root:
                 check_valid_tree(root[i], False)
     else:
-        assert root["hash"] == hash([root["key"], root["value"]])
+        commitment = ipa_utils.pedersen_commit_sparse({0: 1, 
+                                                       1: int.from_bytes(root["key"][:31], "little"),
+                                                       2: int.from_bytes(root["value"][:16], "little"), 
+                                                       3: int.from_bytes(root["value"][16:], "little")})
+        assert root["commitment"] == commitment
+        assert root["hash"] == int.from_bytes(commitment.serialize(), "little") % MODULUS
 
 
 def get_average_depth(trie):
@@ -475,7 +482,7 @@ def make_verkle_proof(trie, keys, display_times=True):
     
     indices = list(map(lambda x: x[0][1], sorted(nodes_by_index_and_subindex.items())))
     
-    ys = list(map(lambda x: int.from_bytes(x[1][x[0][1]]["hash"], "little"), sorted(nodes_by_index_and_subindex.items())))
+    ys = list(map(lambda x: x[1][x[0][1]]["hash"], sorted(nodes_by_index_and_subindex.items())))
     
     log_time_if_eligible("   Sorted all commitments", 30, display_times)
 
@@ -483,7 +490,7 @@ def make_verkle_proof(trie, keys, display_times=True):
     Cs = [x["commitment"] for x in nodes_sorted_by_index_and_subindex]
 
     for node in nodes_sorted_by_index_and_subindex:
-        fs.append([int.from_bytes(node[i]["hash"], "little") if i in node else 0 for i in range(WIDTH)])
+        fs.append([node[i]["hash"] if i in node else 0 for i in range(WIDTH)])
 
     D, ipa_proof = make_ipa_multiproof(Cs, fs, indices, ys, display_times)
 
@@ -517,7 +524,12 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
         for i in range(depth):
             all_indices.add(verkle_indices[:i])
             all_indices_and_subindices.add((verkle_indices[:i], verkle_indices[i]))
-        leaf_values_by_index_and_subindex[(verkle_indices[:depth - 1], verkle_indices[depth - 1])] = hash([key, value])
+        commitment = ipa_utils.pedersen_commit_sparse({0: 1, 
+                                                       1: int.from_bytes(key[:31], "little"),
+                                                       2: int.from_bytes(value[:16], "little"), 
+                                                       3: int.from_bytes(value[16:], "little")})
+        leaf_values_by_index_and_subindex[(verkle_indices[:depth - 1], verkle_indices[depth - 1])] = \
+                    int.from_bytes(commitment.serialize(), "little")
     
     all_indices = sorted(all_indices)
     all_indices_and_subindices = sorted(all_indices_and_subindices)
@@ -533,7 +545,7 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
     for index_and_subindex in all_indices_and_subindices:
         full_subindex = index_and_subindex[0] + (index_and_subindex[1],)
         if full_subindex in commitments_by_index:
-            subhashes_by_index_and_subindex[index_and_subindex] = hash(commitments_by_index[full_subindex])
+            subhashes_by_index_and_subindex[index_and_subindex] = int.from_bytes(commitments_by_index[full_subindex].serialize(), "little") % MODULUS
         else:
             subhashes_by_index_and_subindex[index_and_subindex] = leaf_values_by_index_and_subindex[index_and_subindex]
     
@@ -541,7 +553,7 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
     
     indices = list(map(lambda x: x[1], sorted(all_indices_and_subindices)))
     
-    ys = list(map(lambda x: int.from_bytes(x[1], "little"), sorted(subhashes_by_index_and_subindex.items())))
+    ys = list(map(lambda x: x[1], sorted(subhashes_by_index_and_subindex.items())))
 
     log_time_if_eligible("   Recreated commitment lists", 30, display_times)
 

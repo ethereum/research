@@ -59,6 +59,16 @@ class IPAUtils():
         """
         Returns a Pedersen commitment to the vector a (defined by its coefficients)
         """
+        if len(values) < 5:
+            if len(values) == 0:
+                return Point().mul(0)
+            else:
+                it = iter(values.items())
+                k, v = next(it)
+                r = self.BASIS_G[k].dup().glv(v)
+                for k, v in it:
+                    r = r.add(self.BASIS_G[k].dup().glv(v))
+                return r
         return Point().msm([self.BASIS_G[i] for i in values.keys()], [Scalar().from_int(x) for x in values.values()])
 
 
