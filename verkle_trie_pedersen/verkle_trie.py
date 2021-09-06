@@ -353,7 +353,7 @@ def make_ipa_multiproof(Cs, fs, indices, ys, display_times=True):
     """
 
     # Step 1: Construct g(X) polynomial in evaluation form
-    r = ipa_utils.hash_to_field([hash(C) for C in Cs] + indices + ys) % MODULUS
+    r = ipa_utils.hash_to_field(Cs + indices + ys) % MODULUS
 
     log_time_if_eligible("   Hashed to r", 30, display_times)
 
@@ -418,7 +418,7 @@ def check_ipa_multiproof(Cs, indices, ys, proof, display_times=True):
     D = Point().deserialize(D_serialized)
 
     # Step 1
-    r = ipa_utils.hash_to_field([hash(C) for C in Cs] + indices + ys)
+    r = ipa_utils.hash_to_field(Cs + indices + ys)
 
     log_time_if_eligible("   Computed r hash", 30, display_times)
     
@@ -529,7 +529,7 @@ def check_verkle_proof(trie, keys, values, proof, display_times=True):
                                                        2: int.from_bytes(value[:16], "little"), 
                                                        3: int.from_bytes(value[16:], "little")})
         leaf_values_by_index_and_subindex[(verkle_indices[:depth - 1], verkle_indices[depth - 1])] = \
-                    int.from_bytes(commitment.serialize(), "little")
+                    int.from_bytes(commitment.serialize(), "little") % MODULUS
     
     all_indices = sorted(all_indices)
     all_indices_and_subindices = sorted(all_indices_and_subindices)
@@ -663,7 +663,7 @@ if __name__ == "__main__":
     print("Computed proof for {0} keys (size = {1} bytes) in {2:.3f} s".format(NUMBER_KEYS_PROOF, proof_size, time_b - time_a), file=sys.stderr)
 
     time_a = time()
-    check_verkle_proof(root["commitment"].serialize(), keys_in_proof, [values[key] for key in keys_in_proof], proof)
+    assert check_verkle_proof(root["commitment"].serialize(), keys_in_proof, [values[key] for key in keys_in_proof], proof)
     time_b = time()
     check_time = time_b - time_a
 
