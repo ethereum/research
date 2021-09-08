@@ -41,8 +41,8 @@ def generate_basis(size):
     """
     # TODO: Currently random points that differ on every run.
     # Implement reproducable basis generation once hash_to_curve is provided
-    BASIS_G = [Point(generator=True) for i in range(WIDTH)]
-    BASIS_Q = Point(generator=True)
+    BASIS_G = [Point(generator=False) for i in range(WIDTH)]
+    BASIS_Q = Point(generator=False)
     return {"G": BASIS_G, "Q": BASIS_Q}
 
 

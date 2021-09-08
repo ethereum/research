@@ -201,8 +201,8 @@ if __name__ == "__main__":
     WIDTH = 256
 
     time_a = time.time()
-    BASIS_G = [Point(generator=True) for i in range(WIDTH)]
-    BASIS_Q = Point(generator=True)
+    BASIS_G = [Point(generator=False) for i in range(WIDTH)]
+    BASIS_Q = Point(generator=False)
     time_b = time.time()
 
     print("Basis computed in {:.2f} ms".format((time_b - time_a)*1000))
