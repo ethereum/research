@@ -357,7 +357,7 @@ def get_average_depth(root_node):
     return depth / nodes
 
 
-def find_node_with_path(root_node, key):
+def find_key_with_path(root_node, key):
     """
     Returns the path of all nodes on the way to 'key' as well as their index
     """
@@ -372,11 +372,11 @@ def find_node_with_path(root_node, key):
         else:
             return path, None
 
-    if current_node["stem"] == stem:
-        suffix = get_suffix(key)
-        path.append((stem, suffix, current_node))
-        if suffix in current_node:
-            return path, current_node[suffix]
+    suffix = get_suffix(key)
+    path.append((stem, suffix, current_node))
+
+    if current_node["stem"] == stem and suffix in current_node:
+        return path, current_node[suffix]
 
     return path, None
     
@@ -569,7 +569,10 @@ def make_verkle_proof(root_node, keys, display_times=True):
     other_stems = set()
 
     for key in keys:
-        path, value = find_node_with_path(root_node, key)
+        path, value = find_key_with_path(root_node, key)
+        stem = get_stem(key)
+        suffix = get_suffix(key)
+
         values.append(value)
 
         for prefix, z, node in path:
@@ -577,38 +580,32 @@ def make_verkle_proof(root_node, keys, display_times=True):
                 nodes_by_index[(VERKLE_PROOF_COMMITMENT_TYPE_INNER, prefix)] = node
                 nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_INNER, prefix, z)] = node
 
-        if path[-1][2]["node_type"] == VERKLE_TRIE_NODE_TYPE_SUFFIX_TREE:
-            stem = path[-1][0]
-            suffix = path[-1][1]
-            node = path[-1][2]
-            extension_present_by_stem[stem] = VERKLE_PROOF_EXTENSION_PRESENT_PRESENT
+        node = path[-1][2]
+        if node["node_type"] == VERKLE_TRIE_NODE_TYPE_SUFFIX_TREE:
+            
+            other_stem = node["stem"]
             depths_by_stem[stem] = len(path) - 1
+            nodes_by_index[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, other_stem)] = node
+            nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, other_stem, 0)] = node # 1
+            nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, other_stem, 1)] = node # stem
 
-            nodes_by_index[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem)] = node
-            nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem, 0)] = node                  # 1
-            nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem, 1)] = node                  # stem
-            nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem, 2 + suffix // 128)] = node  # C1/C2
+            if other_stem == stem:
+                extension_present_by_stem[stem] = VERKLE_PROOF_EXTENSION_PRESENT_PRESENT
 
-            suffix_tree_commitment = VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C1 if suffix < 128 \
-                                     else VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C2
-            nodes_by_index[(suffix_tree_commitment, stem)] = node
-            nodes_by_index_and_z[(suffix_tree_commitment, stem, suffix * 2 % 256)] = node # value_lower
-            nodes_by_index_and_z[(suffix_tree_commitment, stem, (suffix * 2 + 1) % 256)] = node # value_upper
-        else:
-            stem = get_stem(key)
-            depths_by_stem[stem] = len(path)
-            node = path[-1][2]
+                nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem, 2 + suffix // 128)] = node  # C1/C2
 
-            if path[-1][1] in node:
-                node = node[path[-1][1]]
-                extension_present_by_stem[stem] = VERKLE_PROOF_EXTENSION_PRESENT_OTHERSTEM
-                other_stem = node["stem"]
-                nodes_by_index[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, other_stem)] = node
-                nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, other_stem, 0)] = node # 1
-                nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, other_stem, 1)] = node # stem
-                other_stems.add(other_stem)
+                suffix_tree_commitment = VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C1 if suffix < 128 \
+                                        else VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C2
+                nodes_by_index[(suffix_tree_commitment, stem)] = node
+                nodes_by_index_and_z[(suffix_tree_commitment, stem, suffix * 2 % 256)] = node       # value_lower
+                nodes_by_index_and_z[(suffix_tree_commitment, stem, (suffix * 2 + 1) % 256)] = node # value_upper
             else:
-                extension_present_by_stem[stem] = VERKLE_PROOF_EXTENSION_PRESENT_NOEXTENSION
+                extension_present_by_stem[stem] = VERKLE_PROOF_EXTENSION_PRESENT_OTHERSTEM
+                other_stems.add(other_stem)
+        else:
+ 
+            depths_by_stem[stem] = len(path)
+            extension_present_by_stem[stem] = VERKLE_PROOF_EXTENSION_PRESENT_NOEXTENSION
 
     depths = list(map(lambda x: x[1], sorted(depths_by_stem.items())))
     extension_present = list(map(lambda x: x[1], sorted(extension_present_by_stem.items())))
@@ -858,24 +855,12 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        WIDTH_BITS = int(sys.argv[1])
-        WIDTH = 2 ** WIDTH_BITS
-        ROOT_OF_UNITY = pow(PRIMITIVE_ROOT, (MODULUS - 1) // WIDTH, MODULUS)
-        primefield.DOMAIN = [pow(ROOT_OF_UNITY, i, MODULUS) for i in range(WIDTH)]
 
-        NUMBER_INITIAL_KEYS = int(sys.argv[2])
-
-        NUMBER_KEYS_PROOF = int(sys.argv[3])
-
-        NUMBER_DELETED_KEYS = 0
-        NUMBER_ADDED_KEYS = 0
-    
     BASIS = generate_basis(WIDTH)
     ipa_utils = IPAUtils(BASIS["G"], BASIS["Q"], primefield)
 
     # Build a random verkle trie
-    root = {"node_type": VERKLE_TRIE_NODE_TYPE_INNER}
+    root_node = {"node_type": VERKLE_TRIE_NODE_TYPE_INNER}
 
     values = {}
 
@@ -884,22 +869,22 @@ if __name__ == "__main__":
         for i in range(CHUNKS_PER_STEM):
             key = stem + bytes([randint(0, 2**8-1)])
             value = randint(0, 2**256-1).to_bytes(32, "little")
-            update_verkle_tree_nocommitmentupdate(root, key, value)
+            update_verkle_tree_nocommitmentupdate(root_node, key, value)
             values[key] = value
     
-    average_depth = get_average_depth(root)
+    average_depth = get_average_depth(root_node)
         
     print("Inserted {0} elements for an average depth of {1:.3f}".format(NUMBER_CHUNKS, average_depth), file=sys.stderr)
     print("Average depth = {0:.3f} without counting suffix trees (stem tree only)".format(average_depth - 2), file=sys.stderr)
 
     time_a = time()
-    verkle_add_missing_commitments(root)
+    verkle_add_missing_commitments(root_node)
     time_b = time()
 
     print("Computed verkle root in {0:.3f} s".format(time_b - time_a), file=sys.stderr)
 
     time_a = time()
-    assert values == check_valid_tree(root)
+    assert values == check_valid_tree(root_node)
     time_b = time()
     
     print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a), file=sys.stderr)
@@ -909,15 +894,15 @@ if __name__ == "__main__":
         for i in range(NUMBER_ADDED_STEMS):
             key = randint(0, 2**256-1).to_bytes(32, "little")
             value = randint(0, 2**256-1).to_bytes(32, "little")
-            update_verkle_tree(root, key, value)
+            update_verkle_tree(root_node, key, value)
             values[key] = value
         time_y = time()
             
         print("Additionally inserted {0} stems in {1:.3f} s".format(NUMBER_ADDED_STEMS, time_y - time_x), file=sys.stderr)
-        print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root)[1], get_average_depth(root)), file=sys.stderr)
+        print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root_node)[1], get_average_depth(root_node)), file=sys.stderr)
 
         time_a = time()
-        assert values == check_valid_tree(root)
+        assert values == check_valid_tree(root_node)
         time_b = time()
         
         print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a), file=sys.stderr)
@@ -931,21 +916,21 @@ if __name__ == "__main__":
             suffix = randint(0, 255)
             key = stem + bytes([suffix])
             value = randint(0, 2**256-1).to_bytes(32, "little")
-            update_verkle_tree(root, key, value)
+            update_verkle_tree(root_node, key, value)
             values[key] = value
         time_y = time()
             
         print("Additionally inserted {0} chunks in {1:.3f} s".format(NUMBER_ADDED_CHUNKS, time_y - time_x), file=sys.stderr)
-        print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root)[1], get_average_depth(root)), file=sys.stderr)
+        print("Keys in tree now: {0}, average depth: {1:.3f}".format(get_total_depth(root_node)[1], get_average_depth(root_node)), file=sys.stderr)
 
         time_a = time()
-        assert values == check_valid_tree(root)
+        assert values == check_valid_tree(root_node)
         time_b = time()
         
         print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a), file=sys.stderr)
 
     for key, value in values.items():
-        path, v2 = find_node_with_path(root, key)
+        path, v2 = find_key_with_path(root_node, key)
         if value != v2:
             print(key, value, v2)
             print(path[-1])
@@ -970,7 +955,7 @@ if __name__ == "__main__":
         values_in_proof.append(values[key] if key in values else None)
 
     time_a = time()
-    proof = make_verkle_proof(root, keys_in_proof)
+    proof = make_verkle_proof(root_node, keys_in_proof)
     time_b = time()
     
     proof_size = get_proof_size(proof)
@@ -979,7 +964,7 @@ if __name__ == "__main__":
     print("Computed proof for {0} keys (size = {1} bytes) in {2:.3f} s".format(len(keys_in_proof), proof_size, time_b - time_a), file=sys.stderr)
 
     time_a = time()
-    assert check_verkle_proof(root["commitment"].serialize(), keys_in_proof, values_in_proof, [], 0, proof)
+    assert check_verkle_proof(root_node["commitment"].serialize(), keys_in_proof, values_in_proof, [], 0, proof)
     time_b = time()
     check_time = time_b - time_a
 
