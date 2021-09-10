@@ -700,17 +700,19 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
     depths, extension_present, commitments_sorted_by_index_serialized, other_stems, D_serialized, ipa_proof = proof
     commitments_sorted_by_index = [Point().deserialize(verkle_root)] + [Point().deserialize(x) for x in commitments_sorted_by_index_serialized]
 
-    all_indices = set()
-    all_indices_and_zs = set()
-
-    leaf_values_by_index_and_z = {}
-
     # Find all stems
     stems = sorted(list(set([get_stem(key) for key in keys])))
     depths_by_stem = {}
     extension_present_by_stem = {}
     stems_with_extension = set()
     other_stems_used = set()
+
+    # The commitments in the proof are sorted by index. So we first need to recreate a list of all indices
+    # that are required for the proof, so that then we can associate all commitments with their index.
+    all_indices = set()
+    all_indices_and_zs = set()
+
+    leaf_values_by_index_and_z = {}
 
     for stem, depth, extpres in zip(stems, depths, extension_present):
         depths_by_stem[stem] = depth
@@ -929,13 +931,6 @@ if __name__ == "__main__":
         time_b = time()
         
         print("[Checked tree valid: {0:.3f} s]".format(time_b - time_a), file=sys.stderr)
-
-    for key, value in values.items():
-        path, v2 = find_key_with_path(root_node, key)
-        if value != v2:
-            print(key, value, v2)
-            print(path[-1])
-    
 
     all_keys = list(values.keys())
     shuffle(all_keys)
