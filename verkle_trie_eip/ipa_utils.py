@@ -27,7 +27,7 @@ def hash(x):
         elif isinstance(a, int):
             b += a.to_bytes(32, "little")
         elif isinstance(a, Point):
-            b += hash(a.serialize())
+            b += a.serialize()
     return hash(b)
 
 class IPAUtils():

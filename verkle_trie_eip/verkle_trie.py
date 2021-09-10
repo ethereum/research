@@ -485,21 +485,25 @@ def check_ipa_multiproof(Cs, zs, ys, proof, display_times=True):
     
     # Step 2
     t = ipa_utils.hash_to_field([r, D])
-    E_coefficients = []
+    E_coefficients = {}
     g_2_of_t = 0
     power_of_r = 1
 
-    for index, y in zip(zs, ys):
-        E_coefficient = primefield.div(power_of_r, t - primefield.DOMAIN[index])
-        E_coefficients.append(E_coefficient)
+    C_by_serialized = {}
+
+    for C, z, y in zip(Cs, zs, ys):
+        E_coefficient = primefield.div(power_of_r, t - primefield.DOMAIN[z])
+        C_serialized = C.serialize()
+        C_by_serialized[C_serialized] = C
+        E_coefficients[C_serialized] = E_coefficient if C_serialized not in E_coefficients \
+                                        else (E_coefficients[C_serialized] + E_coefficient) % MODULUS
         g_2_of_t += E_coefficient * y % MODULUS
-            
+
         power_of_r = power_of_r * r % MODULUS
 
     log_time_if_eligible("   Computed g2 and e coeffs", 30, display_times)
     
-    # TODO: Deduplicate Cs in order to make this MSM faster
-    E = Point().msm(Cs, E_coefficients)
+    E = Point().msm([C_by_serialized[x] for x in E_coefficients.keys()], E_coefficients.values())
 
     log_time_if_eligible("   Computed E commitment", 30, display_times)
 
