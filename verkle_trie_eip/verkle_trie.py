@@ -42,8 +42,8 @@ NUMBER_ADDED_CHUNKS = 512
 NUMBER_EXISTING_KEYS_PROOF = 5000
 
 # Added stems and chunks randomly (most likely empty)
-NUMBER_RANDOM_STEMS_PROOF = 500
-NUMBER_RANDOM_CHUNKS_PROOF = 500
+NUMBER_RANDOM_STEMS_PROOF = 1000
+NUMBER_RANDOM_CHUNKS_PROOF = 1000
 
 NUMBER_VALUES_CHANGED = 300
 
@@ -362,29 +362,29 @@ def find_key_with_path(root_node, key):
     Returns the path of all nodes on the way to 'key' as well as their index
     """
     current_node = root_node
-    path = []
+    node_path = []
     stem = get_stem(key)
     while current_node["node_type"] == VERKLE_TRIE_NODE_TYPE_INNER:
-        index = key[len(path)]
-        path.append((stem[:len(path)], index, current_node))
+        index = key[len(node_path)]
+        node_path.append((stem[:len(node_path)], index, current_node))
         if index in current_node:
             current_node = current_node[index]
         else:
-            return path, None
+            return node_path, None
 
     suffix = get_suffix(key)
-    path.append((stem[:len(path)], suffix, current_node))
+    node_path.append((stem[:len(node_path)], suffix, current_node))
 
     if current_node["stem"] == stem and suffix in current_node:
-        return path, current_node[suffix]
+        return node_path, current_node[suffix]
 
-    return path, None
+    return node_path, None
     
 
 def get_proof_size(proof):
-    depths, extension_present, commitments_sorted_by_index_serialized, other_stems, D_serialized, ipa_proof = proof
+    depths, extension_present, commitments_sorted_by_path_serialized, other_stems, D_serialized, ipa_proof = proof
     size = len(depths) # assume 8 bit integer to represent the depth (5 bit) and extension_present(2 bit)
-    size += 32 * len(commitments_sorted_by_index_serialized)
+    size += 32 * len(commitments_sorted_by_path_serialized)
     size += 32 * len(other_stems)
     size += 32 + (len(ipa_proof) - 1) * 2 * 32 + 32
     return size
@@ -537,19 +537,18 @@ def make_verkle_proof(root_node, keys, display_times=True):
     # to the proof)
     # If the stem is the stem of `key`, then the suffix tree for the suffix has to be revealed:
     #
-    # - the extension node, z = 2/3 for C1/C2 (if index <128/>=128)                        [VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION]
+    # - the extension node, z = 2/3 for C1/C2 (if suffix <128/>=128)                       [VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION]
     # - the suffix tree node C1/C2, z = 2 * suffix % 128     (value_lower + 2**128)        [VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C{1/2}]
     # - the suffix tree node C1/C2, z = 2 * suffix + 1 % 128 (value_upper)                 [VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C{1_2}]
     #
 
     # Step 0: Find all keys in the trie
 
-    # Nodes by index -- index refers to the combination of commitment_type (VERKLE_PROOF_COMMITMENT_TYPE_INNER,
-    # VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C{1/2}) and the prefix.
-    nodes_by_index = {}
+    # Nodes by path -- path refers to the full path of the commitment in the verkle trie
+    nodes_by_path = {}
 
-    # Nodes by index and z -- z is the position of the node that is opened
-    nodes_by_index_and_z = {}
+    # Nodes by path and z -- z is the position of the node that is opened; note that the same node can be opened at several z
+    nodes_by_path_and_z = {}
 
     # All values in order of keys. "None" is used for never written values and b"\0" * 32 for zero/deleted values
     values = []
@@ -569,43 +568,43 @@ def make_verkle_proof(root_node, keys, display_times=True):
     other_stems = set()
 
     for key in keys:
-        path, value = find_key_with_path(root_node, key)
+        node_path, value = find_key_with_path(root_node, key)
         stem = get_stem(key)
         suffix = get_suffix(key)
 
         values.append(value)
 
-        for prefix, z, node in path:
+        for path, z, node in node_path:
             if node["node_type"] == VERKLE_TRIE_NODE_TYPE_INNER:
-                nodes_by_index[(VERKLE_PROOF_COMMITMENT_TYPE_INNER, prefix)] = node
-                nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_INNER, prefix, z)] = node
+                nodes_by_path[path] = (VERKLE_PROOF_COMMITMENT_TYPE_INNER, node)
+                nodes_by_path_and_z[(path, z)] = (VERKLE_PROOF_COMMITMENT_TYPE_INNER, node)
 
-        node = path[-1][2]
-        prefix = path[-1][0]
+        node = node_path[-1][2]
+        path = node_path[-1][0]
         if node["node_type"] == VERKLE_TRIE_NODE_TYPE_SUFFIX_TREE:
             
             other_stem = node["stem"]
-            depths_by_stem[stem] = len(path) - 1
-            nodes_by_index[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, prefix)] = node
-            nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, prefix, 0)] = node # 1
-            nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, prefix, 1)] = node # stem
+            depths_by_stem[stem] = len(node_path) - 1
+            nodes_by_path[path] = (VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, node)
+            nodes_by_path_and_z[(path, 0)] = (VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, node) # 1
+            nodes_by_path_and_z[(path, 1)] = (VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, node) # stem
 
             if other_stem == stem:
                 extension_present_by_stem[stem] = VERKLE_PROOF_EXTENSION_PRESENT_PRESENT
 
-                nodes_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, prefix, 2 + suffix // 128)] = node  # C1/C2
+                nodes_by_path_and_z[(path, 2 + suffix // 128)] = (VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, node)  # C1/C2
 
+                suffix_tree_path = path + bytes([2 if suffix < 128 else 3])
                 suffix_tree_commitment = VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C1 if suffix < 128 \
                                         else VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C2
-                nodes_by_index[(suffix_tree_commitment, prefix)] = node
-                nodes_by_index_and_z[(suffix_tree_commitment, prefix, suffix * 2 % 256)] = node       # value_lower
-                nodes_by_index_and_z[(suffix_tree_commitment, prefix, (suffix * 2 + 1) % 256)] = node # value_upper
+                nodes_by_path[suffix_tree_path] = (suffix_tree_commitment, node)
+                nodes_by_path_and_z[(suffix_tree_path, suffix * 2 % 256)] = (suffix_tree_commitment, node)       # value_lower
+                nodes_by_path_and_z[(suffix_tree_path, (suffix * 2 + 1) % 256)] = (suffix_tree_commitment, node) # value_upper
             else:
                 extension_present_by_stem[stem] = VERKLE_PROOF_EXTENSION_PRESENT_OTHERSTEM
                 other_stems.add(other_stem)
         else:
- 
-            depths_by_stem[stem] = len(path)
+            depths_by_stem[stem] = len(node_path)
             extension_present_by_stem[stem] = VERKLE_PROOF_EXTENSION_PRESENT_NOEXTENSION
 
     depths = list(map(lambda x: x[1], sorted(depths_by_stem.items())))
@@ -614,7 +613,7 @@ def make_verkle_proof(root_node, keys, display_times=True):
     log_time_if_eligible("   Computed key paths", 30, display_times)
     
     # Nodes sorted 
-    nodes_sorted_by_index_and_z = sorted(nodes_by_index_and_z.items())
+    nodes_sorted_by_path_and_z = sorted(nodes_by_path_and_z.items())
     
     log_time_if_eligible("   Sorted all commitments", 30, display_times)
     
@@ -623,8 +622,9 @@ def make_verkle_proof(root_node, keys, display_times=True):
     fs = []
     Cs = []
 
-    for index_and_z, node in nodes_sorted_by_index_and_z:
-        node_type, index, z = index_and_z
+    for path_and_z, node_type_and_node in nodes_sorted_by_path_and_z:
+        path, z = path_and_z
+        node_type, node = node_type_and_node
         zs.append(z)
         if node_type == VERKLE_PROOF_COMMITMENT_TYPE_INNER:
             Cs.append(node["commitment"])
@@ -667,22 +667,23 @@ def make_verkle_proof(root_node, keys, display_times=True):
     D_serialized, ipa_proof = make_ipa_multiproof(Cs, fs, zs, ys, display_times)
 
     # All commitments, but without any duplications. These are for sending over the wire as part of the proof
-    nodes_sorted_by_index = sorted(nodes_by_index.items())
-    commitments_sorted_by_index_serialized = []
-    for index, node in nodes_sorted_by_index[1:]:
-        if index[0] in [VERKLE_PROOF_COMMITMENT_TYPE_INNER, VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION]:
-            commitments_sorted_by_index_serialized.append(node["commitment"].serialize())
-        elif index[0] == VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C1:
-            commitments_sorted_by_index_serialized.append(node["C1"].serialize())
-        elif index[0] == VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C2:
-            commitments_sorted_by_index_serialized.append(node["C2"].serialize())
-    
+    nodes_sorted_by_path = sorted(nodes_by_path.items())
+    commitments_sorted_by_path_serialized = []
+    for path, node_type_and_node in nodes_sorted_by_path[1:]:
+        node_type, node = node_type_and_node
+        if node_type in [VERKLE_PROOF_COMMITMENT_TYPE_INNER, VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION]:
+            commitments_sorted_by_path_serialized.append(node["commitment"].serialize())
+        elif node_type == VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C1:
+            commitments_sorted_by_path_serialized.append(node["C1"].serialize())
+        elif node_type == VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C2:
+            commitments_sorted_by_path_serialized.append(node["C2"].serialize())
+
     stems_with_extension = set(stem for stem in extension_present_by_stem if extension_present_by_stem[stem])
     other_stems = sorted(list(stem for stem in other_stems if stem not in stems_with_extension))
 
     log_time_if_eligible("   Serialized commitments", 30, display_times)
 
-    return depths, extension_present, commitments_sorted_by_index_serialized, other_stems, D_serialized, ipa_proof
+    return depths, extension_present, commitments_sorted_by_path_serialized, other_stems, D_serialized, ipa_proof
 
 
 def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_root, proof, display_times=True):
@@ -697,8 +698,8 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
     start_logging_time_if_eligible("   Starting proof check", display_times)
 
     # Unpack the proof
-    depths, extension_present, commitments_sorted_by_index_serialized, other_stems, D_serialized, ipa_proof = proof
-    commitments_sorted_by_index = [Point().deserialize(verkle_root)] + [Point().deserialize(x) for x in commitments_sorted_by_index_serialized]
+    depths, extension_present, commitments_sorted_by_path_serialized, other_stems, D_serialized, ipa_proof = proof
+    commitments_sorted_by_path = [Point().deserialize(verkle_root)] + [Point().deserialize(x) for x in commitments_sorted_by_path_serialized]
 
     # Find all stems
     stems = sorted(list(set([get_stem(key) for key in keys])))
@@ -707,12 +708,12 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
     stems_with_extension = set()
     other_stems_used = set()
 
-    # The commitments in the proof are sorted by index. So we first need to recreate a list of all indices
-    # that are required for the proof, so that then we can associate all commitments with their index.
-    all_indices = set()
-    all_indices_and_zs = set()
+    # The commitments in the proof are sorted by path in the verkle trie. So we first need to recreate a list of all paths
+    # that are required for the proof, so that then we can associate all commitments with their path.
+    commitment_types_by_path = {}
+    all_paths_and_zs = set()
 
-    leaf_values_by_index_and_z = {}
+    leaf_values_by_path_and_z = {}
 
     for stem, depth, extpres in zip(stems, depths, extension_present):
         depths_by_stem[stem] = depth
@@ -733,34 +734,35 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
         depth = depths_by_stem[stem]
         extpres = extension_present_by_stem[stem]
         for i in range(depth):
-            all_indices.add((VERKLE_PROOF_COMMITMENT_TYPE_INNER, stem[:i]))
-            all_indices_and_zs.add((VERKLE_PROOF_COMMITMENT_TYPE_INNER, stem[:i], stem[i]))
+            commitment_types_by_path[stem[:i]] = VERKLE_PROOF_COMMITMENT_TYPE_INNER
+            all_paths_and_zs.add((stem[:i], stem[i]))
 
         if extpres in [VERKLE_PROOF_EXTENSION_PRESENT_OTHERSTEM, VERKLE_PROOF_EXTENSION_PRESENT_PRESENT]:
 
-            all_indices.add((VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem[:depth]))
-            all_indices_and_zs.add((VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem[:depth], 0))
-            all_indices_and_zs.add((VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem[:depth], 1))
+            commitment_types_by_path[stem[:depth]] = VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION
+            all_paths_and_zs.add((stem[:depth], 0))
+            all_paths_and_zs.add((stem[:depth], 1))
 
-            leaf_values_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem[:depth], 0)] = 1
+            leaf_values_by_path_and_z[(stem[:depth], 0)] = 1
 
             if extpres == VERKLE_PROOF_EXTENSION_PRESENT_PRESENT:
                 suffix = get_suffix(key)
 
-                all_indices_and_zs.add((VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem[:depth], 2 + (suffix // 128)))
+                all_paths_and_zs.add((stem[:depth], 2 + (suffix // 128)))
 
-                leaf_values_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, stem[:depth], 1)] = int.from_bytes(stem, "little")
+                leaf_values_by_path_and_z[(stem[:depth], 1)] = int.from_bytes(stem, "little")
 
-                suffix_tree_commitment = VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C1 if suffix < 128 else VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C2
-                all_indices.add((suffix_tree_commitment, stem[:depth]))
-                all_indices_and_zs.add((suffix_tree_commitment, stem[:depth], 2 * suffix % 256))
-                all_indices_and_zs.add((suffix_tree_commitment, stem[:depth], (2 * suffix + 1) % 256))
+                suffix_tree_path = stem[:depth] + bytes([2 if suffix < 128 else 3])
+                commitment_types_by_path[suffix_tree_path] = VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C1 if suffix < 128 \
+                                                                else VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C2
+                all_paths_and_zs.add((suffix_tree_path, 2 * suffix % 256))
+                all_paths_and_zs.add((suffix_tree_path, (2 * suffix + 1) % 256))
 
                 value_lower = int.from_bytes(value[:16], "little") + 2**128 if value != None else 0
                 value_upper = int.from_bytes(value[16:], "little") if value != None else 0
 
-                leaf_values_by_index_and_z[(suffix_tree_commitment, stem[:depth], 2 * suffix % 256)] = value_lower
-                leaf_values_by_index_and_z[(suffix_tree_commitment, stem[:depth], (2 * suffix + 1) % 256)] = value_upper
+                leaf_values_by_path_and_z[(suffix_tree_path, 2 * suffix % 256)] = value_lower
+                leaf_values_by_path_and_z[(suffix_tree_path, (2 * suffix + 1) % 256)] = value_upper
             elif extpres == VERKLE_PROOF_EXTENSION_PRESENT_OTHERSTEM:
                 # The proof indicates that an extension node for a different stem was found in the tree
                 # We need to verify this is the case by looking up the other stem in "other_stems"
@@ -794,11 +796,13 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
 
                     # Now we need to add this extension node to the proof to show that our original stem wasn't
                     # present
-                    leaf_values_by_index_and_z[(VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, other_stem[:depth], 1)] = int.from_bytes(other_stem, "little")
+                    leaf_values_by_path_and_z[(other_stem[:depth], 1)] = int.from_bytes(other_stem, "little")
         elif extpres == VERKLE_PROOF_EXTENSION_PRESENT_NOEXTENSION:
             # Prover can only claim extension is not present if value was never written
             if value is not None:
                 return False
+
+            leaf_values_by_path_and_z[(stem[:depth - 1], stem[depth - 1])] = 0
         else:
             # Invalid value for extpres
             return False
@@ -806,47 +810,28 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
     # In order to assure uniqueness of the proof, we want the set of other stems to be exact and not include any extras
     # that weren't necessary.
     assert set(other_stems) == other_stems_used
-    
-    
-    all_indices = sorted(all_indices)
-    assert len(all_indices) == len(commitments_sorted_by_index)
-    all_indices_and_zs = sorted(all_indices_and_zs)
+
+    all_paths = sorted(commitment_types_by_path.keys())
+    assert len(all_paths) == len(commitments_sorted_by_path)
+    all_paths_and_zs = sorted(all_paths_and_zs)
 
     log_time_if_eligible("   Computed indices", 30, display_times)
 
     # Step 0: recreate the commitment list sorted by indices
-    commitments_by_index = {index: commitment for index, commitment in zip(all_indices, commitments_sorted_by_index)}
-    commitments_by_index_and_z = {index_and_z: commitments_by_index[index_and_z[:2]]
-                                            for index_and_z in all_indices_and_zs}
+    commitments_by_path = {path: commitment for path, commitment in zip(all_paths, commitments_sorted_by_path)}
+    commitments_by_path_and_z = {(path, z): commitments_by_path[path] for path, z in all_paths_and_zs}
     
-    ys_by_index_and_z = {}
-    for index_and_z in all_indices_and_zs:
-        commitment_type, prefix, z = index_and_z
+    ys_by_path_and_z = {}
+    for path, z in all_paths_and_zs:
+        child_path = path + bytes([z])
+        ys_by_path_and_z[(path, z)] = leaf_values_by_path_and_z[(path, z)] if (path, z) in leaf_values_by_path_and_z \
+                                      else int.from_bytes(commitments_by_path[child_path].serialize(), "little") % MODULUS
 
-        if index_and_z in leaf_values_by_index_and_z:
-            ys_by_index_and_z[index_and_z] = leaf_values_by_index_and_z[index_and_z]
-
-        elif commitment_type == VERKLE_PROOF_COMMITMENT_TYPE_INNER:            
-            inner_child_index = (VERKLE_PROOF_COMMITMENT_TYPE_INNER, prefix + bytes([z]))
-            extension_child_index = (VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION, prefix + bytes([z]))
-
-            if inner_child_index in commitments_by_index:
-                ys_by_index_and_z[index_and_z] = int.from_bytes(commitments_by_index[inner_child_index].serialize(), "little") % MODULUS
-            elif extension_child_index in commitments_by_index:
-                ys_by_index_and_z[index_and_z] = int.from_bytes(commitments_by_index[extension_child_index].serialize(), "little") % MODULUS
-            else:
-                ys_by_index_and_z[index_and_z] = 0
-
-        elif commitment_type == VERKLE_PROOF_COMMITMENT_TYPE_EXTENSION:
-            suffix_tree_commitment = VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C1 if z == 2 else VERKLE_PROOF_COMMITMENT_TYPE_SUFFIX_TREE_C2
-            child_index = (suffix_tree_commitment, prefix)
-            ys_by_index_and_z[index_and_z] = int.from_bytes(commitments_by_index[child_index].serialize(), "little") % MODULUS
-
-    Cs = list(map(lambda x: x[1], sorted(commitments_by_index_and_z.items())))
+    Cs = list(map(lambda x: x[1], sorted(commitments_by_path_and_z.items())))
     
-    zs = list(map(lambda x: x[2], sorted(all_indices_and_zs)))
+    zs = list(map(lambda x: x[1], sorted(all_paths_and_zs)))
     
-    ys = list(map(lambda x: x[1], sorted(ys_by_index_and_z.items())))
+    ys = list(map(lambda x: x[1], sorted(ys_by_path_and_z.items())))
 
     log_time_if_eligible("   Recreated commitment lists", 30, display_times)
 
