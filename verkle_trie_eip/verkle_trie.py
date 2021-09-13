@@ -10,10 +10,10 @@ import sys
 # Proof of concept implementation for verkle tries
 #
 # All polynomials in this implementation are represented in evaluation form, i.e. by their values
-# on primefield.DOMAIN. 
+# on the domain 0, 1, ..., WIDTH - 1
 #
 # Ethereum-specific implementation according to this EIP draft:
-# https://notes.ethereum.org/uwK4EJypSHWyEZvivcYyJA
+# https://notes.ethereum.org/@vbuterin/verkle_tree_eip
 #
 
 # Bandersnatch curve modulus
@@ -218,7 +218,7 @@ def update_verkle_tree(root_node, key, value):
             value_change = current_node[index]["commitment_field"]
             break
     
-    # Update all the parent commitments along 'path'
+    # Update all the ancestor commitments along `path`
     for index, node in reversed(path):
         node["commitment"].add(BASIS["G"][index].dup().mul(value_change))
         old_field = node["commitment_field"]
@@ -357,7 +357,7 @@ def get_average_depth(root_node):
 
 def find_key_with_path(root_node, key):
     """
-    Returns the path of all nodes on the way to 'key' as well as their index
+    Returns the path of all nodes on the way to `key` as well as their index
     """
     current_node = root_node
     node_path = []
@@ -552,7 +552,7 @@ def make_verkle_proof(root_node, keys, display_times=True):
     # Nodes by path and z -- z is the position of the node that is opened; note that the same node can be opened at several z
     nodes_by_path_and_z = {}
 
-    # All values in order of keys. "None" is used for never written values and b"\0" * 32 for zero/deleted values
+    # All values in order of keys. `None` is used for never written values and b"\0" * 32 for zero/deleted values
     values = []
 
     # Depth at which the extension node for the stem was found
@@ -688,13 +688,10 @@ def make_verkle_proof(root_node, keys, display_times=True):
     return depths, extension_present, commitments_sorted_by_path_serialized, other_stems, D_serialized, ipa_proof
 
 
-def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_root, proof, display_times=True):
+def check_verkle_proof(verkle_root, keys, values, proof, display_times=True):
     """
-    Checks Verkle tree proof according to
+    Checks verkle trie proof according to
     https://dankradfeist.de/ethereum/2021/06/18/pcs-multiproofs.html
-
-    Updated_values contains new updated values. Can be "None" for any value that does not need updating.
-    Checks that the resulting root is "new_verkle_root"
     """
 
     start_logging_time_if_eligible("   Starting proof check", display_times)
@@ -782,7 +779,7 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
                         other_stem = o
                 
                 if other_stem is None:
-                    # TODO: other_stem search is linear search which should work perfectly in average case but
+                    # TODO: `other_stem` search is linear search which should work perfectly in average case but
                     # is a DOS vector. Need to employ binary search
                     for o in other_stems:
                         if o[:depth] == stem[:depth]:
@@ -806,7 +803,7 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
             leaf_values_by_path_and_z[(stem[:depth - 1], stem[depth - 1])] = 0
         else:
             # Invalid value for extpres
-            return False
+            return False, None
 
     # In order to assure uniqueness of the proof, we want the set of other stems to be exact and not include any extras
     # that weren't necessary.
@@ -836,9 +833,21 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
 
     log_time_if_eligible("   Recreated commitment lists", 30, display_times)
 
-    assert check_ipa_multiproof(Cs, zs, ys, [D_serialized, ipa_proof], display_times)
+    update_hint = depths_by_stem, extension_present_by_stem, commitments_by_path, other_stems_by_prefix
 
-    # Compute the updated verkle root
+    return check_ipa_multiproof(Cs, zs, ys, [D_serialized, ipa_proof], display_times), update_hint
+
+
+def compute_updated_verkle_root(verkle_root, keys, values, updated_values, update_hint, display_times=True):
+    """
+    Computes the updated verkle root
+
+    `updated_values` contains new updated values in the same order as the keys/values.
+    Can be `None` for any value that does not need updating.
+    Returns the updated verkle root
+    """
+
+    depths_by_stem, extension_present_by_stem, commitments_by_path, other_stems_by_prefix = update_hint
 
     updated_stems = {}
 
@@ -929,6 +938,9 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
     update_tree = {}
 
     def insert_into_update_tree(prefix, field_update):
+        """
+        Helper function to insert field updates into the update tree
+        """
         current_node = update_tree
         for index in prefix[:-1]:
             if index not in current_node:
@@ -1004,6 +1016,9 @@ def check_verkle_proof(verkle_root, keys, values, updated_values, new_verkle_roo
         insert_into_update_tree(prefix, field_update)
 
     def compute_update(path, node):
+        """
+        Helper function to compute the updates in the update tree
+        """
         field_updates = {}
         for index, update_node in node.items():
             if isinstance(update_node, dict):
@@ -1126,21 +1141,29 @@ if __name__ == "__main__":
     proof_time = time_b - time_a
     
     print("Computed proof for {0} keys (size = {1} bytes) in {2:.3f} s".format(len(keys_in_proof), proof_size, time_b - time_a), file=sys.stderr)
+    print("Witness size per key: {0:.3f} bytes".format(proof_size / len(keys_in_proof)))
 
     updated_values = [None] * len(values_in_proof)
     for i in range(NUMBER_VALUES_UPDATED):
         j = randint(0, len(updated_values) - 1)
         while updated_values[j] is not None:
-        #while values_in_proof[j] is not None:
             j = randint(0, len(updated_values) - 1)
         updated_values[j] = randint(0, 2**256-1).to_bytes(32, "little")
 
     time_a = time()
-    updated_root = check_verkle_proof(root_node["commitment"].serialize(), keys_in_proof, values_in_proof, updated_values, 0, proof)
+    r, update_hint =  check_verkle_proof(root_node["commitment"].serialize(), keys_in_proof, values_in_proof, proof)
+    assert r
     time_b = time()
     check_time = time_b - time_a
 
     print("Checked proof in {0:.3f} s".format(time_b - time_a), file=sys.stderr)
+
+    time_a = time()
+    updated_root = compute_updated_verkle_root(root_node["commitment"].serialize(), keys_in_proof, values_in_proof, updated_values, update_hint)
+    time_b = time()
+    check_time = time_b - time_a
+
+    print("Computed root update in {0:.3f} s".format(time_b - time_a), file=sys.stderr)
 
     time_a = time()
     for key, updated_value in zip(keys_in_proof, updated_values):
