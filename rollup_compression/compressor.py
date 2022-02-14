@@ -48,3 +48,20 @@ c = zbyte_compress(data)
 assert zbyte_decompress(c) == data
 
 print("Zero-byte compress length: {}".format(len(c)))
+
+def simple_compress(data, chunk_size=28):
+    q = data.replace(b'\xfe', b'\xfe\xff')
+    winning_keys = []
+    for i in range(200):
+        occurrences = {}
+        for pos in range(0, len(q)-chunk_size+1):
+            chunk = q[pos:pos+chunk_size]
+            occurrences[chunk] = occurrences.get(chunk, 0) + 1
+        winning_key = max(occurrences.keys(), key=lambda x: occurrences[x])
+        winning_keys.append(winning_key)
+        q = q.replace(winning_key, bytes([254, i]))
+        print("Key: {}, occurrences: {}, new length: {}"
+              .format(winning_key, occurrences[winning_key], len(q) + chunk_size * (i+1)))
+    return(b''.join(winning_keys) + q)
+
+print("Simple compress length: {}".format(len(simple_compress(zbyte_compress(data)))))
