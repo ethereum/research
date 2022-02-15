@@ -18,6 +18,13 @@ def serialize_point(pt):
 def privtopub(key):
     return curve.multiply(curve.G1, key)
 
+# Linear combination of a list of points and values
+def lincomb(pts: list, values: list) -> POINT:
+    o = curve.Z1
+    for pt, value in zip(pts, values):
+        o = curve.add(o, curve.multiply(pt, value))
+    return o
+
 # Make a Schnorr signature
 def sign(msg: bytes, key: int) -> SIG2:
     r = hash_to_int(msg + serialize_int(key))
@@ -65,26 +72,29 @@ def verify_1of2(msg: bytes, KEY1: POINT, KEY2: POINT, sig: SIG3, BASE: POINT =cu
     newer_e = hash_to_int(serialize_point(R2) + msg)
     return newer_e == e
 
-# Linear combination of a list of points and values
-def lincomb(pts: list, values: list) -> POINT:
-    o = curve.Z1
-    for pt, value in zip(pts, values):
-        o = curve.add(o, curve.multiply(pt, value))
-    return o
-
 # Generate points C1, D1, C2, D2, which equal
 # EITHER (A1*f, B1*f, A2*f, B2*f) OR (A2*f, B2*f, A1*f, B1*f)
 # And generate a proof that this was done correctly
 def prove_blind_and_swap(A1: POINT, B1: POINT, A2: POINT, B2: POINT, factor: int, swap=False):
-    msg = b''.join(serialize_point(x) for x in (A1, B1, A2, B2))
-    r = hash_to_int(msg + b'\x01')
-    BASE = lincomb((A1, B1, A2, B2), (1, r, r**2, r**3))
+    # Compute the blind-and-swap
     if not swap:
         C1, D1, C2, D2 = (curve.multiply(P, factor) for P in (A1, B1, A2, B2))
+    else:
+        C1, D1, C2, D2 = (curve.multiply(P, factor) for P in (A2, B2, A1, B1))
+    # Fiat shamir to choose a random linear combination
+    msg = b''.join(serialize_point(x) for x in (A1, B1, A2, B2, C1, C2, D1, D2))
+    r = hash_to_int(msg + b'\x01')
+    # Take that linear combination of the base
+    BASE = lincomb((A1, B1, A2, B2), (1, r, r**2, r**3))
+    # The PUB_NOSWAP point is the same linear combination of (C1, D1, C2, D2)
+    # The PUB_WITHSWAP point is the same linear combination of (C2, D2, C1, D1)
+    # If you are not swapping, then PUB_NOSWAP = factor * BASE
+    # If you are swapping, then PUB_WITHSWAP = factor * BASE
+    # So we now transformed the problem into a 1-of-2 ringsig
+    if not swap:
         PUB_WITHSWAP = lincomb((C2, D2, C1, D1), (1, r, r**2, r**3))
         proof = sign_firstof2(msg, factor, PUB_WITHSWAP, BASE)
     else:
-        C1, D1, C2, D2 = (curve.multiply(P, factor) for P in (A2, B2, A1, B1))
         PUB_NOSWAP = lincomb((C1, D1, C2, D2), (1, r, r**2, r**3))
         proof = sign_secondof2(msg, PUB_NOSWAP, factor, BASE)
     return C1, D1, C2, D2, proof
@@ -93,7 +103,7 @@ def prove_blind_and_swap(A1: POINT, B1: POINT, A2: POINT, B2: POINT, factor: int
 def verify_blind_and_swap(A1: POINT, B1: POINT, A2: POINT, B2: POINT,
                           C1: POINT, D1: POINT, C2: POINT, D2: POINT,
                           proof: SIG3):
-    msg = b''.join(serialize_point(x) for x in (A1, B1, A2, B2))
+    msg = b''.join(serialize_point(x) for x in (A1, B1, A2, B2, C1, C2, D1, D2))
     r = hash_to_int(msg + b'\x01')
     BASE = lincomb((A1, B1, A2, B2), (1, r, r**2, r**3))
     PUB_NOSWAP = lincomb((C1, D1, C2, D2), (1, r, r**2, r**3))
