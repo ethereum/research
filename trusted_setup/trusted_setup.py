@@ -35,7 +35,7 @@ def verify_setup(setup):
     G2_upper = linear_combination(G2_setup[1:], G2_random_coeffs, b.Z2)
     return (
         G1_setup[0] == b.G1 and 
-        G1_setup[0] == b.G1 and 
+        G2_setup[0] == b.G2 and 
         b.pairing(G2_lower, G1_upper) == b.pairing(G2_upper, G1_lower)
     )
 
