@@ -84,9 +84,9 @@ def fft(vals, modulus, domain, add, multiply, neg):
 
 # Generate a w such that w**length = 1
 def generate_root_of_unity(length):
-    # 5 is a primitive root
+    # 7 is a primitive root
     assert (b.curve_order - 1) % length == 0
-    return pow(5, (b.curve_order - 1) // length, b.curve_order)
+    return pow(7, (b.curve_order - 1) // length, b.curve_order)
 
 # Converts a G1 or G2 portion of a setup into the Lagrange basis
 def lagrangify(setup):
