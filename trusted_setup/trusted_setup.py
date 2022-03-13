@@ -33,7 +33,11 @@ def verify_setup(setup):
     G2_random_coeffs = [random.randrange(2**40) for _ in range(len(G2_setup) - 1)]
     G2_lower = linear_combination(G2_setup[:-1], G2_random_coeffs, b.Z2)
     G2_upper = linear_combination(G2_setup[1:], G2_random_coeffs, b.Z2)
-    return b.pairing(G2_lower, G1_upper) == b.pairing(G2_upper, G1_lower)
+    return (
+        G1_setup[0] == b.G1 and 
+        G1_setup[0] == b.G1 and 
+        b.pairing(G2_lower, G1_upper) == b.pairing(G2_upper, G1_lower)
+    )
 
 # Helper for extending a setup
 def extend_one_sided_setup(setup, secret):
@@ -64,7 +68,7 @@ def get_extension_proof(previous_setup, secret):
 def verify_extension_proofs(final_setup, proofs):
     G1_points = [proof[0] for proof in proofs] + [final_setup[0][1]]
     G2_points = [proof[1] for proof in proofs]
-    return all(
+    return G1_points[0] == b.G1 and all(
         b.pairing(G2_points[i], G1_points[i]) == b.pairing(b.G2, G1_points[i+1])
         for i in range(len(G2_points))
     )
