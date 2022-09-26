@@ -180,7 +180,7 @@ def simplify(exprs, first_is_negative=False):
         raise Exception("No ops, expected sub-expr to be a unit: {}"
                         .format(expr))
     elif exprs[0][0] == '-':
-        return simplify([expression[exprs[0][1:]]], not first_is_negative)
+        return simplify([exprs[0][1:]], not first_is_negative)
     elif exprs[0].isnumeric():
         return {'': int(exprs[0]) * (-1 if first_is_negative else 1)}
     elif is_valid_variable_name(exprs[0]):
@@ -206,29 +206,28 @@ def eq_to_coeffs(eq):
     if tokens[1] in ('<==', '==='):
         # First token is the output variable
         out = tokens[0]
-        if not is_valid_variable_name(out):
+        if not is_valid_variable_name(out.lstrip('-')):
             raise Exception("Out position must contain valid variable name")
-        variables = sorted(set(
-            t for t in tokens[2:] if is_valid_variable_name(t)
-        ))
+        coeffs = simplify(tokens[2:])
+        variables = []
+        for t in tokens[2:]:
+            if is_valid_variable_name(t.lstrip('-')):
+                variables.append(t.lstrip('-'))
+        allowed_coeffs = variables + ['']
         if len(variables) > 2:
             raise Exception("Max 2 variables, found {}".format(variables))
-        elif len(variables) == 2:
-            allowed_coeffs = [
-                '', variables[0], variables[1], variables[0]+'*'+variables[1]
-            ]
         elif len(variables) == 1:
-            variables = [variables[0], variables[0]]
-            allowed_coeffs = [
-                '', variables[0], variables[0]+'*'+variables[0]
-            ]
-        elif len(variables) == 0:
-            variables = []
-            allowed_coeffs = ['']
-        coeffs = simplify(tokens[2:])
+            if variables[0]+'*'+variables[0] in coeffs:
+                variables.append(variables[0])
+        if len(variables) == 2:
+            allowed_coeffs.append(min(variables)+'*'+max(variables))
         for key in coeffs.keys():
             if key not in allowed_coeffs:
                 raise Exception("Disallowed multiplication: {}".format(key))
+        if out[0] == '-':
+            assert out[1] != '-'
+            out = out[1:]
+            coeffs['$flip_output'] = True
         return out, variables, coeffs
     else:
         raise Exception("Unsupported op: {}".format(tokens[1]))
@@ -248,13 +247,11 @@ def mk_verification_key(setup, group_order, eqs):
     for i, (out, ins, coeffs) in enumerate(eqs):
         L[i] = -coeffs.get(ins[0], 0)
         C[i] = -coeffs.get('', 0)
-        O[i] = 1
+        O[i] = (-1 if '$flip_output' in coeffs else 1)
         if len(ins) == 2:
             R[i] = -coeffs.get(ins[1], 0)
-            M[i] = -coeffs.get(ins[0]+'*'+ins[1], 0)
-            variable_uses.append(ins + [out])
-        else:
-            variable_uses.append(ins + [None, out])
+            M[i] = -coeffs.get(min(ins)+'*'+max(ins), 0)
+        variable_uses.append(ins + [None] * (2 - len(ins)) + [out])
     S1, S2, S3 = make_s_polynomials(setup, group_order, variable_uses)
     return {
         "Qm": evaluations_to_point(setup, group_order, M),
