@@ -12,6 +12,7 @@ def basic_test():
         if c.interpret_json_point(circom_output[key]) != vk[key]:
             raise Exception("Mismatch {}: ours {} theirs {}"
                             .format(key, vk[key], circom_output[key]))
+    assert vk['w'] == int(circom_output['w'])
     print("Success")
 
 if __name__ == '__main__':

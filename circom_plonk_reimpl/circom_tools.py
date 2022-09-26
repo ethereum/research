@@ -265,5 +265,6 @@ def mk_verification_key(setup, group_order, eqs):
         "S1": S1,
         "S2": S2,
         "S3": S3,
-        "X_2": setup.X2
+        "X_2": setup.X2,
+        "w": get_root_of_unity(group_order)
     }
