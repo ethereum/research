@@ -197,12 +197,12 @@ class PrimeField():
 
     # Build a polynomial that returns 0 at all specified xs
     def zpoly(self, xs):
-        root = [1]
-        for x in xs:
-            root.insert(0, 0)
-            for j in range(len(root)-1):
+        root = [0] * len(xs) + [1]
+        for i, x in enumerate(xs):
+            for j in range(len(xs) - i - 1, len(xs)):
                 root[j] -= root[j+1] * x
-        return [x % self.MODULUS for x in root]
+                root[j] = root[j] % self.MODULUS
+        return root
     
     # Given p+1 y values and x values with no errors, recovers the original
     # p+1 degree polynomial.
