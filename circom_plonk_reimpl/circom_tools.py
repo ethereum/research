@@ -2,14 +2,28 @@
 # to match https://zkrepl.dev/ output
 
 import py_ecc.bn128 as b
+from py_ecc.fields.field_elements import FQ as Field
 from fft import fft
+from functools import cache
+
 f = b.FQ
 f2 = b.FQ2
 
+class f_inner(Field):
+    field_modulus = b.curve_order
+
 primitive_root = 5
 
+@cache
 def get_root_of_unity(group_order):
     return pow(primitive_root, (b.curve_order - 1) // group_order, b.curve_order)
+
+@cache
+def get_roots_of_unity(group_order):
+    o = [1, get_root_of_unity(group_order)]
+    while len(o) < group_order:
+        o.append(o[-1] * o[1] % b.curve_order)
+    return o
 
 SETUP_FILE_G1_STARTPOS = 80
 SETUP_FILE_POWERS_POS = 60
@@ -67,11 +81,15 @@ def powers_to_point(setup, powers):
         raise Exception("Not enough powers in setup")
     o = b.Z1
     for x, y in zip(powers, setup.G1_side):
+        if hasattr(x, 'n'):
+            x = x.n
         o = b.add(o, b.multiply(y, x % b.curve_order))
     return o
 
 # Encodes the KZG commitment that evaluates to the given values in the group
 def evaluations_to_point(setup, group_order, vals):
+    if hasattr(vals[0], 'n'):
+        vals = [x.n for x in vals]
     powers = fft(vals, b.curve_order, get_root_of_unity(group_order), inv=True)
     return powers_to_point(setup, powers)
 
@@ -95,7 +113,7 @@ def interpret_json_point(p):
 def S_position_to_field(group_order, index, section):
     assert section in (1, 2, 3) and index < group_order
     return (
-        pow(get_root_of_unity(group_order), index, b.curve_order) * section
+        get_roots_of_unity(group_order)[index] * section
     ) % b.curve_order
 
 # Expects input in the form: [['a', 'b', 'c'], ...]
@@ -266,9 +284,8 @@ def make_verification_key(setup, group_order, eqs):
     # Convert equations into coeffs, eg.
     # 'c = a * b + 5' -> ['a', 'b', 'c'], {"a*b": 1, "": 5}
     eqs = [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in eqs]
-    variable_uses = [variables for (variables, coeffs) in eqs]
     L, R, M, O, C = make_gate_polynomials(group_order, eqs)
-    S1, S2, S3 = make_s_polynomials(group_order, variable_uses)
+    S1, S2, S3 = make_s_polynomials(group_order, [v for (v, c) in eqs])
     return {
         "Qm": evaluations_to_point(setup, group_order, M),
         "Ql": evaluations_to_point(setup, group_order, L),
