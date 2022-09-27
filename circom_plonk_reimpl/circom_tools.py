@@ -99,7 +99,7 @@ def S_position_to_field(group_order, index, section):
     ) % b.curve_order
 
 # Expects input in the form: [['a', 'b', 'c'], ...]
-def make_s_polynomials(setup, group_order, wires):
+def make_s_polynomials(group_order, wires):
     if len(wires) > group_order:
         raise Exception("Group order too small")
     S = {
@@ -132,12 +132,7 @@ def make_s_polynomials(setup, group_order, wires):
             S[uses[next_i][1]][uses[next_i][0]] = S_position_to_field(
                 group_order, uses[i][0], uses[i][1]
             )
-    # Convert S in evaluation form into KZG commitment
-    return (
-        evaluations_to_point(setup, group_order, S[1]),
-        evaluations_to_point(setup, group_order, S[2]),
-        evaluations_to_point(setup, group_order, S[3])
-    )
+    return (S[1], S[2], S[3])
 
 def is_valid_variable_name(name):
     return len(name) > 0 and name.isalnum() and name[0] not in '0123456789'
@@ -245,18 +240,16 @@ def eq_to_coeffs(eq):
     else:
         raise Exception("Unsupported op: {}".format(tokens[1]))
 
-# Generate the verification key with the given setup, group order and equations
-def make_verification_key(setup, group_order, eqs):
-    if len(eqs) > group_order:
-        raise Exception("Group order too small")
+# Generate the gate polynomials a list of 2-item tuples:
+# Left: variable names, [in_L, in_R, out]
+# Right: coeffs, {'': constant term, in_L: L term, in_R: R term,
+#                 in_L*in_R: product term, '$flip_output': flip output to neg?}
+def make_gate_polynomials(group_order, eqs):
     L = [0] * group_order
     R = [0] * group_order
     M = [0] * group_order
     O = [0] * group_order
     C = [0] * group_order
-    # Convert equations into coeffs, eg. 'a * b + 5' -> {"a*b": 1, "": 5}
-    eqs = [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in eqs]
-    variable_uses = []
     for i, (variables, coeffs) in enumerate(eqs):
         L[i] = -coeffs.get(variables[0], 0)
         R[i] = -coeffs.get(variables[1], 0)
@@ -264,17 +257,27 @@ def make_verification_key(setup, group_order, eqs):
         O[i] = (-1 if '$flip_output' in coeffs else 1)
         if None not in variables:
             M[i] = -coeffs.get(min(variables[:2])+'*'+max(variables[:2]), 0)
-        variable_uses.append(variables)
-    S1, S2, S3 = make_s_polynomials(setup, group_order, variable_uses)
+    return L, R, M, O, C        
+
+# Generate the verification key with the given setup, group order and equations
+def make_verification_key(setup, group_order, eqs):
+    if len(eqs) > group_order:
+        raise Exception("Group order too small")
+    # Convert equations into coeffs, eg.
+    # 'c = a * b + 5' -> ['a', 'b', 'c'], {"a*b": 1, "": 5}
+    eqs = [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in eqs]
+    variable_uses = [variables for (variables, coeffs) in eqs]
+    L, R, M, O, C = make_gate_polynomials(group_order, eqs)
+    S1, S2, S3 = make_s_polynomials(group_order, variable_uses)
     return {
         "Qm": evaluations_to_point(setup, group_order, M),
         "Ql": evaluations_to_point(setup, group_order, L),
         "Qr": evaluations_to_point(setup, group_order, R),
         "Qo": evaluations_to_point(setup, group_order, O),
         "Qc": evaluations_to_point(setup, group_order, C),
-        "S1": S1,
-        "S2": S2,
-        "S3": S3,
+        "S1": evaluations_to_point(setup, group_order, S1),
+        "S2": evaluations_to_point(setup, group_order, S2),
+        "S3": evaluations_to_point(setup, group_order, S3),
         "X_2": setup.X2,
         "w": get_root_of_unity(group_order)
     }
