@@ -4,7 +4,7 @@ import json
 def basic_test():
     setup = c.Setup.from_file('powersOfTau28_hez_final_11.ptau')
     print("Extracted setup")
-    vk = c.mk_verification_key(setup, 8, ['c <== a * b'])
+    vk = c.make_verification_key(setup, 8, ['c <== a * b'])
     print("Generated verification key")
     circom_output = json.load(open('main.plonk.vkey.json'))
     for key in ('Qm', 'Ql', 'Qr', 'Qo', 'Qc', 'S1', 'S2', 'S3', 'X_2'):
@@ -24,7 +24,7 @@ def basic_test():
 #    c <== a * b + a;
 # }
 def ab_plus_a_test(setup):
-    vk = c.mk_verification_key(setup, 8, ['ab === a - c', '-ab === a * b'])
+    vk = c.make_verification_key(setup, 8, ['ab === a - c', '-ab === a * b'])
     print("Generated verification key")
     circom_output = json.load(open('main.plonk.vkey-58.json'))
     for key in ('Qm', 'Ql', 'Qr', 'Qo', 'Qc', 'S1', 'S2', 'S3', 'X_2'):

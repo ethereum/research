@@ -189,51 +189,64 @@ def simplify(exprs, first_is_negative=False):
         raise Exception("ok wtf is {}".format(exprs[0]))
 
 # Converts an equation to a mapping of term to coefficient, and verifies that
-# the operations in the equation are valid
+# the operations in the equation are valid.
+#
+# Also outputs a triple containing the L and R input variables and the output
+# variable
+#
+# Think of the list of (variable triples, coeffs) pairs as this language's
+# version of "assembly" 
 #
 # Example valid equations, and output:
-# a === 9                      ('a', [], {'': 9})
-# b <== a * c                  ('b', ['a', 'c'], {'a*c': 1})
-# d <== a * c - 45 * a + 987   ('d', ['a', 'c'], {'a*c': 1, 'a': -45, '': 987})
+# a === 9                      ([None, None, 'a'], {'': 9})
+# b <== a * c                  (['a', 'c', 'b'], {'a*c': 1})
+# d <== a * c - 45 * a + 987   (['a', 'c', 'd'], {'a*c': 1, 'a': -45, '': 987})
 #
 # Example invalid equations:
-# 7 === 7
-# a <== b * * c
-# e <== a + b * c * d
+# 7 === 7                      # Can't assign to non-variable
+# a <== b * * c                # Two times signs in a row
+# e <== a + b * c * d          # Multiplicative degree > 2
 #
 def eq_to_coeffs(eq):
     tokens = eq.split(' ')
     if tokens[1] in ('<==', '==='):
         # First token is the output variable
         out = tokens[0]
-        if not is_valid_variable_name(out.lstrip('-')):
-            raise Exception("Out position must contain valid variable name")
+        # Convert the expression to coefficient map form
         coeffs = simplify(tokens[2:])
+        # Handle the "-x === a * b" case
+        if out[0] == '-':
+            out = out[1:]
+            coeffs['$flip_output'] = True
+        # Check out variable name validity
+        if not is_valid_variable_name(out):
+            raise Exception("Invalid out variable name: {}".format(out))
+        # Gather list of variables used in the expression
         variables = []
         for t in tokens[2:]:
             if is_valid_variable_name(t.lstrip('-')):
                 variables.append(t.lstrip('-'))
-        allowed_coeffs = variables + ['']
-        if len(variables) > 2:
-            raise Exception("Max 2 variables, found {}".format(variables))
+        # Construct the list of allowed coefficients 
+        allowed_coeffs = variables + ['', '$flip_output']
+        if len(variables) == 0:
+            pass
         elif len(variables) == 1:
-            if variables[0]+'*'+variables[0] in coeffs:
-                variables.append(variables[0])
-        if len(variables) == 2:
+            allowed_coeffs.append(variables[0]+'*'+variables[0])
+        elif len(variables) == 2:
             allowed_coeffs.append(min(variables)+'*'+max(variables))
+        else:
+            raise Exception("Max 2 variables, found {}".format(variables))
+        # Check that only allowed coefficients are in the coefficient map
         for key in coeffs.keys():
             if key not in allowed_coeffs:
                 raise Exception("Disallowed multiplication: {}".format(key))
-        if out[0] == '-':
-            assert out[1] != '-'
-            out = out[1:]
-            coeffs['$flip_output'] = True
-        return out, variables, coeffs
+        # Return output
+        return variables + [None] * (2 - len(variables)) + [out], coeffs
     else:
         raise Exception("Unsupported op: {}".format(tokens[1]))
 
 # Generate the verification key with the given setup, group order and equations
-def mk_verification_key(setup, group_order, eqs):
+def make_verification_key(setup, group_order, eqs):
     if len(eqs) > group_order:
         raise Exception("Group order too small")
     L = [0] * group_order
@@ -244,14 +257,14 @@ def mk_verification_key(setup, group_order, eqs):
     # Convert equations into coeffs, eg. 'a * b + 5' -> {"a*b": 1, "": 5}
     eqs = [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in eqs]
     variable_uses = []
-    for i, (out, ins, coeffs) in enumerate(eqs):
-        L[i] = -coeffs.get(ins[0], 0)
+    for i, (variables, coeffs) in enumerate(eqs):
+        L[i] = -coeffs.get(variables[0], 0)
+        R[i] = -coeffs.get(variables[1], 0)
         C[i] = -coeffs.get('', 0)
         O[i] = (-1 if '$flip_output' in coeffs else 1)
-        if len(ins) == 2:
-            R[i] = -coeffs.get(ins[1], 0)
-            M[i] = -coeffs.get(min(ins)+'*'+max(ins), 0)
-        variable_uses.append(ins + [None] * (2 - len(ins)) + [out])
+        if None not in variables:
+            M[i] = -coeffs.get(min(variables[:2])+'*'+max(variables[:2]), 0)
+        variable_uses.append(variables)
     S1, S2, S3 = make_s_polynomials(setup, group_order, variable_uses)
     return {
         "Qm": evaluations_to_point(setup, group_order, M),
