@@ -71,8 +71,8 @@ class Setup(object):
         X2 = (f2(X2_values[:2]), f2(X2_values[2:]))
         assert b.is_on_curve(X2, b.b2)
         print("Extracted G2 side, X^1 point: {}".format(X2))
-        assert b.pairing(b.G2, G1_side[1]) == b.pairing(X2, b.G1)
-        print("X^1 points checked consistent")
+        # assert b.pairing(b.G2, G1_side[1]) == b.pairing(X2, b.G1)
+        # print("X^1 points checked consistent")
         return cls(G1_side, X2)
 
 # Encodes the KZG commitment to the given polynomial coeffs

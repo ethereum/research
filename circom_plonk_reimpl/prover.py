@@ -172,6 +172,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
             b.curve_order, roots_of_unity[1])
         for i in range(3)
     )
+
     T1_pt = evaluations_to_point(setup, group_order, T1)
     T2_pt = evaluations_to_point(setup, group_order, T2)
     T3_pt = evaluations_to_point(setup, group_order, T3)
@@ -192,12 +193,21 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
                 for i in range(order)
             ])
         )
+
+    assert (
+        evaluate_at_point(T1, fft_offset) +
+        evaluate_at_point(T2, fft_offset) * fft_offset**group_order +
+        evaluate_at_point(T3, fft_offset) * fft_offset**(group_order*2)
+    ) == (
+        QUOT_part_1_big[0] + QUOT_part_2_big[0] + QUOT_part_3_big[0]
+    )
+
     A_ev = evaluate_at_point(A, zed)
     B_ev = evaluate_at_point(B, zed)
     C_ev = evaluate_at_point(C, zed)
     S1_ev = evaluate_at_point(S1, zed)
     S2_ev = evaluate_at_point(S2, zed)
-    Z_shifted_ev = evaluate_at_point(A, zed * roots_of_unity[1])
+    Z_shifted_ev = evaluate_at_point(Z, zed * roots_of_unity[1])
 
     L1_ev = evaluate_at_point([1] + [0] * (group_order - 1), zed)
     ZH_ev = zed ** group_order - 1
@@ -207,40 +217,38 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     T3_big = fft_expand(T3)
 
     R_big = [(
-        A_ev * B_ev * QM_big[i] +
         A_ev * QL_big[i] +
         B_ev * QR_big[i] +
+        A_ev * B_ev * QM_big[i] +
         C_ev * QO_big[i] +
         QC_big[i]
-    ) + alpha * (
+    ) + (
         (A_ev + beta * zed + gamma) *
         (B_ev + beta * 2 * zed + gamma) *
-        (C_ev + beta * 3 * zed + gamma) *
-        Z_big[i]
-    ) - alpha * (
+        (C_ev + beta * 3 * zed + gamma)
+    ) * alpha * Z_big[i] - (
         (A_ev + beta * S1_ev + gamma) * 
-        (B_ev + beta * 2 * S2_ev + gamma) *
-        (C_ev + beta * 3 * S3_big[i] + gamma) *
-        Z_shifted_ev
-    ) + alpha**2 * (
+        (B_ev + beta * S2_ev + gamma) *
+        (C_ev + beta * S3_big[i] + gamma)
+    ) * alpha * Z_shifted_ev + (
         (Z_big[i] - 1) * L1_ev
-    ) - ZH_ev * (
+    ) * alpha**2 - (
         T1_big[i] +
         zed ** group_order * T2_big[i] +
         zed ** (group_order * 2) * T3_big[i]
-    ) for i in range(4 * group_order)]
+    ) * ZH_ev for i in range(4 * group_order)]
 
     R_coeffs = expanded_evaluations_to_coeffs(R_big)
     assert R_coeffs[group_order:] == [0] * (group_order * 3)
     R = fft(R_coeffs[:group_order], b.curve_order, roots_of_unity[1])
 
-    R_ev = evaluate_at_point(R, zed)
+    assert evaluate_at_point(R, zed) == 0
 
     print("Generated linearization polynomial R")
 
     buf3 = b''.join([
         x.n.to_bytes(32, 'big') for x in
-        (A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev, R_ev)
+        (A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev)
     ])
     v = binhash_to_f_inner(keccak256(buf3))
     # TODO: finish round 5
