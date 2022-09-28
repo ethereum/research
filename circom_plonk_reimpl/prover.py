@@ -150,7 +150,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     )
     print("Generated part 2 of the quotient polynomial")
 
-    L1_big = fft_expand([1,0,0,0,0,0,0,0])
+    L1_big = fft_expand([1] + [0] * (group_order - 1))
     
     QUOT_part_3_big = [(
         (Z_big[i] - 1) * L1_big[i] * alpha**2
@@ -177,4 +177,70 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     T3_pt = evaluations_to_point(setup, group_order, T3)
     print("Generated T1, T2, T3 polynomials")
 
-    # TODO: finish round 4 and round 5
+    buf2 = serialize_point(T1_pt)+serialize_point(T2_pt)+serialize_point(T3_pt)
+    zed = binhash_to_f_inner(keccak256(buf))
+
+    def evaluate_at_point(values, x):
+        if not hasattr(values[0], 'n'):
+            values = [f_inner(x) for x in values]
+        order = len(values)
+        roots_of_unity = get_roots_of_unity(order)
+        return (
+            (f_inner(x)**order - 1) / order *
+            sum([
+                values[i] * roots_of_unity[i] / (x - roots_of_unity[i])
+                for i in range(order)
+            ])
+        )
+    A_ev = evaluate_at_point(A, zed)
+    B_ev = evaluate_at_point(B, zed)
+    C_ev = evaluate_at_point(C, zed)
+    S1_ev = evaluate_at_point(S1, zed)
+    S2_ev = evaluate_at_point(S2, zed)
+    Z_shifted_ev = evaluate_at_point(A, zed * roots_of_unity[1])
+
+    L1_ev = evaluate_at_point([1] + [0] * (group_order - 1), zed)
+    ZH_ev = zed ** group_order - 1
+
+    T1_big = fft_expand(T1)
+    T2_big = fft_expand(T2)
+    T3_big = fft_expand(T3)
+
+    R_big = [(
+        A_ev * B_ev * QM_big[i] +
+        A_ev * QL_big[i] +
+        B_ev * QR_big[i] +
+        C_ev * QO_big[i] +
+        QC_big[i]
+    ) + alpha * (
+        (A_ev + beta * zed + gamma) *
+        (B_ev + beta * 2 * zed + gamma) *
+        (C_ev + beta * 3 * zed + gamma) *
+        Z_big[i]
+    ) - alpha * (
+        (A_ev + beta * S1_ev + gamma) * 
+        (B_ev + beta * 2 * S2_ev + gamma) *
+        (C_ev + beta * 3 * S3_big[i] + gamma) *
+        Z_shifted_ev
+    ) + alpha**2 * (
+        (Z_big[i] - 1) * L1_ev
+    ) - ZH_ev * (
+        T1_big[i] +
+        zed ** group_order * T2_big[i] +
+        zed ** (group_order * 2) * T3_big[i]
+    ) for i in range(4 * group_order)]
+
+    R_coeffs = expanded_evaluations_to_coeffs(R_big)
+    assert R_coeffs[group_order:] == [0] * (group_order * 3)
+    R = fft(R_coeffs[:group_order], b.curve_order, roots_of_unity[1])
+
+    R_ev = evaluate_at_point(R, zed)
+
+    print("Generated linearization polynomial R")
+
+    buf3 = b''.join([
+        x.n.to_bytes(32, 'big') for x in
+        (A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev, R_ev)
+    ])
+    v = binhash_to_f_inner(keccak256(buf3))
+    # TODO: finish round 5
