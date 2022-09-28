@@ -251,4 +251,33 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         (A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev)
     ])
     v = binhash_to_f_inner(keccak256(buf3))
-    # TODO: finish round 5
+
+    W_z_big = [(
+        R_big[i] +
+        v * (A_big[i] - A_ev) +
+        v**2 * (B_big[i] - B_ev) +
+        v**3 * (C_big[i] - C_ev) +
+        v**4 * (S1_big[i] - S1_ev) +
+        v**5 * (S2_big[i] - S2_ev)
+    ) / (fft_offset * quarter_roots[i] - zed) for i in range(group_order * 4)]
+
+    W_z_coeffs = expanded_evaluations_to_coeffs(W_z_big)
+    assert W_z_coeffs[group_order:] == [0] * (group_order * 3)
+    W_z = fft(W_z_coeffs[:group_order], b.curve_order, roots_of_unity[1])
+    W_z_pt = evaluations_to_point(setup, group_order, W_z)
+
+    W_zw_big = [
+        (Z_big[i] - Z_shifted_ev) /
+        (fft_offset * quarter_roots[i] - zed * roots_of_unity[1])
+    for i in range(group_order * 4)]
+
+    W_zw_coeffs = expanded_evaluations_to_coeffs(W_zw_big)
+    assert W_zw_coeffs[group_order:] == [0] * (group_order * 3)
+    W_zw = fft(W_zw_coeffs[:group_order], b.curve_order, roots_of_unity[1])
+    W_zw_pt = evaluations_to_point(setup, group_order, W_zw)
+
+    print("Generated final quotient witness polynomials")
+    return (
+        A_pt, B_pt, C_pt, Z_pt, T1_pt, T2_pt, T3_pt, W_z_pt, W_zw_pt,
+        A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev
+    )
