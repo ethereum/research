@@ -4,6 +4,7 @@
 import py_ecc.bn128 as b
 from py_ecc.fields.field_elements import FQ as Field
 from fft import fft
+from Crypto.Hash import keccak
 from functools import cache
 
 f = b.FQ
@@ -23,6 +24,23 @@ def get_roots_of_unity(group_order):
     o = [1, get_root_of_unity(group_order)]
     while len(o) < group_order:
         o.append(o[-1] * o[1] % b.curve_order)
+    return o
+
+def keccak256(x):
+    return keccak.new(digest_bits=256).update(x).digest()
+
+def serialize_point(pt):
+    return pt[0].n.to_bytes(32, 'big') + pt[1].n.to_bytes(32, 'big')
+
+def binhash_to_f_inner(h):
+    return f_inner(int.from_bytes(h, 'big'))
+
+def ec_lincomb(pairs):
+    o = b.Z1
+    for pt, coeff in pairs:
+        if hasattr(coeff, 'n'):
+            coeff = coeff.n
+        o = b.add(o, b.multiply(pt, coeff % b.curve_order))
     return o
 
 SETUP_FILE_G1_STARTPOS = 80

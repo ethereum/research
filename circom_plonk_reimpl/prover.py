@@ -1,15 +1,6 @@
 from circom_tools import *
 from Crypto.Hash import keccak
 
-def keccak256(x):
-    return keccak.new(digest_bits=256).update(x).digest()
-
-def serialize_point(pt):
-    return pt[0].n.to_bytes(32, 'big') + pt[1].n.to_bytes(32, 'big')
-
-def binhash_to_f_inner(h):
-    return f_inner(int.from_bytes(h, 'big'))
-
 def prove_from_witness(setup, group_order, eqs, var_assignments):
     eqs = [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in eqs]
     if None not in var_assignments:
@@ -242,6 +233,8 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     assert R_coeffs[group_order:] == [0] * (group_order * 3)
     R = fft(R_coeffs[:group_order], b.curve_order, roots_of_unity[1])
 
+    print('R_pt', evaluations_to_point(setup, group_order, R))
+
     assert evaluate_at_point(R, zed) == 0
 
     print("Generated linearization polynomial R")
@@ -277,6 +270,10 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     W_zw_pt = evaluations_to_point(setup, group_order, W_zw)
 
     print("Generated final quotient witness polynomials")
+    #print(
+    #    "Prover challenges: \n\nbeta: {}\ngamma: {}\nalpha: {}\nzed: {}\nv: {}"
+    #    .format(beta, gamma, alpha, zed, v)
+    #)
     return (
         A_pt, B_pt, C_pt, Z_pt, T1_pt, T2_pt, T3_pt, W_z_pt, W_zw_pt,
         A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev

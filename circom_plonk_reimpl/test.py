@@ -1,5 +1,6 @@
 import circom_tools as c
 import prover as p
+import verifier as v
 import json
 
 def basic_test():
@@ -39,9 +40,15 @@ def prover_test(setup):
     eqs = ['c <== a * b', 'e <== c * d']
     assignments = {'a': 3, 'b': 4, 'c': 12, 'd': 5, 'e': 60}
     print("Beginning prover test")
-    p.prove_from_witness(setup, 8, eqs, assignments)
+    return p.prove_from_witness(setup, 8, eqs, assignments)
+
+def verifier_test(setup, proof):
+    print("Beginning verifier test")
+    vk = c.make_verification_key(setup, 8, ['c <== a * b', 'e <== c * d'])
+    assert v.verify_proof(setup, 8, vk, proof)
 
 if __name__ == '__main__':
     setup = basic_test()
     ab_plus_a_test(setup)
-    prover_test(setup)
+    proof = prover_test(setup)
+    verifier_test(setup, proof)
