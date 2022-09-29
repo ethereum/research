@@ -48,6 +48,14 @@ def make_s_polynomials(group_order, wires):
 def is_valid_variable_name(name):
     return len(name) > 0 and name.isalnum() and name[0] not in '0123456789'
 
+# Gets the key to use in the coeffs dictionary for the term for key1*key2,
+# where key1 and key2 can be constant(''), a variable, or product keys
+# Note that degrees higher than 2 are disallowed in the compiler, but we
+# still allow them in the parser in case we find a way to compile them later
+def get_product_key(key1, key2):
+    members = sorted((key1 or '').split('*') + (key2 or '').split('*'))
+    return '*'.join([x for x in members if x])
+
 # Converts a arithmetic expression containing numbers, variables and {+, -, *}
 # into a mapping of term to coefficient
 #
@@ -79,8 +87,7 @@ def simplify(exprs, first_is_negative=False):
         o = {}
         for k1 in L.keys():
             for k2 in R.keys():
-                merged_key = min(k1,k2)+('*' if k1 and k2 else '')+max(k1,k2)
-                o[merged_key] = L[k1] * R[k2]
+                o[get_product_key(k1, k2)] = L[k1] * R[k2]
         return o
     elif len(exprs) > 1:
         raise Exception("No ops, expected sub-expr to be a unit: {}"
@@ -114,7 +121,7 @@ def simplify(exprs, first_is_negative=False):
 # e <== a + b * c * d          # Multiplicative degree > 2
 #
 def eq_to_coeffs(eq):
-    tokens = eq.split(' ')
+    tokens = eq.rstrip('\n').split(' ')
     if tokens[1] in ('<==', '==='):
         # First token is the output variable
         out = tokens[0]
@@ -139,7 +146,7 @@ def eq_to_coeffs(eq):
         elif len(variables) == 1:
             allowed_coeffs.append(variables[0]+'*'+variables[0])
         elif len(variables) == 2:
-            allowed_coeffs.append(min(variables)+'*'+max(variables))
+            allowed_coeffs.append(get_product_key(*variables))
         else:
             raise Exception("Max 2 variables, found {}".format(variables))
         # Check that only allowed coefficients are in the coefficient map
@@ -155,6 +162,20 @@ def eq_to_coeffs(eq):
         )
     else:
         raise Exception("Unsupported op: {}".format(tokens[1]))
+
+# Wrapper that compiles to [(vars, coeffs), ...] assembly, for three kinds
+# of input:
+# 1. Assembly itself
+# 2. An array of lines, each containing one equation
+# 3. A string, where each line contains an equation
+def to_assembly(inp):
+    if isinstance(inp, str):
+        lines = [line.strip() for line in inp.split('\n')]
+        return [eq_to_coeffs(line) for line in lines if line]
+    elif isinstance(inp, list):
+        return [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in inp]
+    else:
+        raise Exception("Unexpected input: {}".format(inp))
 
 # Generate the gate polynomials a list of 2-item tuples:
 # Left: variable names, [in_L, in_R, out]
@@ -173,8 +194,7 @@ def make_gate_polynomials(group_order, eqs):
         C[i] = f_inner(-coeffs.get('', 0))
         O[i] = f_inner(coeffs.get('$output_coeff', 1))
         if None not in variables:
-            merged_key = min(variables[:2])+'*'+max(variables[:2])
-            M[i] = f_inner(-coeffs.get(merged_key, 0))
+            M[i] = f_inner(-coeffs.get(get_product_key(*variables[:2]), 0))
     return L, R, M, O, C
 
 # Get the list of public variable assignments, in order
@@ -194,12 +214,10 @@ def get_public_assignments(coeffs):
     return o
 
 # Generate the verification key with the given setup, group order and equations
-def make_verification_key(setup, group_order, eqs):
+def make_verification_key(setup, group_order, code):
+    eqs = to_assembly(code)
     if len(eqs) > group_order:
         raise Exception("Group order too small")
-    # Convert equations into coeffs, eg.
-    # 'c = a * b + 5' -> ['a', 'b', 'c'], {"a*b": 1, "": 5}
-    eqs = [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in eqs]
     L, R, M, O, C = make_gate_polynomials(group_order, eqs)
     S1, S2, S3 = make_s_polynomials(group_order, [v for (v, c) in eqs])
     return {
@@ -214,3 +232,26 @@ def make_verification_key(setup, group_order, eqs):
         "X_2": setup.X2,
         "w": get_root_of_unity(group_order)
     }
+
+def fill_variable_assignments(code, starting_assignments):
+    out = {k: v for k,v in starting_assignments.items()}
+    eqs = to_assembly(code)
+    for variables, coeffs in eqs:
+        in_L, in_R, output = variables
+        out_coeff = coeffs.get('$output_coeff', 1)
+        product_key = get_product_key(in_L, in_R)
+        if output is not None and out_coeff in (-1, 1):
+            new_value = (
+                coeffs.get('', 0) +
+                out[in_L] * coeffs.get(in_L, 0) +
+                out[in_R] * coeffs.get(in_R, 0) +
+                out[in_L] * out[in_R] * coeffs.get(product_key, 0)
+            ) * out_coeff # should be / but equivalent for (1, -1)
+            if output in out:
+                if out[output] != new_value:
+                    raise Exception("Failed assertion: {} = {}"
+                                    .format(out[output], new_value))
+            else:
+                out[output] = new_value
+                print('filled in:', output, out[output])
+    return out

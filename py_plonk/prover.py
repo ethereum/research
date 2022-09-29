@@ -1,9 +1,9 @@
-from compiler import eq_to_coeffs, get_public_assignments, \
+from compiler import to_assembly, get_public_assignments, \
     make_s_polynomials, make_gate_polynomials
 from utils import *
 
-def prove_from_witness(setup, group_order, eqs, var_assignments):
-    eqs = [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in eqs]
+def prove_from_witness(setup, group_order, code, var_assignments):
+    eqs = to_assembly(code)
 
     if None not in var_assignments:
         var_assignments[None] = 0
@@ -36,7 +36,6 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     gamma = binhash_to_f_inner(keccak256(keccak256(buf)))
 
     # Compute the accumulator polynomial for the permutation arguments
-    print(variables)
     S1, S2, S3 = make_s_polynomials(group_order, variables)
     Z = [f_inner(1)]
     roots_of_unity = get_roots_of_unity(group_order)
