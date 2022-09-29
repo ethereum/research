@@ -25,7 +25,7 @@ def verify_proof(setup, group_order, vk, proof):
     zed = binhash_to_f_inner(keccak256(buf))
 
     buf3 = b''.join([
-        x.n.to_bytes(32, 'big') for x in
+        serialize_int(x) for x in
         (A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev)
     ])
     v = binhash_to_f_inner(keccak256(buf3))
@@ -48,26 +48,29 @@ def verify_proof(setup, group_order, vk, proof):
     )
 
     R_pt = ec_lincomb([
-        (Qm_pt, (A_ev * B_ev).n),
-        (Ql_pt, A_ev.n),
-        (Qr_pt, B_ev.n), 
-        (Qo_pt, C_ev.n), 
+        (Qm_pt, A_ev * B_ev),
+        (Ql_pt, A_ev),
+        (Qr_pt, B_ev), 
+        (Qo_pt, C_ev), 
         (Qc_pt, 1),
-        (Z_pt, ((
+        (Z_pt, (
             (A_ev + beta * zed + gamma) *
             (B_ev + beta * 2 * zed + gamma) *
-            (C_ev + beta * 3 * zed + gamma)
-        ) * alpha).n),
-        (S3_pt, ((
+            (C_ev + beta * 3 * zed + gamma) *
+            alpha
+        )),
+        (S3_pt, (
             -(A_ev + beta * S1_ev + gamma) * 
             (B_ev + beta * S2_ev + gamma) *
-            beta
-        ) * alpha * Z_shifted_ev).n),
-        (b.G1, ((
+            beta *
+            alpha * Z_shifted_ev
+        )),
+        (b.G1, (
             -(A_ev + beta * S1_ev + gamma) * 
             (B_ev + beta * S2_ev + gamma) *
-            (C_ev + gamma)
-        ) * alpha * Z_shifted_ev).n),
+            (C_ev + gamma) *
+            alpha * Z_shifted_ev
+        )),
         (Z_pt, L1_ev * alpha ** 2),
         (b.G1, -L1_ev * alpha ** 2),
         (T1_pt, -ZH_ev),
@@ -89,21 +92,23 @@ def verify_proof(setup, group_order, vk, proof):
     )
 
     D_pt = ec_lincomb([
-        (Qm_pt, (A_ev * B_ev).n),
-        (Ql_pt, A_ev.n),
-        (Qr_pt, B_ev.n), 
-        (Qo_pt, C_ev.n), 
+        (Qm_pt, A_ev * B_ev),
+        (Ql_pt, A_ev),
+        (Qr_pt, B_ev), 
+        (Qo_pt, C_ev), 
         (Qc_pt, 1),
-        (Z_pt, ((
+        (Z_pt, (
             (A_ev + beta * zed + gamma) *
             (B_ev + beta * 2 * zed + gamma) *
-            (C_ev + beta * 3 * zed + gamma)
-        ) * alpha + L1_ev * alpha**2 + u).n),
+            (C_ev + beta * 3 * zed + gamma) * alpha +
+            L1_ev * alpha ** 2 +
+            u
+        )),
         (S3_pt, (
             -(A_ev + beta * S1_ev + gamma) * 
             (B_ev + beta * S2_ev + gamma) * 
             alpha * beta * Z_shifted_ev
-        ).n),
+        )),
         (T1_pt, -ZH_ev),
         (T2_pt, -ZH_ev * zed**group_order),
         (T3_pt, -ZH_ev * zed**(group_order*2)),
@@ -119,10 +124,10 @@ def verify_proof(setup, group_order, vk, proof):
         (S1_pt, v**4),
         (S2_pt, v**5),
     ])
-    E_pt = b.multiply(b.G1, (
+    E_pt = ec_mul(b.G1, (
         -r0 + v * A_ev + v**2 * B_ev + v**3 * C_ev +
         v**4 * S1_ev + v**5 * S2_ev + u * Z_shifted_ev
-    ).n)
+    ))
 
     assert b.pairing(
         b.G2,
@@ -140,7 +145,7 @@ def verify_proof(setup, group_order, vk, proof):
             (b.G1, -v**5 * S2_ev),
         ])
     ) == b.pairing(
-        b.add(X2, b.multiply(b.G2, (-zed).n)),
+        b.add(X2, ec_mul(b.G2, -zed)),
         W_z_pt
     )
     print("done check 1")
@@ -152,7 +157,7 @@ def verify_proof(setup, group_order, vk, proof):
             (b.G1, -Z_shifted_ev)
         ])
     ) == b.pairing(
-        b.add(X2, b.multiply(b.G2, (-zed*root_of_unity).n)),
+        b.add(X2, ec_mul(b.G2, -zed * root_of_unity)),
         W_zw_pt
     )
     print("done check 2")

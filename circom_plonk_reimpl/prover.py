@@ -7,13 +7,13 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         var_assignments[None] = 0
     variables = [v for (v, c) in eqs]
     # Compute wire assignments
-    A = [0] * group_order
-    B = [0] * group_order
-    C = [0] * group_order
+    A = [f_inner(0) for _ in range(group_order)]
+    B = [f_inner(0) for _ in range(group_order)]
+    C = [f_inner(0) for _ in range(group_order)]
     for i, (in_L, in_R, out) in enumerate(variables):
-        A[i] = var_assignments[in_L]
-        B[i] = var_assignments[in_R]
-        C[i] = var_assignments[out]
+        A[i] = f_inner(var_assignments[in_L])
+        B[i] = f_inner(var_assignments[in_R])
+        C[i] = f_inner(var_assignments[out])
     A_pt = evaluations_to_point(setup, group_order, A)
     B_pt = evaluations_to_point(setup, group_order, B)
     C_pt = evaluations_to_point(setup, group_order, C)
@@ -38,7 +38,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
             (B[i] + beta * S2[i] + gamma) /
             (C[i] + beta * S3[i] + gamma)
         )
-    assert Z.pop().n == 1
+    assert Z.pop() == 1
     Z_pt = evaluations_to_point(setup, group_order, Z)
     alpha = binhash_to_f_inner(keccak256(serialize_point(Z_pt)))
     print("Permutation accumulator polynomial successfully generated")
@@ -53,27 +53,17 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     # divide polys without the 0/0 issue
     fft_offset = binhash_to_f_inner(keccak256(keccak256(serialize_point(Z_pt))))
 
-    def fft_expand(values):
-        if hasattr(values[0], 'n'):
-            values = [x.n for x in values]
-        x_powers = fft(values, b.curve_order, roots_of_unity[1], inv=True)
+    def fft_expand(vals):
+        x_powers = f_inner_fft(vals, inv=True)
         x_powers = [
-            (fft_offset**i * x).n for i, x in enumerate(x_powers)
-        ] + [0] * (group_order * 3)
-        return [
-            f_inner(x) for x in fft(x_powers, b.curve_order, quarter_roots[1])
-        ]
+            (fft_offset**i * x) for i, x in enumerate(x_powers)
+        ] + [f_inner(0)] * (group_order * 3)
+        return f_inner_fft(x_powers)
 
     def expanded_evaluations_to_coeffs(evals):
-        shifted_coeffs = fft(
-            [i.n for i in evals], b.curve_order, quarter_roots[1], inv=True
-        )
-        inv_offset = (1 / fft_offset).n
-        return [
-            (pow(inv_offset, i, b.curve_order) * v) % b.curve_order for
-            (i, v) in enumerate(shifted_coeffs)
-        ]
-        
+        shifted_coeffs = f_inner_fft(evals, inv=True)
+        inv_offset = (1 / fft_offset)
+        return [v * inv_offset ** i for (i, v) in enumerate(shifted_coeffs)]
 
     A_big = fft_expand(A)
     B_big = fft_expand(B)
@@ -90,7 +80,10 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         (fft_expand(x) for x in (QL, QR, QM, QO, QC))
 
     for i in range(group_order):
-        assert (A[i] * QL[i] + B[i] * QR[i] + A[i] * B[i] * QM[i] + C[i] * QO[i] + QC[i]) % b.curve_order == 0
+        assert (
+            A[i] * QL[i] + B[i] * QR[i] + A[i] * B[i] * QM[i] +
+            C[i] * QO[i] + QC[i] == 0
+        )
 
     QUOT_part_1_big = [(
         A_big[i] * QL_big[i] +
@@ -141,7 +134,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     )
     print("Generated part 2 of the quotient polynomial")
 
-    L1_big = fft_expand([1] + [0] * (group_order - 1))
+    L1_big = fft_expand([f_inner(1)] + [f_inner(0)] * (group_order - 1))
     
     QUOT_part_3_big = [(
         (Z_big[i] - 1) * L1_big[i] * alpha**2
@@ -158,11 +151,9 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         for i in range(4 * group_order)
     ])
 
-    (T1, T2, T3) = (
-        fft(all_coeffs[group_order*i : group_order*(i+1)],
-            b.curve_order, roots_of_unity[1])
-        for i in range(3)
-    )
+    T1 = f_inner_fft(all_coeffs[:group_order])
+    T2 = f_inner_fft(all_coeffs[group_order: group_order*2])
+    T3 = f_inner_fft(all_coeffs[group_order*2: group_order*3])
 
     T1_pt = evaluations_to_point(setup, group_order, T1)
     T2_pt = evaluations_to_point(setup, group_order, T2)
@@ -231,7 +222,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
 
     R_coeffs = expanded_evaluations_to_coeffs(R_big)
     assert R_coeffs[group_order:] == [0] * (group_order * 3)
-    R = fft(R_coeffs[:group_order], b.curve_order, roots_of_unity[1])
+    R = f_inner_fft(R_coeffs[:group_order])
 
     print('R_pt', evaluations_to_point(setup, group_order, R))
 
@@ -240,7 +231,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     print("Generated linearization polynomial R")
 
     buf3 = b''.join([
-        x.n.to_bytes(32, 'big') for x in
+        serialize_int(x) for x in
         (A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev)
     ])
     v = binhash_to_f_inner(keccak256(buf3))
@@ -256,7 +247,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
 
     W_z_coeffs = expanded_evaluations_to_coeffs(W_z_big)
     assert W_z_coeffs[group_order:] == [0] * (group_order * 3)
-    W_z = fft(W_z_coeffs[:group_order], b.curve_order, roots_of_unity[1])
+    W_z = f_inner_fft(W_z_coeffs[:group_order])
     W_z_pt = evaluations_to_point(setup, group_order, W_z)
 
     W_zw_big = [
@@ -266,7 +257,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
 
     W_zw_coeffs = expanded_evaluations_to_coeffs(W_zw_big)
     assert W_zw_coeffs[group_order:] == [0] * (group_order * 3)
-    W_zw = fft(W_zw_coeffs[:group_order], b.curve_order, roots_of_unity[1])
+    W_zw = f_inner_fft(W_zw_coeffs[:group_order])
     W_zw_pt = evaluations_to_point(setup, group_order, W_zw)
 
     print("Generated final quotient witness polynomials")
