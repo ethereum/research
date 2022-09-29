@@ -148,3 +148,14 @@ def f_inner_fft(vals, inv=False):
     else:
         # Regular FFT
         return [f_inner(x) for x in _fft(nvals, o, roots)]
+
+def barycentric_eval_at_point(values, x):
+    order = len(values)
+    roots_of_unity = get_roots_of_unity(order)
+    return (
+        (f_inner(x)**order - 1) / order *
+        sum([
+            value * root / (x - root)
+            for value, root in zip(values, roots_of_unity)
+        ])
+    )

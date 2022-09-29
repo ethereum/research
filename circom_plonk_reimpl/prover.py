@@ -3,9 +3,13 @@ from Crypto.Hash import keccak
 
 def prove_from_witness(setup, group_order, eqs, var_assignments):
     eqs = [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in eqs]
+
     if None not in var_assignments:
         var_assignments[None] = 0
+
     variables = [v for (v, c) in eqs]
+    coeffs = [c for (v, c) in eqs]
+
     # Compute wire assignments
     A = [f_inner(0) for _ in range(group_order)]
     B = [f_inner(0) for _ in range(group_order)]
@@ -17,6 +21,12 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     A_pt = evaluations_to_point(setup, group_order, A)
     B_pt = evaluations_to_point(setup, group_order, B)
     C_pt = evaluations_to_point(setup, group_order, C)
+
+    public_vars = get_public_assignments(coeffs)
+    PI = (
+        [f_inner(-var_assignments[v]) for v in public_vars] +
+        [f_inner(0) for _ in range(group_order - len(public_vars))]
+    )
 
     buf = serialize_point(A_pt) + serialize_point(B_pt) + serialize_point(C_pt)
 
@@ -76,13 +86,13 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
 
     QL, QR, QM, QO, QC = make_gate_polynomials(group_order, eqs)
 
-    QL_big, QR_big, QM_big, QO_big, QC_big = \
-        (fft_expand(x) for x in (QL, QR, QM, QO, QC))
+    QL_big, QR_big, QM_big, QO_big, QC_big, PI_big = \
+        (fft_expand(x) for x in (QL, QR, QM, QO, QC, PI))
 
     for i in range(group_order):
         assert (
             A[i] * QL[i] + B[i] * QR[i] + A[i] * B[i] * QM[i] +
-            C[i] * QO[i] + QC[i] == 0
+            C[i] * QO[i] + PI[i] + QC[i] == 0
         )
 
     QUOT_part_1_big = [(
@@ -90,7 +100,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         B_big[i] * QR_big[i] +
         A_big[i] * B_big[i] * QM_big[i] +
         C_big[i] * QO_big[i] + 
-        QC_big[i]
+        PI_big[i] + QC_big[i]
     ) / ZH_big[i] for i in range(group_order * 4)]
     
     assert (
@@ -163,36 +173,24 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     buf2 = serialize_point(T1_pt)+serialize_point(T2_pt)+serialize_point(T3_pt)
     zed = binhash_to_f_inner(keccak256(buf))
 
-    def evaluate_at_point(values, x):
-        if not hasattr(values[0], 'n'):
-            values = [f_inner(x) for x in values]
-        order = len(values)
-        roots_of_unity = get_roots_of_unity(order)
-        return (
-            (f_inner(x)**order - 1) / order *
-            sum([
-                values[i] * roots_of_unity[i] / (x - roots_of_unity[i])
-                for i in range(order)
-            ])
-        )
-
     assert (
-        evaluate_at_point(T1, fft_offset) +
-        evaluate_at_point(T2, fft_offset) * fft_offset**group_order +
-        evaluate_at_point(T3, fft_offset) * fft_offset**(group_order*2)
+        barycentric_eval_at_point(T1, fft_offset) +
+        barycentric_eval_at_point(T2, fft_offset) * fft_offset**group_order +
+        barycentric_eval_at_point(T3, fft_offset) * fft_offset**(group_order*2)
     ) == (
         QUOT_part_1_big[0] + QUOT_part_2_big[0] + QUOT_part_3_big[0]
     )
 
-    A_ev = evaluate_at_point(A, zed)
-    B_ev = evaluate_at_point(B, zed)
-    C_ev = evaluate_at_point(C, zed)
-    S1_ev = evaluate_at_point(S1, zed)
-    S2_ev = evaluate_at_point(S2, zed)
-    Z_shifted_ev = evaluate_at_point(Z, zed * roots_of_unity[1])
+    A_ev = barycentric_eval_at_point(A, zed)
+    B_ev = barycentric_eval_at_point(B, zed)
+    C_ev = barycentric_eval_at_point(C, zed)
+    S1_ev = barycentric_eval_at_point(S1, zed)
+    S2_ev = barycentric_eval_at_point(S2, zed)
+    Z_shifted_ev = barycentric_eval_at_point(Z, zed * roots_of_unity[1])
 
-    L1_ev = evaluate_at_point([1] + [0] * (group_order - 1), zed)
+    L1_ev = barycentric_eval_at_point([1] + [0] * (group_order - 1), zed)
     ZH_ev = zed ** group_order - 1
+    PI_ev = barycentric_eval_at_point(PI, zed)
 
     T1_big = fft_expand(T1)
     T2_big = fft_expand(T2)
@@ -203,6 +201,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         B_ev * QR_big[i] +
         A_ev * B_ev * QM_big[i] +
         C_ev * QO_big[i] +
+        PI_ev +
         QC_big[i]
     ) + (
         (A_ev + beta * zed + gamma) *
@@ -226,7 +225,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
 
     print('R_pt', evaluations_to_point(setup, group_order, R))
 
-    assert evaluate_at_point(R, zed) == 0
+    assert barycentric_eval_at_point(R, zed) == 0
 
     print("Generated linearization polynomial R")
 

@@ -1,7 +1,7 @@
 from circom_tools import *
 from Crypto.Hash import keccak
 
-def verify_proof(setup, group_order, vk, proof, optimized=True):
+def verify_proof(setup, group_order, vk, proof, public_inputs=[], optimized=True):
     (
         A_pt, B_pt, C_pt, Z_pt, T1_pt, T2_pt, T3_pt, W_z_pt, W_zw_pt,
         A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev
@@ -42,6 +42,12 @@ def verify_proof(setup, group_order, vk, proof, optimized=True):
         (group_order * (zed - 1))
     )
 
+    PI_ev = barycentric_eval_at_point(
+        [f_inner(-x) for x in public_inputs] +
+        [f_inner(0) for _ in range(group_order - len(public_inputs))],
+        zed
+    )
+
     if not optimized:
         # Basic, easier-to-understand version of what's going on
 
@@ -52,6 +58,7 @@ def verify_proof(setup, group_order, vk, proof, optimized=True):
             (Ql_pt, A_ev),
             (Qr_pt, B_ev), 
             (Qo_pt, C_ev), 
+            (b.G1, PI_ev),
             (Qc_pt, 1),
             (Z_pt, (
                 (A_ev + beta * zed + gamma) *
@@ -127,7 +134,7 @@ def verify_proof(setup, group_order, vk, proof, optimized=True):
         # term of the R polynomial; rather, it's the portion of R that can
         # be computed directly, without resorting to elliptic cutve commitments
         r0 = (
-            -L1_ev * alpha ** 2 - (
+            PI_ev - L1_ev * alpha ** 2 - (
                 alpha *
                 (A_ev + beta * S1_ev + gamma) *
                 (B_ev + beta * S2_ev + gamma) *

@@ -123,7 +123,7 @@ def eq_to_coeffs(eq):
         # Handle the "-x === a * b" case
         if out[0] == '-':
             out = out[1:]
-            coeffs['$flip_output'] = True
+            coeffs['$output_coeff'] = -1
         # Check out variable name validity
         if not is_valid_variable_name(out):
             raise Exception("Invalid out variable name: {}".format(out))
@@ -133,7 +133,7 @@ def eq_to_coeffs(eq):
             if is_valid_variable_name(t.lstrip('-')):
                 variables.append(t.lstrip('-'))
         # Construct the list of allowed coefficients 
-        allowed_coeffs = variables + ['', '$flip_output']
+        allowed_coeffs = variables + ['', '$output_coeff']
         if len(variables) == 0:
             pass
         elif len(variables) == 1:
@@ -148,13 +148,19 @@ def eq_to_coeffs(eq):
                 raise Exception("Disallowed multiplication: {}".format(key))
         # Return output
         return variables + [None] * (2 - len(variables)) + [out], coeffs
+    elif tokens[1] == 'public':
+        return (
+            [tokens[0], None, None],
+            {tokens[0]: -1, '$output_coeff': 0, '$public': True}
+        )
     else:
         raise Exception("Unsupported op: {}".format(tokens[1]))
 
 # Generate the gate polynomials a list of 2-item tuples:
 # Left: variable names, [in_L, in_R, out]
 # Right: coeffs, {'': constant term, in_L: L term, in_R: R term,
-#                 in_L*in_R: product term, '$flip_output': flip output to neg?}
+#                 in_L*in_R: product term,
+#                 '$output_coeff': coeff on output, 1 by default?}
 def make_gate_polynomials(group_order, eqs):
     L = [f_inner(0) for _ in range(group_order)]
     R = [f_inner(0) for _ in range(group_order)]
@@ -165,11 +171,27 @@ def make_gate_polynomials(group_order, eqs):
         L[i] = f_inner(-coeffs.get(variables[0], 0))
         R[i] = f_inner(-coeffs.get(variables[1], 0))
         C[i] = f_inner(-coeffs.get('', 0))
-        O[i] = f_inner(-1 if '$flip_output' in coeffs else 1)
+        O[i] = f_inner(coeffs.get('$output_coeff', 1))
         if None not in variables:
             merged_key = min(variables[:2])+'*'+max(variables[:2])
             M[i] = f_inner(-coeffs.get(merged_key, 0))
-    return L, R, M, O, C        
+    return L, R, M, O, C
+
+# Get the list of public variable assignments, in order
+def get_public_assignments(coeffs):
+    o = []
+    no_more_allowed = False
+    for coeff in coeffs:
+        if coeff.get('$public', False) is True:
+            if no_more_allowed:
+                raise Exception("Public var declarations must be at the top")
+            var_name = [x for x in list(coeff.keys()) if '$' not in x][0]
+            if coeff != {'$public': True, '$output_coeff': 0, var_name: -1}:
+                raise Exception("Malformatted coeffs: {}",format(coeffs))
+            o.append(var_name)
+        else:
+            no_more_allowed = True
+    return o
 
 # Generate the verification key with the given setup, group order and equations
 def make_verification_key(setup, group_order, eqs):
