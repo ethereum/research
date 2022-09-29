@@ -45,7 +45,8 @@ def prover_test(setup):
 def verifier_test(setup, proof):
     print("Beginning verifier test")
     vk = c.make_verification_key(setup, 8, ['c <== a * b', 'e <== c * d'])
-    assert v.verify_proof(setup, 8, vk, proof)
+    assert v.verify_proof(setup, 8, vk, proof, optimized=False)
+    assert v.verify_proof(setup, 8, vk, proof, optimized=True)
 
 if __name__ == '__main__':
     setup = basic_test()
