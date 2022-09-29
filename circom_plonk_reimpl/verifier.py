@@ -1,7 +1,6 @@
-from circom_tools import *
-from Crypto.Hash import keccak
+from utils import *
 
-def verify_proof(setup, group_order, vk, proof, public_inputs=[], optimized=True):
+def verify_proof(setup, group_order, vk, proof, public=[], optimized=True):
     (
         A_pt, B_pt, C_pt, Z_pt, T1_pt, T2_pt, T3_pt, W_z_pt, W_zw_pt,
         A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev
@@ -43,8 +42,8 @@ def verify_proof(setup, group_order, vk, proof, public_inputs=[], optimized=True
     )
 
     PI_ev = barycentric_eval_at_point(
-        [f_inner(-x) for x in public_inputs] +
-        [f_inner(0) for _ in range(group_order - len(public_inputs))],
+        [f_inner(-x) for x in public] +
+        [f_inner(0) for _ in range(group_order - len(public))],
         zed
     )
 
@@ -206,5 +205,5 @@ def verify_proof(setup, group_order, vk, proof, public_inputs=[], optimized=True
             (E_pt, -1)
         ]))
     
-        print("done combined check!")
+        print("done combined check")
         return True

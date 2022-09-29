@@ -1,5 +1,6 @@
-from circom_tools import *
-from Crypto.Hash import keccak
+from compiler import eq_to_coeffs, get_public_assignments, \
+    make_s_polynomials, make_gate_polynomials
+from utils import *
 
 def prove_from_witness(setup, group_order, eqs, var_assignments):
     eqs = [eq_to_coeffs(eq) if isinstance(eq, str) else eq for eq in eqs]
@@ -30,6 +31,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
 
     buf = serialize_point(A_pt) + serialize_point(B_pt) + serialize_point(C_pt)
 
+    # The first two Fiat-Shamir challenges
     beta = binhash_to_f_inner(keccak256(buf))
     gamma = binhash_to_f_inner(keccak256(keccak256(buf)))
 
@@ -61,19 +63,12 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     # This value could be anything, it just needs to be unpredictable. Lets us
     # have evaluation forms at cosets to avoid zero evaluations, so we can
     # divide polys without the 0/0 issue
-    fft_offset = binhash_to_f_inner(keccak256(keccak256(serialize_point(Z_pt))))
+    fft_offset = binhash_to_f_inner(
+        keccak256(keccak256(serialize_point(Z_pt)))
+    )
 
-    def fft_expand(vals):
-        x_powers = f_inner_fft(vals, inv=True)
-        x_powers = [
-            (fft_offset**i * x) for i, x in enumerate(x_powers)
-        ] + [f_inner(0)] * (group_order * 3)
-        return f_inner_fft(x_powers)
-
-    def expanded_evaluations_to_coeffs(evals):
-        shifted_coeffs = f_inner_fft(evals, inv=True)
-        inv_offset = (1 / fft_offset)
-        return [v * inv_offset ** i for (i, v) in enumerate(shifted_coeffs)]
+    fft_expand = lambda x: fft_expand_with_offset(x, fft_offset)
+    expanded_evals_to_coeffs = lambda x: offset_evals_to_coeffs(x, fft_offset)
 
     A_big = fft_expand(A)
     B_big = fft_expand(B)
@@ -89,31 +84,21 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
     QL_big, QR_big, QM_big, QO_big, QC_big, PI_big = \
         (fft_expand(x) for x in (QL, QR, QM, QO, QC, PI))
 
-    for i in range(group_order):
-        assert (
-            A[i] * QL[i] + B[i] * QR[i] + A[i] * B[i] * QM[i] +
-            C[i] * QO[i] + PI[i] + QC[i] == 0
-        )
-
-    QUOT_part_1_big = [(
-        A_big[i] * QL_big[i] +
-        B_big[i] * QR_big[i] +
-        A_big[i] * B_big[i] * QM_big[i] +
-        C_big[i] * QO_big[i] + 
-        PI_big[i] + QC_big[i]
-    ) / ZH_big[i] for i in range(group_order * 4)]
-    
-    assert (
-        expanded_evaluations_to_coeffs(QUOT_part_1_big)[-2*group_order:] ==
-        [0] * (2 * group_order)
-    )
-    print("Generated part 1 of the quotient polynomial")
-
     Z_big = fft_expand(Z)
     Z_shifted_big = Z_big[4:] + Z_big[:4]
     S1_big = fft_expand(S1)
     S2_big = fft_expand(S2)
     S3_big = fft_expand(S3)
+
+    # Equals 1 at x=1 and 0 at other roots of unity
+    L1_big = fft_expand([f_inner(1)] + [f_inner(0)] * (group_order - 1))
+
+    # Some sanity checks to make sure everything is ok up to here
+    for i in range(group_order):
+        assert (
+            A[i] * QL[i] + B[i] * QR[i] + A[i] * B[i] * QM[i] +
+            C[i] * QO[i] + PI[i] + QC[i] == 0
+        )
 
     for i in range(group_order):
         assert (
@@ -126,44 +111,37 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
             (C[i] + beta * S3[i] + gamma)
         ) * Z[(i+1) % group_order] == 0
 
-    QUOT_part_2_big = [(
-        (
-            (A_big[i] + beta * fft_offset * quarter_roots[i] + gamma) *
-            (B_big[i] + beta * 2 * fft_offset * quarter_roots[i] + gamma) *
-            (C_big[i] + beta * 3 * fft_offset * quarter_roots[i] + gamma)
-        ) * alpha * Z_big[i] - (
-            (A_big[i] + beta * S1_big[i] + gamma) *
-            (B_big[i] + beta * S2_big[i] + gamma) *
-            (C_big[i] + beta * S3_big[i] + gamma)
-        ) * alpha * Z_shifted_big[i]
-    ) / ZH_big[i] for i in range(group_order * 4)]
+    # Compute the quotient polynomial (called T(x) in the paper)
+    QUOT_big = [((
+        A_big[i] * QL_big[i] +
+        B_big[i] * QR_big[i] +
+        A_big[i] * B_big[i] * QM_big[i] +
+        C_big[i] * QO_big[i] + 
+        PI_big[i] +
+        QC_big[i]
+    ) + (
+        (A_big[i] + beta * fft_offset * quarter_roots[i] + gamma) *
+        (B_big[i] + beta * 2 * fft_offset * quarter_roots[i] + gamma) *
+        (C_big[i] + beta * 3 * fft_offset * quarter_roots[i] + gamma)
+    ) * alpha * Z_big[i] - (
+        (A_big[i] + beta * S1_big[i] + gamma) *
+        (B_big[i] + beta * S2_big[i] + gamma) *
+        (C_big[i] + beta * S3_big[i] + gamma)
+    ) * alpha * Z_shifted_big[i] + (
+        (Z_big[i] - 1) * L1_big[i] * alpha**2
+    )) / ZH_big[i] for i in range(group_order * 4)]
+
+    all_coeffs = expanded_evals_to_coeffs(QUOT_big)
 
     assert (
-        expanded_evaluations_to_coeffs(QUOT_part_2_big)[-group_order:] ==
+        expanded_evals_to_coeffs(QUOT_big)[-group_order:] ==
         [0] * group_order
     )
-    print("Generated part 2 of the quotient polynomial")
-
-    L1_big = fft_expand([f_inner(1)] + [f_inner(0)] * (group_order - 1))
-    
-    QUOT_part_3_big = [(
-        (Z_big[i] - 1) * L1_big[i] * alpha**2
-    ) / ZH_big[i] for i in range(group_order * 4)]
-
-    assert (
-        expanded_evaluations_to_coeffs(QUOT_part_3_big)[-3*group_order:] ==
-        [0] * (3 * group_order)
-    )
-    print("Generated part 3 of the quotient polynomial")
-
-    all_coeffs = expanded_evaluations_to_coeffs([
-        QUOT_part_1_big[i] + QUOT_part_2_big[i] + QUOT_part_3_big[i]
-        for i in range(4 * group_order)
-    ])
+    print("Generated the quotient polynomial")
 
     T1 = f_inner_fft(all_coeffs[:group_order])
-    T2 = f_inner_fft(all_coeffs[group_order: group_order*2])
-    T3 = f_inner_fft(all_coeffs[group_order*2: group_order*3])
+    T2 = f_inner_fft(all_coeffs[group_order: group_order * 2])
+    T3 = f_inner_fft(all_coeffs[group_order * 2: group_order * 3])
 
     T1_pt = evaluations_to_point(setup, group_order, T1)
     T2_pt = evaluations_to_point(setup, group_order, T2)
@@ -177,9 +155,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         barycentric_eval_at_point(T1, fft_offset) +
         barycentric_eval_at_point(T2, fft_offset) * fft_offset**group_order +
         barycentric_eval_at_point(T3, fft_offset) * fft_offset**(group_order*2)
-    ) == (
-        QUOT_part_1_big[0] + QUOT_part_2_big[0] + QUOT_part_3_big[0]
-    )
+    ) == QUOT_big[0]
 
     A_ev = barycentric_eval_at_point(A, zed)
     B_ev = barycentric_eval_at_point(B, zed)
@@ -219,7 +195,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         zed ** (group_order * 2) * T3_big[i]
     ) * ZH_ev for i in range(4 * group_order)]
 
-    R_coeffs = expanded_evaluations_to_coeffs(R_big)
+    R_coeffs = expanded_evals_to_coeffs(R_big)
     assert R_coeffs[group_order:] == [0] * (group_order * 3)
     R = f_inner_fft(R_coeffs[:group_order])
 
@@ -244,7 +220,7 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         v**5 * (S2_big[i] - S2_ev)
     ) / (fft_offset * quarter_roots[i] - zed) for i in range(group_order * 4)]
 
-    W_z_coeffs = expanded_evaluations_to_coeffs(W_z_big)
+    W_z_coeffs = expanded_evals_to_coeffs(W_z_big)
     assert W_z_coeffs[group_order:] == [0] * (group_order * 3)
     W_z = f_inner_fft(W_z_coeffs[:group_order])
     W_z_pt = evaluations_to_point(setup, group_order, W_z)
@@ -254,16 +230,12 @@ def prove_from_witness(setup, group_order, eqs, var_assignments):
         (fft_offset * quarter_roots[i] - zed * roots_of_unity[1])
     for i in range(group_order * 4)]
 
-    W_zw_coeffs = expanded_evaluations_to_coeffs(W_zw_big)
+    W_zw_coeffs = expanded_evals_to_coeffs(W_zw_big)
     assert W_zw_coeffs[group_order:] == [0] * (group_order * 3)
     W_zw = f_inner_fft(W_zw_coeffs[:group_order])
     W_zw_pt = evaluations_to_point(setup, group_order, W_zw)
 
     print("Generated final quotient witness polynomials")
-    #print(
-    #    "Prover challenges: \n\nbeta: {}\ngamma: {}\nalpha: {}\nzed: {}\nv: {}"
-    #    .format(beta, gamma, alpha, zed, v)
-    #)
     return (
         A_pt, B_pt, C_pt, Z_pt, T1_pt, T2_pt, T3_pt, W_z_pt, W_zw_pt,
         A_ev, B_ev, C_ev, S1_ev, S2_ev, Z_shifted_ev

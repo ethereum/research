@@ -1,4 +1,4 @@
-import circom_tools as c
+import compiler as c
 import prover as p
 import verifier as v
 import json
@@ -57,10 +57,10 @@ def prover_test(setup):
 def verifier_test(setup, proof):
     print("Beginning verifier test")
     eqs = ['e public', 'c <== a * b', 'e <== c * d']
-    public_assignments = [60]
+    public = [60]
     vk = c.make_verification_key(setup, 8, eqs)
-    assert v.verify_proof(setup, 8, vk, proof, public_assignments, optimized=False)
-    assert v.verify_proof(setup, 8, vk, proof, public_assignments, optimized=True)
+    assert v.verify_proof(setup, 8, vk, proof, public, optimized=False)
+    assert v.verify_proof(setup, 8, vk, proof, public, optimized=True)
     print("Verifier test success")
 
 if __name__ == '__main__':

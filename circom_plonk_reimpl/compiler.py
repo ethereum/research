@@ -79,7 +79,7 @@ def simplify(exprs, first_is_negative=False):
         o = {}
         for k1 in L.keys():
             for k2 in R.keys():
-                merged_key = min(k1,k2) + ('*' if k1 and k2 else '') + max(k1,k2)
+                merged_key = min(k1,k2)+('*' if k1 and k2 else '')+max(k1,k2)
                 o[merged_key] = L[k1] * R[k2]
         return o
     elif len(exprs) > 1:

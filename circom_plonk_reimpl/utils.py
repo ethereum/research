@@ -13,10 +13,12 @@ class f_inner(Field):
 
 primitive_root = 5
 
+# Gets the first root of unity of a given group order
 @cache
 def get_root_of_unity(group_order):
     return f_inner(5) ** ((b.curve_order - 1) // group_order)
 
+# Gets the full list of roots of unity of a given group order
 @cache
 def get_roots_of_unity(group_order):
     o = [f_inner(1), get_root_of_unity(group_order)]
@@ -33,6 +35,7 @@ def serialize_int(x):
 def serialize_point(pt):
     return pt[0].n.to_bytes(32, 'big') + pt[1].n.to_bytes(32, 'big')
 
+# Converts a hash to a f_inner element
 def binhash_to_f_inner(h):
     return f_inner(int.from_bytes(h, 'big'))
 
@@ -41,6 +44,8 @@ def ec_mul(pt, coeff):
         coeff = coeff.n
     return b.multiply(pt, coeff % b.curve_order)
 
+# Elliptic curve linear combination. A truly optimized implementation
+# would replace this with a fast lin-comb algo, see https://ethresear.ch/t/7238
 def ec_lincomb(pairs):
     o = b.Z1
     for pt, coeff in pairs:
@@ -48,18 +53,19 @@ def ec_lincomb(pairs):
     return o
 
 # Encodes the KZG commitment to the given polynomial coeffs
-def powers_to_point(setup, powers):
-    if len(powers) > len(setup.G1_side):
+def coeffs_to_point(setup, coeffs):
+    if len(coeffs) > len(setup.G1_side):
         raise Exception("Not enough powers in setup")
     o = b.Z1
-    for x, y in zip(powers, setup.G1_side):
+    for x, y in zip(coeffs, setup.G1_side):
         o = b.add(o, b.multiply(y, x.n))
     return o
 
 # Encodes the KZG commitment that evaluates to the given values in the group
 def evaluations_to_point(setup, group_order, evals):
-    return powers_to_point(setup, f_inner_fft(evals, inv=True))
+    return coeffs_to_point(setup, f_inner_fft(evals, inv=True))
 
+# Recover the trusted setup from a file in the circom format
 SETUP_FILE_G1_STARTPOS = 80
 SETUP_FILE_POWERS_POS = 60
 
@@ -82,8 +88,8 @@ class Setup(object):
         ]
         assert max(values) < b.field_modulus
         # The points are encoded in a weird encoding, where all x and y points
-        # are multiplied by a factor (for montgomery optimization?). We can extract
-        # the factor because we know that the first point is the generator.
+        # are multiplied by a factor (for montgomery optimization?). We can
+        # extractthe factor because we know the first point is the generator.
         factor = f(values[0]) / b.G1[0]
         values = [f(x) / factor for x in values]
         G1_side = [(values[i*2], values[i*2+1]) for i in range(powers)]
@@ -125,6 +131,9 @@ def interpret_json_point(p):
         return b.Z2
     raise Exception("cannot interpret that point: {}".format(p))
 
+# Fast Fourier transform, used to convert between polynomial coefficients
+# and a list of evaluations at the roots of unity
+# See https://vitalik.ca/general/2019/05/12/fft.html
 def _fft(vals, modulus, roots_of_unity):
     if len(vals) == 1:
         return vals
@@ -137,6 +146,8 @@ def _fft(vals, modulus, roots_of_unity):
         o[i+len(L)] = (x-y_times_root) % modulus 
     return o
 
+# Convenience method to do FFTs specifically over the subgroup over which
+# all of the proofs are operating
 def f_inner_fft(vals, inv=False):
     roots = [x.n for x in get_roots_of_unity(len(vals))]
     o, nvals = b.curve_order, [x.n for x in vals]
@@ -149,6 +160,31 @@ def f_inner_fft(vals, inv=False):
         # Regular FFT
         return [f_inner(x) for x in _fft(nvals, o, roots)]
 
+# Converts a list of evaluations at [1, w, w**2... w**(n-1)] to
+# a list of evaluations at
+# [offset, offset * q, offset * q**2 ... offset * q**(4n-1)] where q = w**(1/4)
+# This lets us work with higher-degree polynomials, and the offset lets us
+# avoid the 0/0 problem when computing a division (as long as the offset is
+# chosen randomly)
+def fft_expand_with_offset(vals, offset):
+    group_order = len(vals)
+    x_powers = f_inner_fft(vals, inv=True)
+    x_powers = [
+        (offset**i * x) for i, x in enumerate(x_powers)
+    ] + [f_inner(0)] * (group_order * 3)
+    return f_inner_fft(x_powers)
+
+# Convert from offset form into coefficients
+# Note that we can't make a full inverse function of fft_expand_with_offset
+# because the output of this might be a deg >= n polynomial, which cannot
+# be expressed via evaluations at n roots of unity
+def offset_evals_to_coeffs(evals, offset):
+    shifted_coeffs = f_inner_fft(evals, inv=True)
+    inv_offset = (1 / offset)
+    return [v * inv_offset ** i for (i, v) in enumerate(shifted_coeffs)]
+
+# Given a polynomial expressed as a list of evaluations at roots of unity,
+# evaluate it at x directly, without using an FFT to covert to coeffs first
 def barycentric_eval_at_point(values, x):
     order = len(values)
     roots_of_unity = get_roots_of_unity(order)
