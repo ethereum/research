@@ -111,6 +111,20 @@ def prove_from_witness(setup, group_order, code, var_assignments):
         ) * Z[(i+1) % group_order] == 0
 
     # Compute the quotient polynomial (called T(x) in the paper)
+    # It is only possible to construct this polynomial if the following
+    # equations are true at all roots of unity {1, w ... w^(n-1)}:
+    #
+    # 1. All gates are correct:
+    #    A * QL + B * QR + A * B * QM + C * QO + PI + QC = 0
+    # 2. The permutation accumulator is valid:
+    #    Z(wx) = Z(x) * (rlc of A, X, 1) * (rlc of B, 2X, 1) *
+    #                   (rlc of C, 3X, 1) / (rlc of A, S1, 1) /
+    #                   (rlc of B, S2, 1) / (rlc of C, S3, 1)
+    #    rlc = random linear combination: term_1 + beta * term2 + gamma * term3
+    # 3. The permutation accumulator equals 1 at the start point
+    #    (Z - 1) * L1 = 0
+    #    L1 = Lagrange polynomial, equal at all roots of unity except 1
+
     QUOT_big = [((
         A_big[i] * QL_big[i] +
         B_big[i] * QR_big[i] +
@@ -132,12 +146,15 @@ def prove_from_witness(setup, group_order, code, var_assignments):
 
     all_coeffs = expanded_evals_to_coeffs(QUOT_big)
 
+    # Sanity check: QUOT has degree < 3n
     assert (
         expanded_evals_to_coeffs(QUOT_big)[-group_order:] ==
         [0] * group_order
     )
     print("Generated the quotient polynomial")
 
+    # Split up T into T1, T2 and T3 (needed because T has degree 3n, so is
+    # too big for the trusted setup)
     T1 = f_inner_fft(all_coeffs[:group_order])
     T2 = f_inner_fft(all_coeffs[group_order: group_order * 2])
     T3 = f_inner_fft(all_coeffs[group_order * 2: group_order * 3])
@@ -150,11 +167,26 @@ def prove_from_witness(setup, group_order, code, var_assignments):
     buf2 = serialize_point(T1_pt)+serialize_point(T2_pt)+serialize_point(T3_pt)
     zed = binhash_to_f_inner(keccak256(buf))
 
+    # Sanity check that we've computed T1, T2, T3 correctly
     assert (
         barycentric_eval_at_point(T1, fft_offset) +
         barycentric_eval_at_point(T2, fft_offset) * fft_offset**group_order +
         barycentric_eval_at_point(T3, fft_offset) * fft_offset**(group_order*2)
     ) == QUOT_big[0]
+
+    # Compute the "linearization polynomial" R. This is a clever way to avoid
+    # needing to provide evaluations of _all_ the polynomials that we are
+    # checking an equation betweeen: instead, we can "skip" the first
+    # multiplicand in each term. The idea is that we construct a
+    # polynomial which is constructed to equal 0 at Z only if the equations
+    # that we are checking are correct, and which the verifier can reconstruct
+    # the KZG commitment to, and we provide proofs to verify that it actually
+    # equals 0 at Z
+    # 
+    # In order for the verifier to be able to reconstruct the commitment to R,
+    # it has to be "linear" in the proof items, hence why we can only use each
+    # proof item once; any further multiplicands in each term need to be
+    # replaced with their evaluations at Z, which do still need to be provided
 
     A_ev = barycentric_eval_at_point(A, zed)
     B_ev = barycentric_eval_at_point(B, zed)
@@ -210,6 +242,9 @@ def prove_from_witness(setup, group_order, code, var_assignments):
     ])
     v = binhash_to_f_inner(keccak256(buf3))
 
+    # Generate proof that W(z) = 0 and that the provided evaluations of
+    # A, B, C, S1, S2 are correct
+
     W_z_big = [(
         R_big[i] +
         v * (A_big[i] - A_ev) +
@@ -223,6 +258,11 @@ def prove_from_witness(setup, group_order, code, var_assignments):
     assert W_z_coeffs[group_order:] == [0] * (group_order * 3)
     W_z = f_inner_fft(W_z_coeffs[:group_order])
     W_z_pt = evaluations_to_point(setup, group_order, W_z)
+
+    # Generate proof that the provided evaluation of Z(z*w) is correct. This
+    # awkwardly different term is needed because the permutation accumulator
+    # polynomial Z is the one place where we have to check between adjacent
+    # coordinates, and not just within one coordinate.
 
     W_zw_big = [
         (Z_big[i] - Z_shifted_ev) /

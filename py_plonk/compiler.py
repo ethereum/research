@@ -3,8 +3,8 @@
 
 from utils import *
 
-# Creates the inner-field representation of a given (section, index)
-# Expects section = 1 for left, 2 for right, 3 for output
+# Outputs the label (an inner-field element) representing a given
+# (section, index) pair. Expects section = 1 for left, 2 right, 3 output
 def S_position_to_f_inner(group_order, index, section):
     assert section in (1, 2, 3) and index < group_order
     return get_roots_of_unity(group_order)[index] * section
@@ -233,6 +233,10 @@ def make_verification_key(setup, group_order, code):
         "w": get_root_of_unity(group_order)
     }
 
+# Attempts to "run" the program to fill in any intermediate variable
+# assignments, starting from the given assignments. Eg. if
+# `starting_assignments` contains {'a': 3, 'b': 5}, and the first line
+# says `c <== a * b`, then it fills in `c: 15`.
 def fill_variable_assignments(code, starting_assignments):
     out = {k: v for k,v in starting_assignments.items()}
     eqs = to_assembly(code)

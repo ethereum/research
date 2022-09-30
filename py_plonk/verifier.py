@@ -180,9 +180,9 @@ def verify_proof(setup, group_order, vk, proof, public=[], optimized=True):
             v**4 * S1_ev + v**5 * S2_ev + u * Z_shifted_ev
         ))
     
-        # Basically, what's going on here is a clever re-arrangement of terms
-        # to check the same equations that are being checked in the basic
-        # version, but in a way that minimizes the number of EC muls and even
+        # What's going on here is a clever re-arrangement of terms to check
+        # the same equations that are being checked in the basic version,
+        # but in a way that minimizes the number of EC muls and even
         # compressed the two pairings into one. The 2 pairings -> 1 pairing
         # trick is basically to replace checking
         #

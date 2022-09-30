@@ -1,6 +1,6 @@
 # Py_plonk
 
-Py_plonk is a simple python implementation of the PLONK protocol as described in https://eprint.iacr.org/2019/953.pdf, targeted to be close to compatible with the implementation at https://zkrepl.dev. Py_plonk includes:
+Py_plonk is a simple python implementation of the PLONK protocol as described in https://eprint.iacr.org/2019/953.pdf (see also https://vitalik.ca/general/2019/09/22/plonk.html), targeted to be close to compatible with the implementation at https://zkrepl.dev. Py_plonk includes:
 
 * A simple programming language for describing circuits, which it can compile into the forms needed for a PLONK proof (QL, QR, QM, QO, QC, S1, S2, S3 polynomials)
 * A prover that can generate proofs for this language, given a list of variable assignments
