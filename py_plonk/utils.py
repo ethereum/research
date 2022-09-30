@@ -65,7 +65,8 @@ def coeffs_to_point(setup, coeffs):
 def evaluations_to_point(setup, group_order, evals):
     return coeffs_to_point(setup, f_inner_fft(evals, inv=True))
 
-# Recover the trusted setup from a file in the circom format
+# Recover the trusted setup from a file in the format used in
+# https://github.com/iden3/snarkjs#7-prepare-phase-2
 SETUP_FILE_G1_STARTPOS = 80
 SETUP_FILE_POWERS_POS = 60
 
@@ -116,7 +117,7 @@ class Setup(object):
         # print("X^1 points checked consistent")
         return cls(G1_side, X2)
 
-# Extracts a point from JSON in circom format
+# Extracts a point from JSON in zkrepl's format
 def interpret_json_point(p):
     if len(p) == 3 and isinstance(p[0], str) and p[2] == "1":
         return (f(int(p[0])), f(int(p[1])))
