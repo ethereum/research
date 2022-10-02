@@ -4,6 +4,7 @@ from functools import cache
 from Crypto.Hash import keccak
 import py_ecc.bn128 as b
 from py_ecc.fields.field_elements import FQ as Field
+from multicombs import lincomb
 
 f = b.FQ
 f2 = b.FQ2
@@ -47,19 +48,23 @@ def ec_mul(pt, coeff):
 # Elliptic curve linear combination. A truly optimized implementation
 # would replace this with a fast lin-comb algo, see https://ethresear.ch/t/7238
 def ec_lincomb(pairs):
-    o = b.Z1
-    for pt, coeff in pairs:
-        o = b.add(o, ec_mul(pt, coeff))
-    return o
+    return lincomb(
+        [pt for (pt, n) in pairs],
+        [int(n) % b.curve_order for (pt, n) in pairs],
+        b.add,
+        b.Z1
+    )
+    # Equivalent to:
+    # o = b.Z1
+    # for pt, coeff in pairs:
+    #     o = b.add(o, ec_mul(pt, coeff))
+    # return o
 
 # Encodes the KZG commitment to the given polynomial coeffs
 def coeffs_to_point(setup, coeffs):
     if len(coeffs) > len(setup.G1_side):
         raise Exception("Not enough powers in setup")
-    o = b.Z1
-    for x, y in zip(coeffs, setup.G1_side):
-        o = b.add(o, b.multiply(y, x.n))
-    return o
+    return ec_lincomb([(s, x) for s, x in zip(setup.G1_side, coeffs)])
 
 # Encodes the KZG commitment that evaluates to the given values in the group
 def evaluations_to_point(setup, group_order, evals):

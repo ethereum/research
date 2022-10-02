@@ -137,14 +137,16 @@ def eq_to_coeffs(eq):
         # Gather list of variables used in the expression
         variables = []
         for t in tokens[2:]:
-            if is_valid_variable_name(t.lstrip('-')):
-                variables.append(t.lstrip('-'))
+            var = t.lstrip('-')
+            if is_valid_variable_name(var) and var not in variables:
+                variables.append(var)
         # Construct the list of allowed coefficients 
         allowed_coeffs = variables + ['', '$output_coeff']
         if len(variables) == 0:
             pass
         elif len(variables) == 1:
-            allowed_coeffs.append(variables[0]+'*'+variables[0])
+            variables.append(variables[0])
+            allowed_coeffs.append(get_product_key(*variables))
         elif len(variables) == 2:
             allowed_coeffs.append(get_product_key(*variables))
         else:
@@ -190,7 +192,8 @@ def make_gate_polynomials(group_order, eqs):
     C = [f_inner(0) for _ in range(group_order)]
     for i, (variables, coeffs) in enumerate(eqs):
         L[i] = f_inner(-coeffs.get(variables[0], 0))
-        R[i] = f_inner(-coeffs.get(variables[1], 0))
+        if variables[1] != variables[0]:
+            R[i] = f_inner(-coeffs.get(variables[1], 0))
         C[i] = f_inner(-coeffs.get('', 0))
         O[i] = f_inner(coeffs.get('$output_coeff', 1))
         if None not in variables:
@@ -238,17 +241,17 @@ def make_verification_key(setup, group_order, code):
 # `starting_assignments` contains {'a': 3, 'b': 5}, and the first line
 # says `c <== a * b`, then it fills in `c: 15`.
 def fill_variable_assignments(code, starting_assignments):
-    out = {k: v for k,v in starting_assignments.items()}
+    out = {k: f_inner(v) for k,v in starting_assignments.items()}
     eqs = to_assembly(code)
     for variables, coeffs in eqs:
         in_L, in_R, output = variables
         out_coeff = coeffs.get('$output_coeff', 1)
         product_key = get_product_key(in_L, in_R)
         if output is not None and out_coeff in (-1, 1):
-            new_value = (
+            new_value = f_inner(
                 coeffs.get('', 0) +
                 out[in_L] * coeffs.get(in_L, 0) +
-                out[in_R] * coeffs.get(in_R, 0) +
+                out[in_R] * coeffs.get(in_R, 0) * (1 if in_R != in_L else 0) +
                 out[in_L] * out[in_R] * coeffs.get(product_key, 0)
             ) * out_coeff # should be / but equivalent for (1, -1)
             if output in out:
@@ -257,5 +260,5 @@ def fill_variable_assignments(code, starting_assignments):
                                     .format(out[output], new_value))
             else:
                 out[output] = new_value
-                print('filled in:', output, out[output])
-    return out
+                # print('filled in:', output, out[output])
+    return {k: v.n for k,v in out.items()}

@@ -2,6 +2,7 @@ import compiler as c
 import prover as p
 import verifier as v
 import json
+import mini_poseidon as m
 
 def basic_test():
     setup = c.Setup.from_file('powersOfTau28_hez_final_11.ptau')
@@ -95,10 +96,50 @@ def factorization_test(setup):
     assert v.verify_proof(setup, 16, vk, proof, public, optimized=True)
     print("Factorization test success!")
 
+def poseidon_test(setup):
+    # PLONK-prove the correctness of a Poseidon execution. Note that this is
+    # a very suboptimal way to do it: an optimized implementation would use
+    # a custom PLONK gate to do a round in a single gate
+    expected_value = m.hash(1, 2)
+    # Generate code for proof
+    o = []
+    o.append('L0 public')
+    o.append('R0 public')
+    o.append('R64 public')
+    ((m00, m01), (m10, m11)) = m.mds_matrix
+    rc = m.rc
+    for i in range(64):
+        o.append('Ladj{x} <== L{x} + {r}'.format(x=i, r=rc[i][0]))
+        o.append('Lsq{x} <== Ladj{x} * Ladj{x}'.format(x=i))
+        o.append('Lqd{x} <== Lsq{x} * Lsq{x}'.format(x=i))
+        o.append('Lqn{x} <== Lqd{x} * Ladj{x}'.format(x=i))
+        if i < 4 or i >= 60:
+            o.append('Radj{x} <== R{x} + {r}'.format(x=i, r=rc[i][1]))
+            o.append('Rsq{x} <== Radj{x} * Radj{x}'.format(x=i))
+            o.append('Rqd{x} <== Rsq{x} * Rsq{x}'.format(x=i))
+            o.append('Rqn{x} <== Rqd{x} * Radj{x}'.format(x=i))
+        else:
+            o.append('Rqn{x} <== R{x} + {r}'.format(x=i, r=rc[i][1]))
+        o.append('Lqnxm00{x} <== Lqn{x} * {m}'.format(x=i, m=m00))
+        o.append('Lqnxm01{x} <== Lqn{x} * {m}'.format(x=i, m=m01))
+        o.append('Rqnxm10{x} <== Rqn{x} * {m}'.format(x=i, m=m10))
+        o.append('Rqnxm11{x} <== Rqn{x} * {m}'.format(x=i, m=m11))
+        o.append('L{xp1} <== Lqnxm00{x} + Rqnxm10{x}'.format(x=i, xp1=i+1))
+        o.append('R{xp1} <== Lqnxm01{x} + Rqnxm11{x}'.format(x=i, xp1=i+1))
+    code = '\n'.join(o)
+    print("Generated code for Poseidon test")
+    assignments = c.fill_variable_assignments(code, {'L0': 1, 'R0': 2})
+    vk = c.make_verification_key(setup, 1024, code)
+    print("Generated verification key")
+    proof = p.prove_from_witness(setup, 1024, code, assignments)
+    print("Generated proof")
+    assert v.verify_proof(setup, 1024, vk, proof, [1, 2, expected_value])
+    print("Verified proof!")
 if __name__ == '__main__':
     setup = basic_test()
-    ab_plus_a_test(setup)
-    one_public_input_test(setup)
-    proof = prover_test(setup)
-    verifier_test(setup, proof)
-    factorization_test(setup)
+    #ab_plus_a_test(setup)
+    #one_public_input_test(setup)
+    #proof = prover_test(setup)
+    #verifier_test(setup, proof)
+    #factorization_test(setup)
+    poseidon_test(setup)

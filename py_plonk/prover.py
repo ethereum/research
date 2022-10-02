@@ -94,6 +94,8 @@ def prove_from_witness(setup, group_order, code, var_assignments):
 
     # Some sanity checks to make sure everything is ok up to here
     for i in range(group_order):
+        # print('a', A[i], 'b', B[i], 'c', C[i])
+        # print('ql', QL[i], 'qr', QR[i], 'qm', QM[i], 'qo', QO[i], 'qc', QC[i])
         assert (
             A[i] * QL[i] + B[i] * QR[i] + A[i] * B[i] * QM[i] +
             C[i] * QO[i] + PI[i] + QC[i] == 0
