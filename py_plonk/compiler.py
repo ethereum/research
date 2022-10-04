@@ -242,6 +242,7 @@ def make_verification_key(setup, group_order, code):
 # says `c <== a * b`, then it fills in `c: 15`.
 def fill_variable_assignments(code, starting_assignments):
     out = {k: f_inner(v) for k,v in starting_assignments.items()}
+    out[None] = f_inner(0)
     eqs = to_assembly(code)
     for variables, coeffs in eqs:
         in_L, in_R, output = variables
