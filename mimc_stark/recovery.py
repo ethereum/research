@@ -61,12 +61,13 @@ def zpoly(positions, modulus, root_of_unity):
         rootz.append((rootz[-1] * root_of_unity) % modulus)
     return _zpoly(positions, modulus, rootz[:-1])
 
-def erasure_code_recover(vals, modulus, root_of_unity):
+def erasure_code_recover(vals, modulus, root_of_unity, z=None):
     # Generate the polynomial that is zero at the roots of unity
     # corresponding to the indices where vals[i] is None
     import poly_utils
-    z = zpoly([i for i in range(len(vals)) if vals[i] is None],
-              modulus, root_of_unity)
+    if z is None:
+        z = zpoly([i for i in range(len(vals)) if vals[i] is None],
+                modulus, root_of_unity)
     zvals = fft(z, modulus, root_of_unity)
 
     # Pointwise-multiply (vals filling in zero at missing spots) * z

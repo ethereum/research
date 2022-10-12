@@ -66,7 +66,73 @@ def test_recovery():
         print("Recovery in dataset of size %i done in time %.4f" %
               (2**L, time.time() - a))
     print("Passed expansive test")
+
+def is_power_of_two(x):
+    return x > 0 and x & (x-1) == 0
+
+def reverse_bit_order(n, order):
+    """
+    Reverse the bit order of an integer n
+    """
+    assert is_power_of_two(order)
+    # Convert n to binary with the same number of bits as "order" - 1, then reverse its bit order
+    return int(('{:0' + str(order.bit_length() - 1) + 'b}').format(n)[::-1], 2)
+
+
+def list_to_reverse_bit_order(l):
+    """
+    Convert a list between normal and reverse bit order. This operation is idempotent.
+    """
+    return [l[reverse_bit_order(i, len(l))] for i in range(len(l))]
+
+def test_recovery_danksharding():
+    modulus = 52435875175126190479447740508185965837690552500527637822603658699938581184513
+    nonresidue = 5
+    L = 13 # 2^13 data
+    M = 4 # 2^4 sample size
+
+    root_of_unity = pow(nonresidue, (modulus-1)//(2**L), modulus)
+    root_of_unity_s = pow(nonresidue, (modulus-1)//(2**(L - M)), modulus)
+    data = fft.fft([random.randrange(modulus) for i in range(2**(L-1))],
+                    modulus, root_of_unity)
+
+    # discard half data
+    indices = [i for i in range(2 ** (L - M))] # in samples
+    random.shuffle(indices)
+    indices=indices[:len(indices)//2]
+    rbo = list_to_reverse_bit_order([i for i in range(2 ** L)])
+    rbo_s = list_to_reverse_bit_order([i for i in range(2 ** (L - M))])
+    erased_data = data[:]
+    for i in indices:
+        for j in range(2 ** M):
+            erased_data[rbo[i*(2 ** M) + j]] = None
+
+    # recover z in smaller group of order 2 ** (L - M) with shifting parameter
+    a = time.time()
+    z_s = recovery.zpoly([rbo_s[i] for i in indices],
+                modulus, root_of_unity_s)
+    # extend to the full group of order 2 ** L
+    z = []
+    for i in z_s:
+        z.append(i)
+        z.extend([0] * ((2 ** M) - 1))
+
+    outdata = recovery.erasure_code_recover(
+        erased_data, modulus, root_of_unity, z
+    )
+    assert outdata == data
+    print("Recovery in dataset of size %i with optimized zpoly done in time %.4f" %
+            (2**L, time.time() - a))
+    a = time.time()
+    outdata = recovery.erasure_code_recover(
+        erased_data, modulus, root_of_unity
+    )
+    assert outdata == data
+    print("Recovery in dataset of size %i done in time %.4f" %
+            (2**L, time.time() - a))
+    print("Passed expansive test")
     
 if __name__ == '__main__':
     test_zpoly()
     test_recovery()
+    test_recovery_danksharding()
