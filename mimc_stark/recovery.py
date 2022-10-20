@@ -61,14 +61,13 @@ def zpoly(positions, modulus, root_of_unity):
         rootz.append((rootz[-1] * root_of_unity) % modulus)
     return _zpoly(positions, modulus, rootz[:-1])
 
-def erasure_code_recover(vals, modulus, root_of_unity, z=None):
+def erasure_code_recover(vals, modulus, root_of_unity, z=None, zvals=None, inv_z_of_kv_vals_map=None):
     # Generate the polynomial that is zero at the roots of unity
     # corresponding to the indices where vals[i] is None
     import poly_utils
-    if z is None:
-        z = zpoly([i for i in range(len(vals)) if vals[i] is None],
+    z = z or zpoly([i for i in range(len(vals)) if vals[i] is None],
                 modulus, root_of_unity)
-    zvals = fft(z, modulus, root_of_unity)
+    zvals = zvals or fft(z, modulus, root_of_unity)
 
     # Pointwise-multiply (vals filling in zero at missing spots) * z
     # By construction, this equals vals * z
@@ -88,11 +87,15 @@ def erasure_code_recover(vals, modulus, root_of_unity, z=None):
         p_times_z_of_kx = [x * pow(k, i, modulus) % modulus
                            for i, x in enumerate(p_times_z)]
         p_times_z_of_kx_vals = fft(p_times_z_of_kx, modulus, root_of_unity)
-        z_of_kx = [x * pow(k, i, modulus) for i, x in enumerate(z)]
-        z_of_kx_vals = fft(z_of_kx, modulus, root_of_unity)
-        
+
         # Compute q1(x) / q2(x) = p(k*x)
-        inv_z_of_kv_vals = multi_inv(z_of_kx_vals, modulus)
+        if inv_z_of_kv_vals_map is None or k not in inv_z_of_kv_vals_map:
+            z_of_kx = [x * pow(k, i, modulus) for i, x in enumerate(z)]
+            z_of_kx_vals = fft(z_of_kx, modulus, root_of_unity)
+            inv_z_of_kv_vals = multi_inv(z_of_kx_vals, modulus)
+        else:
+            inv_z_of_kv_vals = inv_z_of_kv_vals_map[k]
+
         p_of_kx_vals = [x*y % modulus for x,y in
                         zip(p_times_z_of_kx_vals, inv_z_of_kv_vals)]
         p_of_kx = fft(p_of_kx_vals, modulus, root_of_unity, inv=True)

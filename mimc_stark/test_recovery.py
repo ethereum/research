@@ -93,23 +93,26 @@ def test_recovery_danksharding():
 
     root_of_unity = pow(nonresidue, (modulus-1)//(2**L), modulus)
     root_of_unity_s = pow(nonresidue, (modulus-1)//(2**(L - M)), modulus)
+    root_of_unity_ss = pow(nonresidue, (modulus-1)//(2**M), modulus)
     data = fft.fft([random.randrange(modulus) for i in range(2**(L-1))],
                     modulus, root_of_unity)
 
     # discard half data
     indices = [i for i in range(2 ** (L - M))] # in samples
     random.shuffle(indices)
-    indices=indices[:len(indices)//2]
+    avail_indices=indices[:len(indices)//2]
+    missing_indices=indices[len(indices)//2:]
     rbo = list_to_reverse_bit_order([i for i in range(2 ** L)])
     rbo_s = list_to_reverse_bit_order([i for i in range(2 ** (L - M))])
+    rbo_ss = list_to_reverse_bit_order([i for i in range(2 ** M)])
     erased_data = data[:]
-    for i in indices:
+    for i in missing_indices:
         for j in range(2 ** M):
             erased_data[rbo[i*(2 ** M) + j]] = None
 
     # recover z in smaller group of order 2 ** (L - M) with shifting parameter
     a = time.time()
-    z_s = recovery.zpoly([rbo_s[i] for i in indices],
+    z_s = recovery.zpoly([rbo_s[i] for i in missing_indices],
                 modulus, root_of_unity_s)
     # extend to the full group of order 2 ** L
     z = []
@@ -130,8 +133,50 @@ def test_recovery_danksharding():
     assert outdata == data
     print("Recovery in dataset of size %i done in time %.4f" %
             (2**L, time.time() - a))
+
+    # optimized recovery on danksharding encoding
+    # pre-compute root of unit list
+    ru_list = [pow(root_of_unity, i, modulus) for i in range(2 ** L)]
+    a = time.time()
+    # prepare shared variables
+    k = 5
+    z_of_kx = [x * pow(k, i, modulus) for i, x in enumerate(z_s)]
+    z_of_kx_vals = fft.fft(z_of_kx, modulus, root_of_unity_s)
+    inv_z_of_kv_vals = recovery.multi_inv(z_of_kx_vals, modulus)
+    inv_z_of_kv_vals_map = {k: inv_z_of_kv_vals}
+    zvals = fft.fft(z_s, modulus, root_of_unity_s)
+
+    # IFFT all available samples
+    coeffs = []
+    for i in avail_indices:
+        coeff = fft.fft([erased_data[rbo[i * (2 ** M) + j]] for j in rbo_ss], modulus, root_of_unity_ss, True)
+        coeff = [c * ru_list[-rbo_s[i] * k] % modulus for k, c in enumerate(coeff)]
+        coeffs.extend(coeff)
+
+    # recover pre-FFT values of the missing samples
+    recs = []
+    for i in range(2 ** M):
+        ys = [None] * len(indices)
+        for j, y in zip(avail_indices, coeffs[i::(2**M)]):
+            ys[rbo_s[j]] = y
+
+        rec = recovery.erasure_code_recover(ys, modulus, root_of_unity_s, z_s, zvals=zvals,
+                inv_z_of_kv_vals_map=inv_z_of_kv_vals_map)
+        recs.extend(rec)
+
+    # FFT to get the missing samples
+    outdata = erased_data[:]
+    for i in missing_indices:
+        coeff = recs[rbo_s[i]::len(indices)]
+        coeff = [c * ru_list[rbo_s[i] * k] % modulus for k, c in enumerate(coeff)]
+        outdata_s = fft.fft(coeff, modulus, root_of_unity_ss)
+        for j, d in enumerate(outdata_s):
+            outdata[rbo[i * (2 ** M) + rbo_ss[j]]] = d
+    assert outdata == data
+    print("Recovery in dataset of size %i with optimized recovery done in time %.4f" %
+            (2**L, time.time() - a))
     print("Passed expansive test")
-    
+
 if __name__ == '__main__':
     test_zpoly()
     test_recovery()
