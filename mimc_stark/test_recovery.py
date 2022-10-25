@@ -140,6 +140,8 @@ def test_recovery_danksharding():
     a = time.time()
     # prepare shared variables
     k = 5
+    z_s = recovery.zpoly([rbo_s[i] for i in missing_indices],
+                modulus, root_of_unity_s)
     z_of_kx = [x * pow(k, i, modulus) for i, x in enumerate(z_s)]
     z_of_kx_vals = fft.fft(z_of_kx, modulus, root_of_unity_s)
     inv_z_of_kv_vals = recovery.multi_inv(z_of_kx_vals, modulus)
