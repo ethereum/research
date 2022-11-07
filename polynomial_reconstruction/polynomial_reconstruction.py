@@ -52,7 +52,8 @@ def zero_polynomial_via_multiplication(root_of_unity, zero_vector):
     assert all(a == 0 and b == 0 or a != 0 and b != 0 for a, b in zip(zero_vector, r))
     return r, zero_poly
 
-def reconstruct_polynomial_from_samples(root_of_unity, samples, zero_polynomial_function):
+def reconstruct_polynomial_from_samples(root_of_unity, samples, zero_polynomial_function,
+            shifted_zero_poly=None, eval_shifted_zero_poly=None, inv_eval_shifted_zero_poly=None):
     zero_vector = [0 if x is None else 1 for x in samples]
 
     time_a = time()
@@ -66,19 +67,23 @@ def reconstruct_polynomial_from_samples(root_of_unity, samples, zero_polynomial_
     shift_inv = primefield.inv(PRIMITIVE_ROOT_OF_UNITY)
     
     shifted_poly_with_zero = shift_poly(poly_with_zero, MODULUS, PRIMITIVE_ROOT_OF_UNITY)
-    shifted_zero_poly = shift_poly(zero_poly, MODULUS, PRIMITIVE_ROOT_OF_UNITY)
+    shifted_zero_poly = shifted_zero_poly or shift_poly(zero_poly, MODULUS, PRIMITIVE_ROOT_OF_UNITY)
     
-    eval_shifted_poly_with_zero = fft(shifted_poly_with_zero, MODULUS, ROOT_OF_UNITY)
-    eval_shifted_zero_poly = fft(shifted_zero_poly, MODULUS, ROOT_OF_UNITY)
+    eval_shifted_poly_with_zero = fft(shifted_poly_with_zero, MODULUS, root_of_unity)
+    eval_shifted_zero_poly = eval_shifted_zero_poly or fft(shifted_zero_poly, MODULUS, root_of_unity)
     
-    eval_shifted_reconstructed_poly = [primefield.div(a, b) for a, b in 
-                                       zip(eval_shifted_poly_with_zero, eval_shifted_zero_poly)]
+    if inv_eval_shifted_zero_poly:
+        eval_shifted_reconstructed_poly = [primefield.mul(a, b) for a, b in
+                                        zip(eval_shifted_poly_with_zero, inv_eval_shifted_zero_poly)]
+    else:
+        eval_shifted_reconstructed_poly = [primefield.div(a, b) for a, b in
+                                        zip(eval_shifted_poly_with_zero, eval_shifted_zero_poly)]
     
-    shifted_reconstructed_poly = fft(eval_shifted_reconstructed_poly, MODULUS, ROOT_OF_UNITY, inv=True)
+    shifted_reconstructed_poly = fft(eval_shifted_reconstructed_poly, MODULUS, root_of_unity, inv=True)
     
     reconstructed_poly = shift_poly(shifted_reconstructed_poly, MODULUS, shift_inv)
 
-    reconstructed_data = fft(reconstructed_poly, MODULUS, ROOT_OF_UNITY)
+    reconstructed_data = fft(reconstructed_poly, MODULUS, root_of_unity)
     
     assert all(x is None or x == y for x, y in zip(samples, reconstructed_data))
     
