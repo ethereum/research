@@ -1,5 +1,8 @@
 # Example code for building and getting proofs in a Merkle sum tree,
 # used to make proofs of solvency in an exchange
+#
+# THIS IS EDUCATIONAL CODE, NOT PRODUCTION! HIRE A SECURITY AUDITOR
+# WHEN BUILDING SOMETHING FOR PRODUCTION USE.
 
 import hashlib
 
