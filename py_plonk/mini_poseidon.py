@@ -25,7 +25,7 @@ rc = [
 
 mds = [f_inner(1) / i for i in range(3, 8)]
 
-def hash(in1, in2):
+def poseidon_hash(in1, in2):
     L, M, R = f_inner(in1), f_inner(in2), f_inner(0)
     for i in range(64):
         L = (L + rc[i][0]) ** 5

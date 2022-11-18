@@ -2,7 +2,7 @@ import compiler as c
 import prover as p
 import verifier as v
 import json
-import mini_poseidon as m
+from mini_poseidon import rc, mds, poseidon_hash
 
 def basic_test():
     setup = c.Setup.from_file('powersOfTau28_hez_final_11.ptau')
@@ -97,7 +97,6 @@ def factorization_test(setup):
     print("Factorization test success!")
 
 def output_proof_lang():
-    from mini_poseidon import rc, mds
     o = []
     o.append('L0 public')
     o.append('M0 public')
@@ -126,7 +125,7 @@ def poseidon_test(setup):
     # PLONK-prove the correctness of a Poseidon execution. Note that this is
     # a very suboptimal way to do it: an optimized implementation would use
     # a custom PLONK gate to do a round in a single gate
-    expected_value = m.hash(1, 2)
+    expected_value = poseidon_hash(1, 2)
     # Generate code for proof
     code = output_proof_lang()
     print("Generated code for Poseidon test")
