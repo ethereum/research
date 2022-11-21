@@ -6,7 +6,7 @@ import py_ecc.optimized_bls12_381 as b
 
 MODULUS = b.curve_order
 
-PRIMITIVE_ROOT_OF_UNITY = 5
+PRIMITIVE_ROOT_OF_UNITY = 7
 
 primefield = PrimeFieldExtended(MODULUS, PRIMITIVE_ROOT_OF_UNITY)
 

@@ -7,7 +7,7 @@ from polynomial_reconstruction import reconstruct_polynomial_from_samples, zero_
 
 MODULUS = b.curve_order
 
-PRIMITIVE_ROOT_OF_UNITY = 5
+PRIMITIVE_ROOT_OF_UNITY = 7
 
 primefield = PrimeFieldExtended(MODULUS, PRIMITIVE_ROOT_OF_UNITY)
 
