@@ -12,7 +12,12 @@ def hash(x):
     return hashlib.sha256(x).digest()
 
 def log2(x):
-    return len(bin(x)) - 2
+    result = 0
+    while x > 1:
+        x >>= 1
+        result += 1
+    return result
+
 
 def get_next_power_of_2(x):
     return 2 * get_next_power_of_2((x+1)//2) if x > 1 else 1
@@ -62,7 +67,7 @@ def get_proof(tree, index):
 # Verifies a proof (duh)
 def verify_proof(username, salt, balance, index, user_table_size, root, proof):
     leaf = userdata_to_leaf(username, salt, balance)
-    branch_length = log2(get_next_power_of_2(user_table_size)) - 1
+    branch_length = log2(get_next_power_of_2(user_table_size))
     for i in range(branch_length):
         if index & (2**i):
             leaf = combine_tree_nodes(proof[i], leaf)
@@ -89,6 +94,5 @@ def test():
     print("Proof:", proof)
     assert verify_proof(b'Charlie', user_table[2][1], 10, 2, 8, root, proof)
     print("Proof checked")
-
 if __name__ == '__main__':
     test()
