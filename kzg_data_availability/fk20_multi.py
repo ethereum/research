@@ -136,15 +136,23 @@ def add_instrumentation():
 
 
 if __name__ == "__main__":
-    from timer import chrono
-    generate_setup = chrono(generate_setup)
-    data_availabilty_using_fk20_multi = chrono(data_availabilty_using_fk20_multi)
-    check_proof_multi = chrono(check_proof_multi)
+    #uncomment to report time for the functions
+    #from timer import chrono
+    #generate_setup = chrono(generate_setup)
+    #data_availabilty_using_fk20_multi = chrono(data_availabilty_using_fk20_multi)
+    #check_proof_multi = chrono(check_proof_multi)
 
-    polynomial = [1, 2, 3, 4, 7, 8, 9, 10, 13, 14, 1, 15, MODULUS - 1, 1000, MODULUS - 134, 33] * 32
-    n = len(polynomial)
+    import random
+    from tqdm import tqdm
 
-    setup = generate_setup(1927409816240961209460912649124, n)
+    MAX_DEGREE_POLY = MODULUS-1
+    N_POINTS = 512
+
+
+    polynomial = [random.randint(1, MAX_DEGREE_POLY) for _ in range(512)] 
+    n = N_POINTS
+
+    setup = generate_setup(random.getrandbits(256), n)
 
     commitment = commit_to_poly(polynomial, setup)
 

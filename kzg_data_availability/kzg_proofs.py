@@ -1,4 +1,3 @@
-from py_ecc import optimized_bls12_381 as b
 import blst
 from fft import fft
 from multicombs import lincomb
@@ -244,24 +243,30 @@ def check_proof_multi(commitment: blst.P1, proof: blst.P1, x: int, ys: list[int]
 
 if __name__ == "__main__":
     from timer import chrono
-    generate_setup = chrono(generate_setup)
-    commit_to_poly = chrono(commit_to_poly)
-    eval_poly_at = chrono(eval_poly_at)
-    check_proof_single = chrono(check_proof_single)
-    compute_proof_multi = chrono(compute_proof_multi)
-    check_proof_multi = chrono(check_proof_multi)
+    import random
+    from tqdm import tqdm
+    # Uncomment to report time of the functions
+    #generate_setup = chrono(generate_setup)
+    #commit_to_poly = chrono(commit_to_poly)
+    #eval_poly_at = chrono(eval_poly_at)
+    #check_proof_single = chrono(check_proof_single)
+    #compute_proof_multi = chrono(compute_proof_multi)
+    #check_proof_multi = chrono(check_proof_multi)
 
+    MAX_DEGREE_POLY = MODULUS-1
+    N_POINTS = 512
+    polynomial = [random.randint(1, MAX_DEGREE_POLY) for _ in range(N_POINTS)] 
+    n = N_POINTS
 
-    polynomial = [1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13]
-    n = len(polynomial)
-
-    setup = generate_setup(1927409816240961209460912649124, n)
+    setup = generate_setup(random.getrandbits(256), n)
 
     commitment = commit_to_poly(polynomial, setup)
-    proof = compute_proof_single(polynomial, 17, setup)
-    value = eval_poly_at(polynomial, 17)
-    assert check_proof_single(commitment, proof, 17, value, setup)
-    print("Single point check passed")
+    
+    for i in tqdm(range(n), desc='Single point test'):
+        proof = compute_proof_single(polynomial, i, setup)
+        value = eval_poly_at(polynomial, i)
+        assert check_proof_single(commitment, proof, i, value, setup)
+    print(f"Single point check passed for all {n} points")
 
     root_of_unity = get_root_of_unity(8)
     x = 5431

@@ -146,17 +146,23 @@ def data_availabilty_using_fk20(polynomial: list[int], setup: tuple[list[blst.P1
 
 
 if __name__ == "__main__":
-    from timer import chrono
-    generate_setup = chrono(generate_setup)
-    commit_to_poly = chrono(commit_to_poly)
-    eval_poly_at = chrono(eval_poly_at)
-    check_proof_single = chrono(check_proof_single)
+    #uncomment to report time for the functions
+    #from timer import chrono
+    #generate_setup = chrono(generate_setup)
+    #commit_to_poly = chrono(commit_to_poly)
+    #eval_poly_at = chrono(eval_poly_at)
+    #check_proof_single = chrono(check_proof_single)
     
     import random
-    polynomial = [1, 2, 3, 4, 7, 7, 7, 7, 13, 13, 13, 13, 13, 13, 13, 13]
-    n = len(polynomial)
+    from tqdm import tqdm
 
-    setup = generate_setup(1927409816240961209460912649124, n)
+    MAX_DEGREE_POLY = MODULUS-1
+    N_POINTS = 512
+
+    polynomial = [random.randint(1, MAX_DEGREE_POLY) for _ in range(512)] 
+    n = N_POINTS
+
+    setup = generate_setup(random.getrandbits(256), n)
 
     commitment = commit_to_poly(polynomial, setup)
 
@@ -166,10 +172,11 @@ if __name__ == "__main__":
 
     # Now check a random position
 
-    pos = random.randrange(0, len(polynomial))
-    root_of_unity = get_root_of_unity(n * 2)
-    x = pow(root_of_unity, pos, MODULUS)
-    y = eval_poly_at(polynomial, x)
-    
-    assert check_proof_single(commitment, all_proofs[reverse_bit_order(pos, 2 * n)], x, y, setup)
-    print(f"Single point check passed (idx={pos})")
+    pos = random.randrange(0, len(polynomial), desc='Single point check')
+    for pos in tqdm(range(n)):
+        root_of_unity = get_root_of_unity(n * 2)
+        x = pow(root_of_unity, pos, MODULUS)
+        y = eval_poly_at(polynomial, x)
+        
+        assert check_proof_single(commitment, all_proofs[reverse_bit_order(pos, 2 * n)], x, y, setup)
+    print(f"Single point check passed for all {n} points")
