@@ -167,7 +167,6 @@ class CSI_FISH:
             reduced_exp_minus_a = [reduced_exponent[i] - self.__es[i] for i in range(len(self.__es))]
             final_exponent=reduced_exp_minus_a
             challenge_curve = self.csidh.action(self.E_A,reduced_exp_minus_a)  
-        print(challenge_curve)
         s = str(challenge_curve)
         h.update(s.encode())
         return (challenge, final_exponent, h.digest())
