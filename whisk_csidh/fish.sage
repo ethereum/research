@@ -293,7 +293,7 @@ class CSI_FISH:
                 reduced_exp_minus_a = [reduced_exponents[i][j] - self.__es[j] for j in range(len(self.__es))]
                 challenge_curves.append(self.csidh.action(self.E_A, reduced_exp_minus_a)) 
                 final_exponents.append(reduced_exp_minus_a)
-        print(challenge_curves)
+        
         s = ''
         for curve in challenge_curves: # computes H( [r1]*E1 | ... | [r_t]*E_t)
             s += str(curve)
