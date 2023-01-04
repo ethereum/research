@@ -197,7 +197,7 @@ class CSI_FISH:
     Input: 
     -challenges is a (self.lambda,1) shape array of bits 
     -curves is a (m,2) shape array with tuples (E_i, E_i')
-    -secret sec is an integer mod class number 
+    -sec is an integer mod class number 
     
     Output: 
     -returns a proof pi = (challenges, rs)
