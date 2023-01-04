@@ -152,9 +152,8 @@ class CSI_FISH:
     """
     def identification(self, challenge):
         h = hashlib.sha256()
-        #b = random.randint(0, self.class_number)
-        #b=random.randint(0, 2^30)
-        b=100
+        #b = random.randint(0, self.class_number) #uncomment when big int issues fixed 
+        b=random.randint(0, 100) #for testing 
         target = self.num_primes*[Decimal('0')]
         target[0]=Decimal(str(b))
         z=self.babai_nearest_vector(target)
@@ -214,7 +213,7 @@ class CSI_FISH:
         reduced_sec = [int(z_) for z_ in self.babai_nearest_vector(sec_arr)]
         
         for j in range(self.lam): 
-            #b = random.randint(0, self.class_number)
+            #b = random.randint(0, self.class_number) #uncomment when big int issues fixed 
             b=random.randint(0, 100)
             target = self.num_primes*[Decimal('0')]
             target[0]=Decimal(str(b))
@@ -276,6 +275,7 @@ class CSI_FISH:
     def sign(self, msg, cs):
         assert len(cs)==self.t
         h = hashlib.sha256()
+        #targets = [random.randint(0, self.class_number) for i in range(self.t)] # uncomment when big int issues fixed 
         targets = [random.randint(0, 100) for i in range(self.t)]
         reduced_exponents=[]
         for t in targets: 
