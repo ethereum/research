@@ -130,7 +130,7 @@ class CSI_FISH:
     Babai nearest plane algorithm. 
     Given a target vector finds the nearest vector wrt  
     L1 norm in the linear subspace defined by the relation lattice self.A
-    See [2] Section 4
+    See [2] Section 4 and https://github.com/KULeuven-COSIC/CSI-FiSh/blob/master/implementation/classgroup.c
     """
     
     def babai_nearest_vector(self, target): 
