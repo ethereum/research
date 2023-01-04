@@ -201,7 +201,7 @@ class CSI_FISH:
     
     Output: 
     -returns a proof pi = (challenges, rs)
-    where rs is a (self.lambda, 1) shape array where r_j = b_j - c)j * s
+    where rs is a (self.lambda, 1) shape array where r_j = b_j - c_j * s
     """
     def dleq_prover(self, challenges, curves, sec):    
         h = hashlib.sha256()
