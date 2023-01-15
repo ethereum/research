@@ -167,7 +167,7 @@ def prove_from_witness(setup, group_order, code, var_assignments):
     print("Generated T1, T2, T3 polynomials")
 
     buf2 = serialize_point(T1_pt)+serialize_point(T2_pt)+serialize_point(T3_pt)
-    zed = binhash_to_f_inner(keccak256(buf))
+    zed = binhash_to_f_inner(keccak256(buf2))
 
     # Sanity check that we've computed T1, T2, T3 correctly
     assert (
