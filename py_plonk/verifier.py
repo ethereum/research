@@ -21,7 +21,7 @@ def verify_proof(setup, group_order, vk, proof, public=[], optimized=True):
     alpha = binhash_to_f_inner(keccak256(serialize_point(Z_pt)))
 
     buf2 = serialize_point(T1_pt)+serialize_point(T2_pt)+serialize_point(T3_pt)
-    zed = binhash_to_f_inner(keccak256(buf))
+    zed = binhash_to_f_inner(keccak256(buf2))
 
     buf3 = b''.join([
         serialize_int(x) for x in
