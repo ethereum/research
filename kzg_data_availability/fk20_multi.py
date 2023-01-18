@@ -1,4 +1,4 @@
-from py_ecc import optimized_bls12_381 as b
+import blst
 from fft import fft
 import kzg_proofs
 from kzg_proofs import (
@@ -11,7 +11,8 @@ from kzg_proofs import (
     reverse_bit_order,
     is_power_of_two,
     eval_poly_at,
-    get_extended_data
+    get_extended_data,
+    P1_INF
 )
 from fk20_single import (
     toeplitz_part1,
@@ -44,16 +45,16 @@ def fk20_multi(polynomial, l, setup):
     # done before the polynomial is known, it only needs to be computed once
     xext_fft = []
     for i in range(l):
-        x = setup[0][n - l - 1 - i::-l] + [b.Z1]
+        x = setup[0][n - l - 1 - i::-l] + [P1_INF.dup()]
         xext_fft.append(toeplitz_part1(x))
 
-    hext_fft = [b.Z1] * 2 * k
+    hext_fft = [P1_INF.dup()] * 2 * k
     for i in range(l):
 
         toeplitz_coefficients = polynomial[- i - 1::l] + [0] * (k + 1) + polynomial[2 * l - i - 1: - l - i:l]
 
         # Compute the vector h from the paper using a Toeplitz matric multiplication
-        hext_fft = [b.add(v, w) for v, w in zip(hext_fft, toeplitz_part2(toeplitz_coefficients, xext_fft[i]))]
+        hext_fft = [v.dup().add(w) for v, w in zip(hext_fft, toeplitz_part2(toeplitz_coefficients, xext_fft[i]))]
     
     h = toeplitz_part3(hext_fft)
 
@@ -81,24 +82,24 @@ def fk20_multi_data_availability_optimized(polynomial, l, setup):
     # done before the polynomial is known, it only needs to be computed once
     xext_fft = []
     for i in range(l):
-        x = setup[0][n - l - 1 - i::-l] + [b.Z1]
+        x = setup[0][n - l - 1 - i::-l] + [P1_INF.dup()]
         xext_fft.append(toeplitz_part1(x))
 
     add_instrumentation()
 
-    hext_fft = [b.Z1] * 2 * k
+    hext_fft = [P1_INF.dup()] * 2 * k
     for i in range(l):
 
         toeplitz_coefficients = reduced_polynomial[- i - 1::l] + [0] * (k + 1) \
              + reduced_polynomial[2 * l - i - 1: - l - i:l]
 
         # Compute the vector h from the paper using a Toeplitz matric multiplication
-        hext_fft = [b.add(v, w) for v, w in zip(hext_fft, toeplitz_part2(toeplitz_coefficients, xext_fft[i]))]
+        hext_fft = [v.dup().add(w) for v, w in zip(hext_fft, toeplitz_part2(toeplitz_coefficients, xext_fft[i]))]
 
     # Final FFT done after summing all h vectors
     h = toeplitz_part3(hext_fft)
 
-    h = h + [b.Z1] * k
+    h = h + [P1_INF.dup()] * k
 
     # The proofs are the DFT of the h vector
     return fft(h, MODULUS, get_root_of_unity(2 * k))
@@ -124,21 +125,34 @@ def add_instrumentation():
     multiplication_count = 0
 
     # Add counter to multiply function for statistics
-    b_multiply_ = b.multiply
+    b_multiply_ = blst.P1.mult
     def multiply_and_count(*args):
         global multiplication_count
         multiplication_count += 1
 
         return b_multiply_(*args)
 
-    b.multiply = multiply_and_count
+    blst.P1.mult = multiply_and_count
 
 
 if __name__ == "__main__":
-    polynomial = [1, 2, 3, 4, 7, 8, 9, 10, 13, 14, 1, 15, MODULUS - 1, 1000, MODULUS - 134, 33] * 32
-    n = len(polynomial)
+    #uncomment to report time for the functions
+    #from timer import chrono
+    #generate_setup = chrono(generate_setup)
+    #data_availabilty_using_fk20_multi = chrono(data_availabilty_using_fk20_multi)
+    #check_proof_multi = chrono(check_proof_multi)
 
-    setup = generate_setup(1927409816240961209460912649124, n)
+    import random
+    from tqdm import tqdm
+
+    MAX_DEGREE_POLY = MODULUS-1
+    N_POINTS = 512
+
+
+    polynomial = [random.randint(1, MAX_DEGREE_POLY) for _ in range(512)] 
+    n = N_POINTS
+
+    setup = generate_setup(random.getrandbits(256), n)
 
     commitment = commit_to_poly(polynomial, setup)
 

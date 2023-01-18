@@ -1,32 +1,39 @@
 
-from py_ecc import optimized_bls12_381 as b
+import blst
+
+P1_INF = blst.P1(bytes.fromhex("400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"))
+
 
 def _simple_ft(vals, modulus, roots_of_unity):
     L = len(roots_of_unity)
     o = []
     for i in range(L):
-        last = b.Z1 if type(vals[0]) == tuple else 0
+        last = P1_INF if type(vals[0]) == blst.P1 else 0
         for j in range(L):
-            if type(vals[0]) == tuple:
-                last = b.add(last, b.multiply(vals[j], roots_of_unity[(i*j)%L]))
+            if type(vals[0]) == blst.P1:
+                #last = b.add(last, b.multiply(vals[j], roots_of_unity[(i*j)%L]))
+                last.add(vals[j].dup().mul(roots_of_unity[(i*j)%L]))
             else:
                 last += vals[j] * roots_of_unity[(i*j)%L]
-        o.append(last if type(last) == tuple else last % modulus)
+        o.append(last if type(last) == blst.P1 else last % modulus)
     return o
 
 def _fft(vals, modulus, roots_of_unity):
-    if len(vals) <= 4 and type(vals[0]) != tuple:
+    if len(vals) <= 4 and type(vals[0]) != blst.P1:
         #return vals
         return _simple_ft(vals, modulus, roots_of_unity)
-    elif len(vals) == 1 and type(vals[0]) == tuple:
+    elif len(vals) == 1 and type(vals[0]) == blst.P1:
         return vals
     L = _fft(vals[::2], modulus, roots_of_unity[::2])
     R = _fft(vals[1::2], modulus, roots_of_unity[::2])
     o = [0 for i in vals]
     for i, (x, y) in enumerate(zip(L, R)):
-        y_times_root = b.multiply(y, roots_of_unity[i]) if type(y) == tuple else y*roots_of_unity[i]
-        o[i] = b.add(x, y_times_root) if type(x) == tuple else (x+y_times_root) % modulus
-        o[i+len(L)] = b.add(x, b.neg(y_times_root)) if type(x) == tuple else (x-y_times_root) % modulus
+        #y_times_root = b.multiply(y, roots_of_unity[i]) if type(y) == tuple else y*roots_of_unity[i]
+        y_times_root = y.dup().mult(roots_of_unity[i]) if type(y) == blst.P1 else y*roots_of_unity[i]
+        #o[i] = b.add(x, y_times_root) if type(x) == tuple else (x+y_times_root) % modulus
+        o[i] = x.dup().add(y_times_root) if type(y) == blst.P1 else (x+y_times_root) % modulus
+        #o[i+len(L)] = b.add(x, b.neg(y_times_root)) if type(x) == tuple else (x-y_times_root) % modulus
+        o[i+len(L)] = x.dup().add(y_times_root.dup().neg()) if type(x) == blst.P1 else (x-y_times_root) % modulus
     return o
 
 def expand_root_of_unity(root_of_unity, modulus):
@@ -44,8 +51,8 @@ def fft(vals, modulus, root_of_unity, inv=False):
     if inv:
         # Inverse FFT
         invlen = pow(len(vals), modulus-2, modulus)
-        if type(vals[0]) == tuple:
-            return [b.multiply(x, invlen) for x in
+        if type(vals[0]) == blst.P1:
+            return [x.dup().mult(invlen) for x in  
                     _fft(vals, modulus, rootz[:0:-1])]
         else:
             return [(x*invlen) % modulus for x in
@@ -53,6 +60,8 @@ def fft(vals, modulus, root_of_unity, inv=False):
     else:
         # Regular FFT
         return _fft(vals, modulus, rootz[:-1])
+
+#Note on call hierarchy: the project is not using the functions below.
 
 # Evaluates f(x) for f in evaluation form
 def inv_fft_at_point(vals, modulus, root_of_unity, x):
