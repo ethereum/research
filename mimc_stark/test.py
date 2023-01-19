@@ -1,3 +1,5 @@
+import time
+
 from fft import fft
 from mimc_stark import mk_mimc_proof, modulus, mimc, verify_mimc_proof
 from merkle_tree import merkelize, mk_branch, verify_branch, bin_length
@@ -18,8 +20,9 @@ def test_fri():
     poly = list(range(4096))
     root_of_unity = pow(7, (modulus-1)//16384, modulus)
     evaluations = fft(poly, modulus, root_of_unity)
+    start_time = time.time()
     proof = prove_low_degree(evaluations, root_of_unity, 4096, modulus)
-    print("Approx proof length: %d" % fri_proof_bin_length(proof))
+    print("Approx proof length: %d, used time: %.4f" % (fri_proof_bin_length(proof), (time.time() - start_time)))
     assert verify_low_degree_proof(pmerkelize(evaluations)[1], root_of_unity, proof, 4096, modulus)
     
     try:
