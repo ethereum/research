@@ -12,4 +12,4 @@
 
  ## License
 
- [MIT](LICENSE) © 2015-2018 Vitalik Buterin
+ [MIT](LICENSE) © 2015-2023 Vitalik Buterin et al
