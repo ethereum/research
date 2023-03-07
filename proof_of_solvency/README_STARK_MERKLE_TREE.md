@@ -1,11 +1,7 @@
 This demo is based on Vitalik's proof of solvency proposal and implemented using the STARK proof system. 
-
 See https://vitalik.ca/general/2022/11/19/proof_of_solvency.html
 
-It provides users with proofs that constrain the sum of all assets and the non-negativity of their net asset value. 
-
-This is a basic version of the solution.
-
+It provides users with proofs that constrain the sum of all assets and the non-negativity of their net asset value. This is a basic version of the solution.
 Most of the modules used here including fft and fri etc. came from "../mimc_stark".
 
 
@@ -29,4 +25,4 @@ $$(I(z^{i+1}) - 2 * I(z^{i})) * (I(z^{i+1}) - 2 * I(z^{i}) -1) = 0, i mod uts \n
 $$I(z^{i*uts})=0, i < N$$
 
 3. Include a positivity constraint：
-$$I(z^{uts * i+(uts-2)})=balance(z^{uts * i+(uts-2)}),i<N$$
+$$I(z^{uts * i+(uts-2)})=balance(z^{uts * i+(uts-2)}),i < N$$
