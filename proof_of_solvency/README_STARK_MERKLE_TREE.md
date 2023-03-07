@@ -16,7 +16,9 @@ $$I(z^{uts*(i+1)+(uts-1)}) = I(z^{uts*(i+1) +(uts-2)}) + I(z^{uts*i+(uts-1)}) - 
 $$I(z^{uts*(N-1)+(uts-1)})=0$$
 
 uts: user trace size, the number of traces included in each user's data
+
 sum: total user balance
+
 N: number of users
 
 #### 2. Non-negativity constraint：
