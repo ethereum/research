@@ -1,3 +1,12 @@
+# This demo is based on Vitalik's proof of solvency proposal and implemented using the STARK proof system. 
+# See https://vitalik.ca/general/2022/11/19/proof_of_solvency.html
+# It provides users with proofs that constrain the sum of all assets and the non-negativity of their net asset value. 
+# This is a basic version of the solution.
+# Most of the modules used here including fft and fri etc. came from "../mimc_stark".
+
+# THIS IS EDUCATIONAL CODE, NOT PRODUCTION! HIRE A SECURITY AUDITOR
+# WHEN BUILDING SOMETHING FOR PRODUCTION USE.
+
 import time
 import sys
 sys.path.append("../mimc_stark")
