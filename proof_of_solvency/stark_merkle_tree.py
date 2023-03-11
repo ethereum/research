@@ -9,7 +9,9 @@
 
 import time
 import sys
+sys.path.append("..")
 sys.path.append("../mimc_stark")
+
 
 from mimc_stark.permuted_tree import merkelize, mk_branch, verify_branch, blake, mk_multi_branch, verify_multi_branch
 from mimc_stark.poly_utils import PrimeField
@@ -84,7 +86,7 @@ def mk_por_proof(id, balances):
     b_polynomial = fft(balances, modulus, G1, inv=True)
     b_evaluations = fft(b_polynomial, modulus, G2)
 
-    id_evaluations = sum([[x,0,0,0,0,0,0,0] for x in id], [])
+    id_evaluations = sum([[x]+[0]*(extension_factor-1) for x in id], [])
 
 
     # constraint 1: t[uts*extension_factor*i] = 0, 0<=i<=user_num-1, 
@@ -262,7 +264,7 @@ def verify_por_proof(steps, sum_amount, b0, proof):
                 (f.exp(x, user_num) - f.exp(G2, (uts-2) * extension_factor * user_num)) * (f.exp(x, user_num) - f.exp(G2, (uts-1) * extension_factor * user_num)))
         assert(((t_of_skips_x - 2 * t_of_x) * (t_of_skips_x - 2 * t_of_x - 1) - c3_of_x * z3) % modulus == 0)
 
-        # check constraint 4: t(i + uts*extension_factor) = t(i + (uts-1)*extension_factor) + t(i) - average, 当 i mod uts*extension_factor == (uts-1)*extension_factor， 且 i != last_step_position 时成立，
+        # check constraint 4: t(i + uts*extension_factor) = t(i + (uts-1)*extension_factor) + t(i) - average, i mod uts*extension_factor == (uts-1)*extension_factor, i != last_step_position，
         # z4(x) = (x^user_num - G2^((uts-1) * extension_factor * user_num))/(x - last_step_position)
         # t(i + uts*extension_factor) - t(i + (uts-1)*extension_factor) - t(i) + average = c4[i] * z4
         z4 = f.div(f.exp(x, user_num) - f.exp(G2, (uts-1) * extension_factor * user_num), x - last_step_position)
