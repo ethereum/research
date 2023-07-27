@@ -1,3 +1,4 @@
+import sys
 import copy
 
 def mkmatrix(rows, cols):
@@ -57,8 +58,12 @@ def mk_evil_matrix(n):
             o[half_odd_n + i][j] = 1
     return o
 
-def test():
-    recover(mk_evil_matrix(12))
+def test(n=12):
+    recover(mk_evil_matrix(n))
 
 if __name__ == '__main__':
-    test()
+    print(sys.argv)
+    if len(sys.argv) == 2:
+        test(int(sys.argv[-1]))
+    else:
+        test()
