@@ -132,6 +132,46 @@ def naive_descent(matrix):
     print("Group 4 quality: {}".format(average(note_quality[-size//4:])))
     return note_quality
 
+# Experimental alternative algo
+def pairwise_m_tm_m(matrix):
+    import numpy as np
+    size = len(matrix)
+    # Users' votes
+    m = np.array(matrix)
+    # Basically: 1 if two users agree with each other on-net, 0 otherwise
+    user_shared = np.clip(np.dot(m, np.transpose(m)), 0, 1)
+    # Likes only
+    likes = np.clip(m, 0, 2**30)
+    # Dislikes only
+    dislikes = -np.clip(m, -2**30, 0)
+    # Likes, where a user also "delegates" to everyone who on-net agrees with them
+    adj_m_l = np.dot(user_shared, likes)
+    # Dislikes, where a user also "delegates" to everyone who on-net agrees with them
+    adj_m_d = np.dot(user_shared, dislikes)
+    # Total shared liking between each pair of users
+    shared_l = np.dot(adj_m_l, np.transpose(adj_m_l))
+    # Total shared disliking between each pair of users
+    shared_d = np.dot(adj_m_d, np.transpose(adj_m_d))
+    # This is a pairwise algorithm, which walks over each pair of users, and gives them
+    # 1 unit of liking power and 1 unit of disliking power to split between notes where
+    # they have a common interest. So users who have fewer common interests are counted
+    # for more when they do agree on something.
+    note_quality = [0] * size
+    for i in range(size):
+        for j in range(size):
+            if shared_l[i, j] > 0: 
+                for note in range(size):
+                    note_quality[note] += adj_m_l[i, note] * adj_m_l[j, note] / shared_l[i, j]
+            if shared_d[i, j] > 0: 
+                for note in range(size):
+                    note_quality[note] -= adj_m_d[i, note] * adj_m_d[j, note] / shared_d[i, j]
+    print("Group 1 quality: {}".format(average(note_quality[:size//4])))
+    print("Group 2 quality: {}".format(average(note_quality[size//4: size//2])))
+    print("Group 3 quality: {}".format(average(note_quality[size//2: -size//4])))
+    print("Group 4 quality: {}".format(average(note_quality[-size//4:])))
+    return note_quality
+
+
 help_string = """
 Use:
 
