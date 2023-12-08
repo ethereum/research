@@ -1,3 +1,5 @@
+# The work here is outdated, please ignore
+
 import urllib.request, json
 
 url = 'https://api.etherscan.io/api?module=account&action=txlist&address=0x5e4e65926ba27467555eb562121fac00d24e9dd2&startblock=0&endblock=99999999&page=1&offset=100&sort=desc&apikey=YourApiKeyToken'

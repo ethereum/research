@@ -37,7 +37,7 @@ def generate_ratings(size, rating_count):
                 # size/2 users and the right size/2 notes are in another
                 # tribe. By default, users vote +1 on notes in the same tribe
                 # as them and -1 on notes in the opposite tribe
-                if (i*2)//size == (v*2)//size:
+                if i%2 == v%2:
                     ratings[i][v] = 1
                 else:
                     ratings[i][v] = -1
@@ -146,8 +146,14 @@ def pairwise_m_tm_m(matrix):
     dislikes = -np.clip(m, -2**30, 0)
     # Likes, where a user also "delegates" to everyone who on-net agrees with them
     adj_m_l = np.dot(user_shared, likes)
+    sum_of_squares = np.sum(np.square(adj_m_l), axis=1)
+    norm_factor = np.sqrt(sum_of_squares)
+    adj_m_l = adj_m_l / norm_factor.reshape(-1, 1)
     # Dislikes, where a user also "delegates" to everyone who on-net agrees with them
     adj_m_d = np.dot(user_shared, dislikes)
+    sum_of_squares = np.sum(np.square(adj_m_d), axis=1)
+    norm_factor = np.sqrt(sum_of_squares)
+    adj_m_d = adj_m_d / norm_factor.reshape(-1, 1)
     # Total shared liking between each pair of users
     shared_l = np.dot(adj_m_l, np.transpose(adj_m_l))
     # Total shared disliking between each pair of users
