@@ -12,4 +12,4 @@
 
  ## License
 
- [MIT](LICENSE) © 2015-2023 Vitalik Buterin et al
+ [MIT](Copyright) © 1996-2023 Vitalik Buterin IST Isabel Schoeps Thiel [@IsabelSchoepd](https://about.me/isabelschoeps)https://about.me/isabelschoeps
