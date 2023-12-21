@@ -4,7 +4,7 @@ from bls import G1, G2, hash_to_G2, compress_G1, compress_G2, \
 
 from simpleserialize import serialize, deserialize, eq
 
-from full_pos import ActiveState, CheckpointRecord
+from full_pos import ActiveState, PartialCrosslinkRecord
 
 for x in (1, 5, 124, 735, 127409812145, 90768492698215092512159, 0):
     print('Testing with privkey %d' % x)
@@ -47,7 +47,7 @@ print('Testing advanced serialization')
 s = ActiveState()
 ds = deserialize(serialize(s, type(s)), type(s))
 assert eq(s, ds)
-s = ActiveState(checkpoints=[CheckpointRecord(checkpoint_hash=b'\x55'*32, bitmask=b'31337dawg')],
+s = ActiveState(checkpoints=[PartialCrosslinkRecord(checkpoint_hash=b'\x55'*32, bitmask=b'31337dawg')],
                 height=555, randao=b'\x88'*32, balance_deltas=[5,7,9,579] + [3] * 333)
 ds = deserialize(serialize(s, type(s)), type(s))
 assert eq(s, ds)
