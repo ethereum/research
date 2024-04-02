@@ -802,7 +802,7 @@ def check_verkle_proof(verkle_root, keys, values, proof, display_times=True):
 
             leaf_values_by_path_and_z[(stem[:depth - 1], stem[depth - 1])] = 0
         else:
-            # Invalid value for extpres
+            # Invalid value for express
             return False, None
 
     # In order to assure uniqueness of the proof, we want the set of other stems to be exact and not include any extras
