@@ -27,7 +27,7 @@ def log(s, lvl):
         print(s)
 
 
-# A signture specifies an initial height ("sign_from"), a finalized
+# A signature specifies an initial height ("sign_from"), a finalized
 # state from all blocks before that height and a list of probability
 # bets from that height up to the latest height
 class Signature():
