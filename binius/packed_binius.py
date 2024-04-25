@@ -6,17 +6,31 @@ from binary_fields import BinaryFieldElement
 from utils import get_class, eval_poly_at, mul_polys, compute_lagrange_poly, multilinear_poly_eval, extend, evaluation_tensor_product, Vector, zero_of_same_type
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
 
+# "Block-level encoding-based polynomial commitment scheme", section 3.11 of
+# https://eprint.iacr.org/2023/1784.pdf
+#
+# This algorithm is more complex, but it closely follows a similar pattern to
+# the simple scheme. Note that here, we have to be more opinionated with fields:
+# evaluations within the hypercube MUST be 0 or 1, and for the Reed-Solomon code
+# and the evaluation point we use binary fields
 
-def packed_binius_proof(evals, evaluation_point):
-    L = len(evals).bit_length() - 1
+def packed_binius_proof(evaluations, evaluation_point):
+
+    # Rearrange evaluations into a row_length * row_count grid
+    L = len(evaluations).bit_length() - 1
     row_length = 1 << (L // 2)
     row_count = 1 << ((L + 1) // 2)
-    rows = [evals[i:i+row_length] for i in range(0, len(evals), row_length)]
+    rows = [evaluations[i:i+row_length] for i in range(0, len(evaluations), row_length)]
+
+    # Difference with 3.7: here, we group the bits within a row into blocks of size
+    # PACKING_FACTOR each
     packed_rows = [
         [Vector(row[i:i+PACKING_FACTOR]) for i in range(0, len(row), PACKING_FACTOR)]
         for row in rows
     ]
     packed_row_length = row_length // PACKING_FACTOR
+
+    # We extend the packed groups of bits
     extended_rows = [extend(row, expansion_factor=EXPANSION_FACTOR) for row in packed_rows]
     extended_row_length = packed_row_length * EXPANSION_FACTOR
     row_combination = evaluation_tensor_product(evaluation_point[L//2:])
@@ -40,14 +54,13 @@ def packed_binius_proof(evals, evaluation_point):
     return {
         'root': root,
         'evaluation_point': evaluation_point,
-        'eval': multilinear_poly_eval(evals, evaluation_point),
+        'eval': multilinear_poly_eval(evaluations, evaluation_point),
         't_prime': t_prime,
         'columns': [columns[c] for c in challenges],
         'branches': [get_branch(merkle_tree, c) for c in challenges],
     }
 
 def verify_packed_binius_proof(proof):
-    cls = get_class([proof['columns'], proof['evaluation_point'], proof['eval']])
     # Check Merkle branches
     root = proof["root"]
     extended_row_length = 2**len(proof["branches"][0])
@@ -78,7 +91,7 @@ def verify_packed_binius_proof(proof):
         assert expected_tprime == extended_t_prime[challenge]
     col_combination = evaluation_tensor_product(proof["evaluation_point"][:log_col_count])
     print('col comb', col_combination)
-    computed_eval = sum([proof["t_prime"][i] * col_combination[i] for i in range(row_length)], cls(0))
+    computed_eval = sum([proof["t_prime"][i] * col_combination[i] for i in range(row_length)], BinaryFieldElement(0))
     print(f"Testing evaluation: expected {proof['eval']} computed {computed_eval}")
     assert computed_eval == proof["eval"]
     return True
