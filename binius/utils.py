@@ -1,33 +1,3 @@
-# A vector over binary field elements. This will get used in the
-# packed_binius protocol, which involves using the Reed-Solomon
-# code over vectors rather than individual elements
-
-class Vector():
-    def __init__(self, values):
-        self.values = values
-
-    def __add__(self, other):
-        return Vector([v+w for v,w in zip(self.values, other.values)])
-
-    def __mul__(self, other):
-        return Vector([v*other for v in self.values])
-
-    def __div__(self, other):
-        return Vector([v/other for v in self.values])
-
-    def __iter__(self):
-        for value in self.values:
-            yield value
-
-    def to_bytes(self, length, byteorder):
-        return b''.join([v.to_bytes(length, byteorder) for v in self.values])
-
-    def __repr__(self):
-        return repr(self.values)
-
-    def __eq__(self, other):
-        return self.values == other.values
-
 # Helper methods to allow the below methods to be used for multiple types
 # (binary fields, prime fields, regular integers), while still enforcing
 # compatibility
@@ -36,7 +6,7 @@ class Vector():
 # packed-binius that we use for simple-binius
 
 def get_class(arg, start=int):
-    if isinstance(arg, (list, tuple, Vector)):
+    if isinstance(arg, (list, tuple)):
         output = start
         for a in arg:
             output = get_class(a, output)
@@ -55,7 +25,7 @@ def spread_type(arg, cls):
         return arg
     elif isinstance(arg, int):
         return cls(arg)
-    elif isinstance(arg, (list, tuple, Vector)):
+    elif isinstance(arg, (list, tuple)):
         return arg.__class__([spread_type(item, cls) for item in arg])
     else:
         raise Exception("Type propagation of {} hit incompatible element: {}".format(cls, arg))
@@ -63,12 +33,6 @@ def spread_type(arg, cls):
 def enforce_type_compatibility(*args):
     cls = get_class(args)
     return tuple([cls] + list(spread_type(arg, cls) for arg in args))
-
-def zero_of_same_type(val):
-    if isinstance(val, Vector):
-        return Vector([zero_of_same_type(v) for v in val])
-    else:
-        return val.__class__(0)
 
 # Evaluate a (univariate) polynomial at the given point
 # eg (over regular integers):
@@ -78,7 +42,7 @@ def zero_of_same_type(val):
 
 def eval_poly_at(poly, pt):
     cls, poly, pt = enforce_type_compatibility(poly, pt)
-    o = zero_of_same_type(poly[0])
+    o = cls(0)
     power = cls(1)
     for coeff in poly:
         o += coeff * power
@@ -164,8 +128,7 @@ def extend(vals, expansion_factor=2):
     ]
     output = vals[::]
     for x in range(len(vals), expansion_factor * len(vals)):
-        _x = cls(x)
-        o = zero_of_same_type(vals[0])
+        o = cls(0)
         for v, L in zip(vals, lagranges):
             o += v * eval_poly_at(L, x)
         output.append(o)
