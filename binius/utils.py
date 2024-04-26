@@ -160,3 +160,11 @@ def evaluation_tensor_product(pt):
             coord * v for v in o
         ]
     return o
+
+# 1 -> 0
+# 2 -> 1
+# 64 -> 6
+# 175 -> error (only takes powers of 2)
+def log2(x):
+    assert x & (x-1) == 0
+    return x.bit_length() - 1

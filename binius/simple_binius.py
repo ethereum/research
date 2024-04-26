@@ -2,11 +2,18 @@ EXPANSION_FACTOR = 8
 NUM_CHALLENGES = 4
 
 from utils import (
-    get_class, enforce_type_compatibility, eval_poly_at,
-    mul_polys, compute_lagrange_poly, multilinear_poly_eval,
-    extend, evaluation_tensor_product
+    get_class, enforce_type_compatibility, eval_poly_at, mul_polys,
+    compute_lagrange_poly, multilinear_poly_eval, extend,
+    evaluation_tensor_product, log2
 )
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
+
+def choose_row_length_and_count(log_evaluation_count):
+    log_row_length = log_evaluation_count // 2
+    log_row_count = (log_evaluation_count + 1) // 2
+    row_length = 1 << log_row_length
+    row_count = 1 << log_row_count
+    return log_row_length, log_row_count, row_length, row_count
 
 # An implementation of the "Basic small-field construction", construction 3.7 of
 # https://eprint.iacr.org/2023/1784.pdf
@@ -16,10 +23,8 @@ def simple_binius_proof(evaluations, evaluation_point):
         enforce_type_compatibility(evaluations, evaluation_point)
 
     # Rearrange evaluations into a row_length * row_count grid
-    L = len(evaluations).bit_length() - 1
-    row_length = 1 << (L // 2)
-    row_count = 1 << ((L + 1) // 2)
-    assert row_length * row_count == len(evaluations)
+    log_row_length, log_row_count, row_length, row_count = \
+        choose_row_length_and_count(log2(len(evaluations)))
     rows = [
         evaluations[i:i+row_length]
         for i in range(0, len(evaluations), row_length)
@@ -30,7 +35,11 @@ def simple_binius_proof(evaluations, evaluation_point):
     extended_row_length = row_length * EXPANSION_FACTOR
 
     # Compute t_prime, a linear combination of the rows
-    row_combination = evaluation_tensor_product(evaluation_point[L//2:])
+    # The linear combination is carefully chosen so that the evaluation of the
+    # multilinear polynomial at the `evaluation_point` is itself either on
+    # t_prime, or a linear combination of elements of t_prime
+    row_combination = \
+        evaluation_tensor_product(evaluation_point[log_row_length:])
     assert len(row_combination) == len(rows) == row_count
     t_prime = [
         sum([rows[i][j] * row_combination[i] for i in range(row_count)], cls(0))
@@ -75,9 +84,8 @@ def verify_simple_binius_proof(proof):
 
     # Compute the row length and row count of the grid. Should output same
     # numbers as what prover gave
-    L = len(evaluation_point)
-    row_length = 1 << (L // 2)
-    row_count = 1 << ((L + 1) // 2)
+    log_row_length, log_row_count, row_length, row_count = \
+        choose_row_length_and_count(len(evaluation_point))
     extended_row_length = row_length * EXPANSION_FACTOR
 
     # Compute challenges. Should output the same as what prover computed
@@ -101,7 +109,8 @@ def verify_simple_binius_proof(proof):
     # Here, we take advantage of the linearity of the code. A linear combination
     # of the Reed-Solomon extension gives the same result as an extension of the
     # linear combination.
-    row_combination = evaluation_tensor_product(evaluation_point[L // 2:])
+    row_combination = \
+        evaluation_tensor_product(evaluation_point[log_row_length:])
     for column, challenge in zip(proof['columns'], challenges):
         expected_tprime = sum(
             [column[i] * row_combination[i] for i in range(row_count)],
@@ -116,7 +125,8 @@ def verify_simple_binius_proof(proof):
     # Take the right linear combination of elements *within* t_prime to
     # extract the evaluation of the original multilinear polynomial at
     # the desired point
-    col_combination = evaluation_tensor_product(evaluation_point[:L // 2])
+    col_combination = \
+        evaluation_tensor_product(evaluation_point[:log_row_length])
     computed_eval = sum(
         [t_prime[i] * col_combination[i] for i in range(row_length)],
         cls(0)
