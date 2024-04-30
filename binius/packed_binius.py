@@ -5,8 +5,9 @@ PACKING_FACTOR = 32
 from binary_fields import BinaryFieldElement
 from utils import (
     get_class, eval_poly_at, mul_polys, compute_lagrange_poly,
-    multilinear_poly_eval, extend, evaluation_tensor_product, log2
+    multilinear_poly_eval, evaluation_tensor_product, log2
 )
+from binary_ntt import extend
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
 
 # Pack `PACKING_FACTOR` items into a field element

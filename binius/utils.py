@@ -49,6 +49,14 @@ def eval_poly_at(poly, pt):
         power *= pt
     return o
 
+def add_polys(a, b):
+    cls, a, b = enforce_type_compatibility(a, b)
+    minl, maxl = sorted((len(a), len(b)))
+    tail = [cls(0)] * (maxl - minl)
+    a += tail    
+    b += tail    
+    return [(a[i] + b[i]) for i in range(maxl)]
+
 # Multiply two polynomials together
 # eg (over regular integers):
 #

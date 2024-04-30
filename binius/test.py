@@ -1,5 +1,5 @@
 from binary_fields import BinaryFieldElement as B
-from utils import extend
+from utils import extend, log2
 from simple_binius import simple_binius_proof, verify_simple_binius_proof
 from packed_binius import (
     packed_binius_proof, verify_packed_binius_proof
@@ -12,16 +12,18 @@ def test_binary_operations():
     print("Verified basic operations")
 
 def test_simple_binius():
-    z = [B(int(bit)) for bit in bin(3**7890)[2:][:1024]]
-    proof = simple_binius_proof(z, [B(x) for x in [3, 14, 15, 92, 65, 35, 89, 79, 32, 38]])
+    SIZE = 8192
+    z = [B(int(bit)) for bit in bin(3**SIZE)[2:][:SIZE]]
+    proof = simple_binius_proof(z, [B((3**i)%256) for i in range(log2(SIZE))])
     print("Generated simple-binius proof")
     print("t_prime:", proof["t_prime"])
     verify_simple_binius_proof(proof)
     print("Verified simple-binius proof")
 
 def test_packed_binius():
-    z = [B(int(bit)) for bit in bin(3**7890)[2:][:8192]]
-    proof = packed_binius_proof(z, [B(x) for x in [3, 14, 15, 92, 65, 35, 89, 79, 32, 38, 46, 26, 43]])
+    SIZE = 65536
+    z = [B(int(bit)) for bit in bin(3**SIZE)[2:][:SIZE]]
+    proof = packed_binius_proof(z, [B((3**i)%256) for i in range(log2(SIZE))])
     print("Generated packed-binius proof")
     print("t_prime:", proof["t_prime"])
     verify_packed_binius_proof(proof)

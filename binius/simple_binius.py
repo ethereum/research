@@ -1,11 +1,13 @@
 EXPANSION_FACTOR = 8
 NUM_CHALLENGES = 4
+BYTES_PER_ELEMENT = 2
 
 from utils import (
     get_class, enforce_type_compatibility, eval_poly_at, mul_polys,
-    compute_lagrange_poly, multilinear_poly_eval, extend,
+    compute_lagrange_poly, multilinear_poly_eval,
     evaluation_tensor_product, log2
 )
+from binary_ntt import extend
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
 
 def choose_row_length_and_count(log_evaluation_count):
@@ -51,9 +53,8 @@ def simple_binius_proof(evaluations, evaluation_point):
         [row[j] for row in extended_rows]
         for j in range(extended_row_length)
     ]
-    bytes_per_element = (max(c.bit_length() for c in sum(rows, [])) + 7) // 8
     packed_columns = [
-        b''.join(x.to_bytes(bytes_per_element, 'little') for x in col)
+        b''.join(x.to_bytes(BYTES_PER_ELEMENT, 'little') for x in col)
         for col in columns
     ]
     merkle_tree = merkelize(packed_columns)
@@ -95,10 +96,9 @@ def verify_simple_binius_proof(proof):
     ]
 
     # Verify the correctness of the Merkle branches
-    bytes_per_element = len(columns[0]) // row_count
     for challenge, branch, column in zip(challenges, branches, columns):
         packed_column = \
-            b''.join(x.to_bytes(bytes_per_element, 'little') for x in column)
+            b''.join(x.to_bytes(BYTES_PER_ELEMENT, 'little') for x in column)
         print(f"Verifying Merkle branch for column {challenge}")
         assert verify_branch(root, challenge, packed_column, branch)
 
