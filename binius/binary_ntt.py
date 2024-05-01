@@ -65,9 +65,11 @@ def additive_ntt(vals, start=0):
     L, R = vals[:halflen], vals[halflen:]
     coeff1 = get_Wi_eval(log2(halflen), start)
     coeff2 = get_Wi_eval(log2(halflen), start + halflen)
+    sub_input1 = [i+j*coeff1 for i,j in zip(L, R)]
+    sub_input2 = [i+j for i,j in zip(sub_input1, R)]
     o = (
-        additive_ntt([i+j*coeff1 for i,j in zip(L, R)], start) +
-        additive_ntt([i+j*coeff2 for i,j in zip(L, R)], start + halflen)
+        additive_ntt(sub_input1, start) +
+        additive_ntt(sub_input2, start + halflen)
     )
     # print('for {} at {} used coeffs {}, {}; returning {}'.format(vals, start, coeff1, coeff2, o))
     return o

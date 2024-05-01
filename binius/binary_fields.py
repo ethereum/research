@@ -12,12 +12,12 @@
 # (x_{i+1})^2 = x_{i+1} * x_i + 1
 
 def binmul(v1, v2, L=None):
+    if v1 < 256 and v2 < 256 and rawmulcache[v1][v2] is not None:
+        return rawmulcache[v1][v2]
     if v1 < 2 or v2 < 2:
         return v1 * v2
     if L is None:
         L = 1 << (max(v1, v2).bit_length() - 1).bit_length()
-    if v1 < 256 and v2 < 256 and rawmulcache[v1][v2] is not None:
-        return rawmulcache[v1][v2]
     halflen = L//2
     quarterlen = L//4
     halfmask = (1 << halflen)-1
@@ -33,8 +33,7 @@ def binmul(v1, v2, L=None):
     return (
         L1L2 ^
         R1R2 ^
-        ((Z3 ^ L1L2 ^ R1R2) << halflen) ^
-        (R1R2_high << halflen)
+        ((Z3 ^ L1L2 ^ R1R2 ^ R1R2_high) << halflen)
     )
 
 # A wrapper object that makes it easy to work with binary fields

@@ -1,5 +1,5 @@
 EXPANSION_FACTOR = 8
-NUM_CHALLENGES = 4
+NUM_CHALLENGES = 32
 PACKING_FACTOR = 32
 
 from binary_fields import BinaryFieldElement
