@@ -64,7 +64,6 @@ def additive_ntt(vals, start=0):
     halflen = len(vals)//2
     L, R = vals[:halflen], vals[halflen:]
     coeff1 = get_Wi_eval(log2(halflen), start)
-    coeff2 = get_Wi_eval(log2(halflen), start + halflen)
     sub_input1 = [i+j*coeff1 for i,j in zip(L, R)]
     sub_input2 = [i+j for i,j in zip(sub_input1, R)]
     o = (
@@ -83,7 +82,7 @@ def inv_additive_ntt(vals, start=0):
     L = inv_additive_ntt(vals[:halflen], start)
     R = inv_additive_ntt(vals[halflen:], start + halflen)
     coeff1 = get_Wi_eval(log2(halflen), start)
-    coeff2 = get_Wi_eval(log2(halflen), start + halflen)
+    coeff2 = coeff1 + 1
     o = (
         [i*coeff2+j*coeff1 for i,j in zip(L, R)] +
         [i+j for i,j in zip(L, R)]
