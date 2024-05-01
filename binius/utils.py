@@ -67,8 +67,9 @@ def mul_polys(a, b):
     cls, a, b = enforce_type_compatibility(a, b)
     o = [cls(0)] * (len(a) + len(b) - 1)
     for i, aval in enumerate(a):
-        for j, bval in enumerate(b):
-            o[i+j] += a[i] * b[j]
+        if aval != 0:
+            for j, bval in enumerate(b):
+                o[i+j] += aval * bval
     return o
 
 # Computes the polynomial the equals 0 over 0...size-1, except at pt,
