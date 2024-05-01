@@ -117,19 +117,8 @@ def _multilinear_poly_eval(cls, evals, pt):
     top = _multilinear_poly_eval(cls, evals[:len(evals)//2], pt[:-1])
     bottom = _multilinear_poly_eval(cls, evals[len(evals)//2:], pt[:-1])
     return (
-        top * (cls(1) - pt[-1]) + bottom * pt[-1]
+        (bottom - top) * pt[-1] + top
     )
-
-    o = cls(0)
-    for i, evaluation in enumerate(evals):
-        value = evals[i]
-        for j, coord in enumerate(pt):
-            if (i >> j) % 2:
-                value *= coord
-            else:
-                value *= (cls(1) - coord)
-        o += value
-    return o
 
 # Uses a Reed-Solomon code to extend the input list of N values into a list of
 # 2N values. That is, treat the input as P(0) ... P(N-1) for some polynomial
