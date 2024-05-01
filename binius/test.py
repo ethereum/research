@@ -39,7 +39,7 @@ def test_simple_binius():
     print("Verified simple-binius proof")
 
 def test_packed_binius():
-    SIZE = 262144
+    SIZE = 2**20
     z = [B(int(bit)) for bit in bin(3**SIZE)[2:][:SIZE]]
     proof = packed_binius_proof(z, [B((999**i)%2**128) for i in range(log2(SIZE))])
     print("Generated packed-binius proof")
