@@ -12,18 +12,18 @@ def test_binary_operations():
     print("Verified basic operations")
 
 def test_simple_binius():
-    SIZE = 8192
+    SIZE = 16384
     z = [B(int(bit)) for bit in bin(3**SIZE)[2:][:SIZE]]
-    proof = simple_binius_proof(z, [B((3**i)%2**128) for i in range(log2(SIZE))])
+    proof = simple_binius_proof(z, [B((999**i)%2**128) for i in range(log2(SIZE))])
     print("Generated simple-binius proof")
     print("t_prime:", proof["t_prime"])
     verify_simple_binius_proof(proof)
     print("Verified simple-binius proof")
 
 def test_packed_binius():
-    SIZE = 65536
+    SIZE = 262144
     z = [B(int(bit)) for bit in bin(3**SIZE)[2:][:SIZE]]
-    proof = packed_binius_proof(z, [B((3**i)%2**128) for i in range(log2(SIZE))])
+    proof = packed_binius_proof(z, [B((999**i)%2**128) for i in range(log2(SIZE))])
     print("Generated packed-binius proof")
     print("t_prime:", proof["t_prime"])
     verify_packed_binius_proof(proof)

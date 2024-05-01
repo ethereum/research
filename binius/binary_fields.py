@@ -16,6 +16,8 @@ def binmul(v1, v2, L=None):
         return v1 * v2
     if L is None:
         L = 1 << (max(v1, v2).bit_length() - 1).bit_length()
+    if v1 < 256 and v2 < 256 and rawmulcache[v1][v2] is not None:
+        return rawmulcache[v1][v2]
     halflen = L//2
     quarterlen = L//4
     halfmask = (1 << halflen)-1
@@ -24,13 +26,14 @@ def binmul(v1, v2, L=None):
     L2, R2 = v2 & halfmask, v2 >> halflen
 
     # x_{i+1}^2 reduces to 1 + x_{i+1} * x_i
+    L1L2 = binmul(L1, L2, halflen)
     R1R2 = binmul(R1, R2, halflen)
     R1R2_high = binmul(1 << quarterlen, R1R2, halflen)
+    Z3 = binmul(L1 ^ R1, L2 ^ R2, halflen)
     return (
-        binmul(L1, L2, halflen) ^
+        L1L2 ^
         R1R2 ^
-        (binmul(L1, R2, halflen) << halflen) ^
-        (binmul(R1, L2, halflen) << halflen) ^
+        ((Z3 ^ L1L2 ^ R1R2) << halflen) ^
         (R1R2_high << halflen)
     )
 
@@ -96,10 +99,12 @@ class BinaryFieldElement():
     def from_bytes(cls, b, byteorder):
         return cls(int.from_bytes(b, byteorder))
 
+rawmulcache = [[None for _ in range(256)] for _ in range(256)]
 addcache = [[None for _ in range(256)] for _ in range(256)]
 mulcache = [[None for _ in range(256)] for _ in range(256)]
 
 for i in range(256):
     for j in range(256):
+        rawmulcache[i][j] = binmul(i, j)
         addcache[i][j] = BinaryFieldElement(i ^ j)
         mulcache[i][j] = BinaryFieldElement(binmul(i, j))

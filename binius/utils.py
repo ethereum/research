@@ -109,6 +109,17 @@ def compute_lagrange_poly(size, pt):
 def multilinear_poly_eval(evals, pt):
     cls, evals, pt = enforce_type_compatibility(evals, pt)
     assert len(evals) == 2 ** len(pt)
+    return _multilinear_poly_eval(cls, evals, pt)
+
+def _multilinear_poly_eval(cls, evals, pt):
+    if len(pt) == 0:
+        return evals[0]
+    top = _multilinear_poly_eval(cls, evals[:len(evals)//2], pt[:-1])
+    bottom = _multilinear_poly_eval(cls, evals[len(evals)//2:], pt[:-1])
+    return (
+        top * (cls(1) - pt[-1]) + bottom * pt[-1]
+    )
+
     o = cls(0)
     for i, evaluation in enumerate(evals):
         value = evals[i]
