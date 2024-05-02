@@ -2,20 +2,19 @@ EXPANSION_FACTOR = 8
 NUM_CHALLENGES = 32
 PACKING_FACTOR = 16
 
-from binary_fields import BinaryFieldElement
-from utils import (
-    get_class, pack_vector,
-    evaluation_tensor_product, log2, multilinear_poly_eval
+from binary_fields import BinaryFieldElement as B
+from utils import log2
+from optimized_utils import (
+    pack16, extend, multilinear_poly_eval,
+    bytestobits, bitstobytes, uint16s_to_bits, bits_to_uint16s,
+    evaluation_tensor_product, bigbin_to_int, big_mul
 )
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
-from binary_ntt import extend
+import numpy as np
 
 # Take a single bit from a packed element
 def unpack_bit(item, bit):
-    return (item.value >> bit) & 1
-
-def extend_row_of_bits(row):
-    return extend(pack_vector(row, PACKING_FACTOR), EXPANSION_FACTOR)
+    return (int(item) >> bit) & 1
 
 def choose_row_length_and_count(log_evaluation_count):
     log_row_length = (log_evaluation_count + 2) // 2
@@ -27,24 +26,20 @@ def choose_row_length_and_count(log_evaluation_count):
 # "Block-level encoding-based polynomial commitment scheme", section 3.11 of
 # https://eprint.iacr.org/2023/1784.pdf
 #
-# This algorithm is more complex, but it closely follows a similar pattern to
-# the simple scheme. Note that here, we have to be more opinionated with fields:
-# evaluations within the hypercube MUST be 0 or 1, and for the Reed-Solomon code
-# and the evaluation point we use binary fields
+# An optimized implementation that tries to go as fast as you can in python,
+# using numpy
 
-def packed_binius_proof(evaluations, evaluation_point):
+def optimized_binius_proof(evaluations, evaluation_point):
     # Rearrange evaluations into a row_length * row_count grid
+    assert len(evaluation_point) == log2(len(evaluations) * 8)
     log_row_length, log_row_count, row_length, row_count = \
-        choose_row_length_and_count(log2(len(evaluations)))
-    rows = [
-        evaluations[i:i+row_length]
-        for i in range(0, len(evaluations), row_length)
-    ]
-
-    # Extend each row using a Reed-Solomon code
-    # Difference with 3.7: here, we take the input as bits, and treat each
-    # slice of `PACKING_FACTOR` bits as a single field element
-    extended_rows = [extend_row_of_bits(row) for row in rows]
+        choose_row_length_and_count(log2(len(evaluations) * 8))
+    # Directly treat the rows as a list of uint16's
+    rows = (
+        np.frombuffer(evaluations, dtype='<u2')
+        .reshape((row_count, row_length // PACKING_FACTOR))
+    )
+    extended_rows = extend(rows, EXPANSION_FACTOR)
     extended_row_length = row_length * EXPANSION_FACTOR // PACKING_FACTOR
 
     # Compute t_prime, a linear combination of the rows
@@ -54,23 +49,17 @@ def packed_binius_proof(evaluations, evaluation_point):
     row_combination = \
         evaluation_tensor_product(evaluation_point[log_row_length:])
     assert len(row_combination) == len(rows) == row_count
-    t_prime = [
-        sum(
-            [row_combination[i] for i in range(row_count) if rows[i][j] == 1],
-            BinaryFieldElement(0)
-        ) for j in range(row_length)
-    ]
+    t_prime = np.array([
+        np.bitwise_xor.reduce([
+            row_combination[i] for i in range(row_count) if
+            int(rows[i][j//16]) & (1 << (j%16))
+        ]) for j in range(row_length)
+    ])
 
     # Pack columns into a Merkle tree, to commit to them
-    columns = [
-        [row[j] for row in extended_rows]
-        for j in range(extended_row_length)
-    ]
+    columns = np.transpose(extended_rows)
     bytes_per_element = PACKING_FACTOR//8
-    packed_columns = [
-        b''.join(x.to_bytes(bytes_per_element, 'little') for x in col)
-        for col in columns
-    ]
+    packed_columns = [col.tobytes('C') for col in columns]
     merkle_tree = merkelize(packed_columns)
     root = get_root(merkle_tree)
 
@@ -88,7 +77,7 @@ def packed_binius_proof(evaluations, evaluation_point):
         'branches': [get_branch(merkle_tree, c) for c in challenges],
     }
 
-def verify_packed_binius_proof(proof):
+def verify_optimized_binius_proof(proof):
     columns, evaluation_point, value, t_prime, root, branches = (
         proof['columns'],
         proof['evaluation_point'],
@@ -113,18 +102,16 @@ def verify_packed_binius_proof(proof):
     # Verify the correctness of the Merkle branches
     bytes_per_element = PACKING_FACTOR//8
     for challenge, branch, col in zip(challenges, branches, columns):
-        packed_column = \
-            b''.join(x.to_bytes(bytes_per_element, 'little') for x in col)
+        packed_column = col.tobytes('C')
         print(f"Verifying Merkle branch for column {challenge}")
         assert verify_branch(root, challenge, packed_column, branch)
 
     # Use the same Reed-Solomon code that the prover used to extend the rows,
     # but to extend t_prime. We do this separately for each bit of t_prime
-    t_prime_bit_length = max(x.bit_length() for x in evaluation_point)
-    extended_slices = [
-        extend_row_of_bits([unpack_bit(v, i) for v in t_prime])
-        for i in range(t_prime_bit_length)
-    ]
+    t_prime_bit_length = 128
+    t_prime_bits = uint16s_to_bits(t_prime)
+    rows = bits_to_uint16s(np.transpose(t_prime_bits))
+    extended_slices = extend(rows, EXPANSION_FACTOR)
 
     # Here, we take advantage of the linearity of the code. A linear combination
     # of the Reed-Solomon extension gives the same result as an extension of the
@@ -137,18 +124,14 @@ def verify_packed_binius_proof(proof):
         for b in range(PACKING_FACTOR):
             # We apply the same linear combination to that sub-column of bits
             # that the prover applied to generate t_prime
-            computed_tprime = sum(
-                [
-                    row_combination[i] * unpack_bit(column[i], b)
-                    for i in range(row_count)
-                ],
-                BinaryFieldElement(0)
-            )
-            expected_tprime = pack_vector([
-                unpack_bit(_slice[challenge], b)
-                for _slice in extended_slices
-            ], 128)[0]
-            assert expected_tprime == computed_tprime
+            computed_tprime = np.bitwise_xor.reduce([
+                row_combination[i] for i in range(row_count) if
+                unpack_bit(column[i], b)
+            ])
+            expected_tprime = bits_to_uint16s(np.array([
+                unpack_bit(x, b) for x in extended_slices[:, challenge]
+            ], dtype=np.uint16))
+            assert np.array_equal(expected_tprime, computed_tprime)
     print("T_prime matches Merkle branches")
 
     # Take the right linear combination of elements *within* t_prime to
@@ -156,10 +139,9 @@ def verify_packed_binius_proof(proof):
     # the desired point
     col_combination = \
         evaluation_tensor_product(evaluation_point[:log_row_length])
-    computed_eval = sum(
-        [t_prime[i] * col_combination[i] for i in range(row_length)],
-        BinaryFieldElement(0)
+    computed_eval = np.bitwise_xor.reduce(
+        big_mul(t_prime, col_combination)
     )
     print(f"Testing evaluation: expected {value} computed {computed_eval}")
-    assert computed_eval == value
+    assert np.array_equal(computed_eval, value)
     return True

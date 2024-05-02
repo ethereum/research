@@ -1,15 +1,22 @@
 from binary_fields import BinaryFieldElement as B
-from utils import extend, log2, eval_poly_at, multilinear_poly_eval
+from utils import (
+    extend, log2, eval_poly_at, multilinear_poly_eval,
+    evaluation_tensor_product
+)
 from simple_binius import simple_binius_proof, verify_simple_binius_proof
 from packed_binius import (
     packed_binius_proof, verify_packed_binius_proof
 )
+from optimized_binius import (
+    optimized_binius_proof, verify_optimized_binius_proof,
+)
 from binary_ntt import (
     additive_ntt, inv_additive_ntt, eval_poly_in_basis, get_Wi_eval, get_Wi
 )
-from crazy_ntt import (
+from optimized_utils import (
     int_to_bigbin, bigbin_to_int, Wi_eval_cache,
-    multilinear_poly_eval as crazy_ml_eval, big_mul
+    multilinear_poly_eval as op_multilinear_poly_eval, big_mul, bytestobits,
+    evaluation_tensor_product as op_evaluation_tensor_product
 )
 import numpy as np
 
@@ -22,6 +29,11 @@ def compute_size(x):
         return sum(compute_size(val) for val in x)
     elif isinstance(x, dict):
         return sum(compute_size(val) for val in x.values())
+    elif isinstance(x, np.ndarray):
+        return x.size * x.dtype.itemsize
+    elif isinstance(x, int):
+        assert x < 2**128
+        return 16
     else:
         raise Exception("Error computing size of {}".format(x))
 
@@ -82,16 +94,23 @@ def test_vectorized_operations():
             (B(3**i) * B(123456789)).value for i in range(55)
         ]
     )
+
     # Polynomial evaluation consistency
-    evals = [3, 14, 15, B(92)]
-    assert crazy_ml_eval(evals, [0, 0]) == 3
-    assert crazy_ml_eval(evals, [1, 0]) == 14
-    assert crazy_ml_eval(evals, [2, 5]) == 204
-    SIZE = 256
-    z = [B(int(bit)) for bit in bin(3**SIZE)[2:][:SIZE]]
-    eval_point = [B((999**i)%2**128) for i in range(log2(SIZE))]
-    assert crazy_ml_eval(z, eval_point) == multilinear_poly_eval(z, eval_point)
+    evals = bytes([3, 14, 15, 92]) # 11000000 01110000 11110000 00111010
+    b_evals = list(B(int(x)) for x in bytestobits(evals))
+    assert bigbin_to_int(op_multilinear_poly_eval(evals, [0, 0, 0, 0, 0])) == 1
+    assert bigbin_to_int(op_multilinear_poly_eval(evals, [1, 0, 0, 0, 0])) == 1
+    assert bigbin_to_int(op_multilinear_poly_eval(evals, [0, 1, 0, 0, 0])) == 0
+    pt = [9999**i for i in range(5)]
+    b_pt = [B(x) for x in pt]
+    control_value = multilinear_poly_eval(b_evals, b_pt)
+    assert bigbin_to_int(op_multilinear_poly_eval(evals, pt)) == control_value
     print("Verified vectorized operations")
+
+    # Evaluation tensor product consistency
+    etp = evaluation_tensor_product(b_pt)
+    op_etp = op_evaluation_tensor_product(pt)
+    assert [bigbin_to_int(x) for x in op_etp] == etp
 
 
 def test_simple_binius():
@@ -116,8 +135,23 @@ def test_packed_binius():
     verify_packed_binius_proof(proof)
     print("Verified packed-binius proof")
 
+def test_optimized_binius():
+    SIZE = 2**20
+    z = bytearray(SIZE//8)
+    power_of_3 = 1
+    for i, bit in enumerate(bin(3**SIZE)[2:][:SIZE]):
+        z[i//8] += int(bit) << (i%8)
+    eval_point = [(999**i)%2**128 for i in range(log2(SIZE))]
+    proof = optimized_binius_proof(z, eval_point)
+    print("Generated packed-binius proof")
+    print("Proof size: {} bytes".format(compute_size(proof)))
+    # print("t_prime:", proof["t_prime"])
+    verify_optimized_binius_proof(proof)
+    print("Verified optimized-binius proof")
+
 if __name__ == '__main__':
     test_binary_operations()
     test_vectorized_operations()
     test_simple_binius()
     test_packed_binius()
+    test_optimized_binius()

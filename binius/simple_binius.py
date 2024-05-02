@@ -4,10 +4,9 @@ BYTES_PER_ELEMENT = 2
 
 from utils import (
     get_class, enforce_type_compatibility,
-    evaluation_tensor_product, log2
+    evaluation_tensor_product, log2, multilinear_poly_eval
 )
-from crazy_ntt import extend, multilinear_poly_eval
-from binary_ntt import extend as bignum_extend
+from binary_ntt import extend
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
 
 def choose_row_length_and_count(log_evaluation_count):
@@ -104,7 +103,7 @@ def verify_simple_binius_proof(proof):
 
     # Use the same Reed-Solomon code that the prover used to extend the rows,
     # but to extend t_prime
-    extended_t_prime = bignum_extend(proof["t_prime"], EXPANSION_FACTOR)
+    extended_t_prime = extend(proof["t_prime"], EXPANSION_FACTOR)
 
     # Here, we take advantage of the linearity of the code. A linear combination
     # of the Reed-Solomon extension gives the same result as an extension of the
