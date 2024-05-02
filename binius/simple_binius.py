@@ -3,10 +3,10 @@ NUM_CHALLENGES = 32
 BYTES_PER_ELEMENT = 2
 
 from utils import (
-    get_class, enforce_type_compatibility, eval_poly_at, mul_polys,
-    evaluation_tensor_product, log2, multilinear_poly_eval
+    get_class, enforce_type_compatibility,
+    evaluation_tensor_product, log2
 )
-from crazy_ntt import extend
+from crazy_ntt import extend, multilinear_poly_eval
 from binary_ntt import extend as bignum_extend
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
 

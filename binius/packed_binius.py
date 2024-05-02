@@ -1,33 +1,24 @@
 EXPANSION_FACTOR = 8
 NUM_CHALLENGES = 32
-PACKING_FACTOR = 32
+PACKING_FACTOR = 16
 
 from binary_fields import BinaryFieldElement
 from utils import (
-    get_class, eval_poly_at, mul_polys, multilinear_poly_eval,
+    get_class, pack_vector as _pack_vector,
     evaluation_tensor_product, log2
 )
-from crazy_ntt import extend
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
+from crazy_ntt import extend, multilinear_poly_eval, pack16
 
-# Pack `PACKING_FACTOR` items into a field element
-def pack(item):
-    o = BinaryFieldElement(0)
-    for i, v in enumerate(item):
-        o += v * (2**i)
-    return o
+pack_vector = lambda x, d: pack16(x) if d == 16 else _pack_vector(x, d)
+#pack_vector = _pack_vector
 
 # Take a single bit from a packed element
 def unpack_bit(item, bit):
     return (item.value >> bit) & 1
 
-# Treat a row of bits as a sequence where each slice of `PACKING_FACTOR` bits
-# represents a field element, and Reed-solomon extend that
 def extend_row_of_bits(row):
-    return extend([
-        pack(row[i:i+PACKING_FACTOR])
-        for i in range(0, len(row), PACKING_FACTOR)
-    ], EXPANSION_FACTOR)
+    return extend(pack_vector(row, PACKING_FACTOR), EXPANSION_FACTOR)
 
 def choose_row_length_and_count(log_evaluation_count):
     log_row_length = (log_evaluation_count + 2) // 2
@@ -45,7 +36,6 @@ def choose_row_length_and_count(log_evaluation_count):
 # and the evaluation point we use binary fields
 
 def packed_binius_proof(evaluations, evaluation_point):
-
     # Rearrange evaluations into a row_length * row_count grid
     log_row_length, log_row_count, row_length, row_count = \
         choose_row_length_and_count(log2(len(evaluations)))
@@ -69,7 +59,7 @@ def packed_binius_proof(evaluations, evaluation_point):
     assert len(row_combination) == len(rows) == row_count
     t_prime = [
         sum(
-            [rows[i][j] * row_combination[i] for i in range(row_count)],
+            [row_combination[i] for i in range(row_count) if rows[i][j] == 1],
             BinaryFieldElement(0)
         ) for j in range(row_length)
     ]
@@ -157,10 +147,10 @@ def verify_packed_binius_proof(proof):
                 ],
                 BinaryFieldElement(0)
             )
-            expected_tprime = pack([
+            expected_tprime = pack_vector([
                 unpack_bit(_slice[challenge], b)
                 for _slice in extended_slices
-            ])
+            ], 128)[0]
             assert expected_tprime == computed_tprime
     print("T_prime matches Merkle branches")
 

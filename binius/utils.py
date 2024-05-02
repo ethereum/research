@@ -177,3 +177,15 @@ def evaluation_tensor_product(pt):
 def log2(x):
     assert x & (x-1) == 0
     return x.bit_length() - 1
+
+# Packs a list of bits into a smaller list of binary representations
+def pack_vector(bits, slice_size):
+    o = []
+    for pos in range(0, len(bits), slice_size):
+        new_value = 0
+        for v in reversed(bits[pos:pos+slice_size]):
+            assert v == 0 or v == 1
+            new_value = (new_value * 2) + (1 if v == 1 else 0)
+        o.append(new_value)
+    _, _, o = enforce_type_compatibility(bits, o)
+    return o
