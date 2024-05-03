@@ -71,13 +71,13 @@ def int_to_bigbin(value):
 def bigbin_to_int(value):
     return sum(int(x) << (16*i) for i,x in enumerate(value))
 
-def coerce_to_int(val):
-    if isinstance(val, np.ndarray):
-        return val
-    elif isinstance(val, list):
-        return [x if isinstance(x, (int, np.uint16)) else x.value for x in val]
-    else:
-        return val if isinstance(val, (int, np.uint16)) else val.value
+def mul_by_Xi(x, N):
+    assert x.shape[-1] == N
+    if N == 1:
+        return mul[x, 256]
+    L, R = x[..., :N//2], x[..., N//2:]
+    outR = mul_by_Xi(R, N//2) ^ L
+    return np.concatenate((R, outR), axis=-1)
 
 def big_mul(x1, x2):
     N = x1.shape[-1]
@@ -87,12 +87,7 @@ def big_mul(x1, x2):
     R1, R2 = x1[..., N//2:], x2[..., N//2:]
     L1L2 = big_mul(L1, L2)
     R1R2 = big_mul(R1, R2)
-    cofactor = np.zeros(N//2, dtype=np.uint16)
-    if N >= 4:
-        cofactor[N//4] = 1
-    else:
-        cofactor[0] = 256
-    R1R2_high = big_mul(R1R2, cofactor)
+    R1R2_high = mul_by_Xi(R1R2, N//2)
     Z3 = big_mul(L1 ^ R1, L2 ^ R2)
     o = np.concatenate((
         L1L2 ^ R1R2,
@@ -172,13 +167,6 @@ def multilinear_poly_eval(data, pt):
         evals_array = big_mul(bottom ^ top, coord) ^ top
     return evals_array[0]
 
-def pack16(vec):
-    vec = coerce_to_int(vec)
-    o = np.zeros(len(vec)//16, dtype=np.uint16)
-    for i in range(15, -1, -1):
-        o = o * 2 + vec[i::16]
-    return o
-
 def evaluation_tensor_product(pt):
     if isinstance(pt, list):
         pt = np.array([
@@ -191,4 +179,33 @@ def evaluation_tensor_product(pt):
             o_times_coord ^ o,
             o_times_coord
         ))
+    return o
+
+def multisubset(values, bits):
+    assert values.shape[0] == bits.shape[-1]
+    GROUPING = 4
+    subsets = np.zeros(
+        (values.shape[0] // GROUPING, 16) + values.shape[1:],
+        dtype=values.dtype
+    )
+    for i in range(GROUPING):
+        subsets[:,1<<i,...] = values[i::4]
+    top_p_of_2 = 2
+    for i in range(3, 1<<GROUPING):
+        if (i & (i-1)) == 0:
+            top_p_of_2 = i
+        else:
+            subsets[:,i,...] = (
+                subsets[:,top_p_of_2,...] ^
+                subsets[:,i - top_p_of_2,...]
+            )
+    bits_GROUPING_at_a_time = bits.reshape(bits.shape[:-1] + (-1, GROUPING))
+    index_columns = np.sum( 
+        bits_GROUPING_at_a_time * [1<<i for i in range(GROUPING)],
+        axis=-1
+    )       
+    o = np.bitwise_xor.reduce(
+        subsets[np.arange(index_columns.shape[-1]), index_columns],
+        axis=len(bits.shape)-1
+    )
     return o

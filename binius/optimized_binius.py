@@ -5,9 +5,9 @@ PACKING_FACTOR = 16
 from binary_fields import BinaryFieldElement as B
 from utils import log2
 from optimized_utils import (
-    pack16, extend, multilinear_poly_eval,
+    extend, multilinear_poly_eval,
     bytestobits, bitstobytes, uint16s_to_bits, bits_to_uint16s,
-    evaluation_tensor_product, bigbin_to_int, big_mul
+    evaluation_tensor_product, bigbin_to_int, big_mul, multisubset
 )
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
 import numpy as np
@@ -49,12 +49,8 @@ def optimized_binius_proof(evaluations, evaluation_point):
     row_combination = \
         evaluation_tensor_product(evaluation_point[log_row_length:])
     assert len(row_combination) == len(rows) == row_count
-    t_prime = np.array([
-        np.bitwise_xor.reduce([
-            row_combination[i] for i in range(row_count) if
-            int(rows[i][j//16]) & (1 << (j%16))
-        ]) for j in range(row_length)
-    ])
+    rows_as_bits = uint16s_to_bits(rows)
+    t_prime = multisubset(row_combination, rows_as_bits.transpose())
 
     # Pack columns into a Merkle tree, to commit to them
     columns = np.transpose(extended_rows)
@@ -64,16 +60,16 @@ def optimized_binius_proof(evaluations, evaluation_point):
     root = get_root(merkle_tree)
 
     # Challenge in a few positions, to get branches
-    challenges = [
+    challenges = np.array([
         int.from_bytes(hash(root + bytes([i])), 'little') % extended_row_length
         for i in range(NUM_CHALLENGES)
-    ]
+    ], dtype=np.uint16)
     return {
         'root': root,
         'evaluation_point': evaluation_point,
         'eval': multilinear_poly_eval(evaluations, evaluation_point),
         't_prime': t_prime,
-        'columns': [columns[c] for c in challenges],
+        'columns': columns[challenges],
         'branches': [get_branch(merkle_tree, c) for c in challenges],
     }
 
@@ -94,10 +90,10 @@ def verify_optimized_binius_proof(proof):
     extended_row_length = row_length * EXPANSION_FACTOR // PACKING_FACTOR
 
     # Compute challenges. Should output the same as what prover computed
-    challenges = [
+    challenges = np.array([
         int.from_bytes(hash(root + bytes([i])), 'little') % extended_row_length
         for i in range(NUM_CHALLENGES)
-    ]
+    ], dtype=np.uint16)
 
     # Verify the correctness of the Merkle branches
     bytes_per_element = PACKING_FACTOR//8
@@ -118,20 +114,18 @@ def verify_optimized_binius_proof(proof):
     # linear combination.
     row_combination = \
         evaluation_tensor_product(evaluation_point[log_row_length:])
-    for column, challenge in zip(columns, challenges):
-        # Each extended row, at the column we're querying, contains a field
-        # element `PACKING_FACTOR` bits wide. We treat each bit separately
-        for b in range(PACKING_FACTOR):
-            # We apply the same linear combination to that sub-column of bits
-            # that the prover applied to generate t_prime
-            computed_tprime = np.bitwise_xor.reduce([
-                row_combination[i] for i in range(row_count) if
-                unpack_bit(column[i], b)
-            ])
-            expected_tprime = bits_to_uint16s(np.array([
-                unpack_bit(x, b) for x in extended_slices[:, challenge]
-            ], dtype=np.uint16))
-            assert np.array_equal(expected_tprime, computed_tprime)
+    column_bits = uint16s_to_bits(columns[..., np.newaxis])
+    computed_tprimes = multisubset(
+        row_combination,
+        np.transpose(column_bits, (0,2,1))
+    )
+    extended_slices_bits = uint16s_to_bits(
+        extended_slices[:, challenges, np.newaxis]
+    )
+    assert np.array_equal(
+        computed_tprimes,
+        bits_to_uint16s(np.transpose(extended_slices_bits, (1, 2, 0)))
+    )
     print("T_prime matches Merkle branches")
 
     # Take the right linear combination of elements *within* t_prime to

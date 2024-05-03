@@ -16,7 +16,7 @@ from binary_ntt import (
 from optimized_utils import (
     int_to_bigbin, bigbin_to_int, Wi_eval_cache,
     multilinear_poly_eval as op_multilinear_poly_eval, big_mul, bytestobits,
-    evaluation_tensor_product as op_evaluation_tensor_product
+    evaluation_tensor_product as op_evaluation_tensor_product, multisubset
 )
 import numpy as np
 
@@ -112,6 +112,29 @@ def test_vectorized_operations():
     op_etp = op_evaluation_tensor_product(pt)
     assert [bigbin_to_int(x) for x in op_etp] == etp
 
+    # Multi-subset. Make sure that the method works for different
+    # dimensionalities both of inputs and of bits
+    values = np.array([1<<i for i in range(16)], dtype=np.uint16)
+    bits = np.array(
+        [
+            [((3**j) >> i) & 1 for i in range(16)]
+            for j in range(8)
+        ], dtype=np.uint16
+    )
+    answer = np.array([3**i for i in range(8)], dtype=np.uint16)
+    assert np.array_equal(multisubset(values, bits), answer)
+    assert np.array_equal(
+        multisubset(values, bits.reshape(4, 2, 16)),
+        answer.reshape(4, 2)
+    )
+    values2 = np.transpose(np.array([values, values*2]))
+    answer2 = np.array([[3**i, (3**i)*2] for i in range(8)], dtype=np.uint16)
+    assert np.array_equal(multisubset(values2, bits), answer2)
+    assert np.array_equal(
+        multisubset(values2, bits.reshape(4, 2, 16)),
+        answer2.reshape(4, 2, 2)
+    )
+
 
 def test_simple_binius():
     SIZE = 16384
@@ -125,7 +148,7 @@ def test_simple_binius():
     print("Verified simple-binius proof")
 
 def test_packed_binius():
-    SIZE = 2**20
+    SIZE = 2**18
     z = [B(int(bit)) for bit in bin(3**SIZE)[2:][:SIZE]]
     eval_point = [B((999**i)%2**128) for i in range(log2(SIZE))]
     proof = packed_binius_proof(z, eval_point)
@@ -136,7 +159,7 @@ def test_packed_binius():
     print("Verified packed-binius proof")
 
 def test_optimized_binius():
-    SIZE = 2**20
+    SIZE = 2**23
     z = bytearray(SIZE//8)
     power_of_3 = 1
     for i, bit in enumerate(bin(3**SIZE)[2:][:SIZE]):
