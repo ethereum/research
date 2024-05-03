@@ -19,6 +19,10 @@ from optimized_utils import (
     evaluation_tensor_product as op_evaluation_tensor_product, multisubset
 )
 import numpy as np
+from hashlib import sha256
+
+# 32 MB
+TEST_DATA_STREAM = b''.join(sha256(b'').digest() for _ in range(2**20))
 
 def compute_size(x):
     if isinstance(x, bytes):
@@ -138,7 +142,7 @@ def test_vectorized_operations():
 
 def test_simple_binius():
     SIZE = 16384
-    z = [B(int(bit)) for bit in bin(3**SIZE)[2:][:SIZE]]
+    z = [B(int(byte)) for byte in TEST_DATA_STREAM[:SIZE]]
     eval_point = [B((999**i)%2**128) for i in range(log2(SIZE))]
     proof = simple_binius_proof(z, eval_point)
     print("Generated simple-binius proof")
@@ -148,8 +152,8 @@ def test_simple_binius():
     print("Verified simple-binius proof")
 
 def test_packed_binius():
-    SIZE = 2**18
-    z = [B(int(bit)) for bit in bin(3**SIZE)[2:][:SIZE]]
+    SIZE = 2**17
+    z = [B((int(TEST_DATA_STREAM[i//8]) >> (i%8)) & 1) for i in range(SIZE)]
     eval_point = [B((999**i)%2**128) for i in range(log2(SIZE))]
     proof = packed_binius_proof(z, eval_point)
     print("Generated packed-binius proof")
@@ -159,11 +163,8 @@ def test_packed_binius():
     print("Verified packed-binius proof")
 
 def test_optimized_binius():
-    SIZE = 2**23
-    z = bytearray(SIZE//8)
-    power_of_3 = 1
-    for i, bit in enumerate(bin(3**SIZE)[2:][:SIZE]):
-        z[i//8] += int(bit) << (i%8)
+    SIZE = 2**27
+    z = TEST_DATA_STREAM[:SIZE//8]
     eval_point = [(999**i)%2**128 for i in range(log2(SIZE))]
     proof = optimized_binius_proof(z, eval_point)
     print("Generated packed-binius proof")

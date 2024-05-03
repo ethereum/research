@@ -204,6 +204,9 @@ def evaluation_tensor_product(pt):
         ))
     return o
 
+# Given a list of N objects, and a list of length-N bitvectors representing
+# subsets of those objects, compute the xor-sum of each subset. Uses the main
+# subroutine of Pippenger-style algorithms, see: https://ethresear.ch/t/7238
 def multisubset(values, bits):
     assert values.shape[0] == bits.shape[-1]
     GROUPING = 4

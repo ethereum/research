@@ -18,6 +18,13 @@ def choose_row_length_and_count(log_evaluation_count):
     row_count = 1 << log_row_count
     return log_row_length, log_row_count, row_length, row_count
 
+# Get the Merkle branch challenge indices from a root
+def get_challenges(root, extended_row_length):
+    return np.array([
+        int.from_bytes(hash(root+bytes([i])), 'little') % extended_row_length
+        for i in range(NUM_CHALLENGES)
+    ], dtype=np.uint16)
+
 # "Block-level encoding-based polynomial commitment scheme", section 3.11 of
 # https://eprint.iacr.org/2023/1784.pdf
 #
@@ -57,17 +64,22 @@ def optimized_binius_proof(evaluations, evaluation_point):
     root = get_root(merkle_tree)
 
     # Challenge in a few positions, to get branches
-    challenges = np.array([
-        int.from_bytes(hash(root + bytes([i])), 'little') % extended_row_length
-        for i in range(NUM_CHALLENGES)
-    ], dtype=np.uint16)
+    challenges = get_challenges(root, extended_row_length)
+
+    # Compute evaluation. Note that this is much faster than computing it
+    # "directly"
+    col_combination = \
+        evaluation_tensor_product(evaluation_point[:log_row_length])
+    computed_eval = np.bitwise_xor.reduce(
+        big_mul(t_prime, col_combination)
+    )
     return {
         'root': root,
         'evaluation_point': evaluation_point,
-        'eval': multilinear_poly_eval(evaluations, evaluation_point),
+        'eval': computed_eval,
         't_prime': t_prime,
         'columns': columns[challenges],
-        'branches': [get_branch(merkle_tree, c) for c in challenges],
+        'branches': [get_branch(merkle_tree, c) for c in challenges]
     }
 
 def verify_optimized_binius_proof(proof):
@@ -87,10 +99,7 @@ def verify_optimized_binius_proof(proof):
     extended_row_length = row_length * EXPANSION_FACTOR // PACKING_FACTOR
 
     # Compute challenges. Should output the same as what prover computed
-    challenges = np.array([
-        int.from_bytes(hash(root + bytes([i])), 'little') % extended_row_length
-        for i in range(NUM_CHALLENGES)
-    ], dtype=np.uint16)
+    challenges = get_challenges(root, extended_row_length)
 
     # Verify the correctness of the Merkle branches
     bytes_per_element = PACKING_FACTOR//8
@@ -135,7 +144,7 @@ def verify_optimized_binius_proof(proof):
         computed_tprimes,
         bits_to_uint16s(np.transpose(extended_slices_bits, (1, 2, 0)))
     )
-    print("T_prime matches Merkle branches")
+    print("T_prime matches linear combinations of Merkle branches")
 
     # Take the right linear combination of elements *within* t_prime to
     # extract the evaluation of the original multilinear polynomial at

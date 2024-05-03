@@ -11,21 +11,29 @@
 # (x_0)^2 = x_0 + 1
 # (x_{i+1})^2 = x_{i+1} * x_i + 1
 
-def binmul(v1, v2, L=None):
+def binmul(v1, v2, length=None):
     if v1 < 256 and v2 < 256 and rawmulcache[v1][v2] is not None:
         return rawmulcache[v1][v2]
     if v1 < 2 or v2 < 2:
         return v1 * v2
-    if L is None:
-        L = 1 << (max(v1, v2).bit_length() - 1).bit_length()
-    halflen = L//2
-    quarterlen = L//4
+    if length is None:
+        length = 1 << (max(v1, v2).bit_length() - 1).bit_length()
+    halflen = length//2
+    quarterlen = length//4
     halfmask = (1 << halflen)-1
 
     L1, R1 = v1 & halfmask, v1 >> halflen
     L2, R2 = v2 & halfmask, v2 >> halflen
 
+    # Optimized special case (used to compute R1R2_high), sec III of
+    # https://ieeexplore.ieee.org/document/612935
+    if (L1, R1) == (0, 1):
+        outR = binmul(1 << quarterlen, R2, halflen) ^ L2
+        return R2 ^ (outR << halflen)
+
     # x_{i+1}^2 reduces to 1 + x_{i+1} * x_i
+    # Uses Karatsuba to only require three sub-multiplications for each input
+    # halving (R1R2_high doesn't count because of the above optimization)
     L1L2 = binmul(L1, L2, halflen)
     R1R2 = binmul(R1, R2, halflen)
     R1R2_high = binmul(1 << quarterlen, R1R2, halflen)
