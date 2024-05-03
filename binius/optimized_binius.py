@@ -2,7 +2,6 @@ EXPANSION_FACTOR = 8
 NUM_CHALLENGES = 32
 PACKING_FACTOR = 16
 
-from binary_fields import BinaryFieldElement as B
 from utils import log2
 from optimized_utils import (
     extend, multilinear_poly_eval,
@@ -11,10 +10,6 @@ from optimized_utils import (
 )
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
 import numpy as np
-
-# Take a single bit from a packed element
-def unpack_bit(item, bit):
-    return (int(item) >> bit) & 1
 
 def choose_row_length_and_count(log_evaluation_count):
     log_row_length = (log_evaluation_count + 2) // 2
@@ -39,6 +34,7 @@ def optimized_binius_proof(evaluations, evaluation_point):
         np.frombuffer(evaluations, dtype='<u2')
         .reshape((row_count, row_length // PACKING_FACTOR))
     )
+    # Fast-Fourier extend the rows
     extended_rows = extend(rows, EXPANSION_FACTOR)
     extended_row_length = row_length * EXPANSION_FACTOR // PACKING_FACTOR
 
@@ -50,6 +46,7 @@ def optimized_binius_proof(evaluations, evaluation_point):
         evaluation_tensor_product(evaluation_point[log_row_length:])
     assert len(row_combination) == len(rows) == row_count
     rows_as_bits = uint16s_to_bits(rows)
+    # t_prime[i] = sum(row_combination[j] * rows_as_bits[j][i])
     t_prime = multisubset(row_combination, rows_as_bits.transpose())
 
     # Pack columns into a Merkle tree, to commit to them
@@ -105,8 +102,11 @@ def verify_optimized_binius_proof(proof):
     # Use the same Reed-Solomon code that the prover used to extend the rows,
     # but to extend t_prime. We do this separately for each bit of t_prime
     t_prime_bit_length = 128
+    # Each t_prime, as a 128-bit bitarray
     t_prime_bits = uint16s_to_bits(t_prime)
+    # Treat this as 128 bit-rows, and re-pack those
     rows = bits_to_uint16s(np.transpose(t_prime_bits))
+    # And FFT-extend that re-packing
     extended_slices = extend(rows, EXPANSION_FACTOR)
 
     # Here, we take advantage of the linearity of the code. A linear combination
@@ -114,14 +114,23 @@ def verify_optimized_binius_proof(proof):
     # linear combination.
     row_combination = \
         evaluation_tensor_product(evaluation_point[log_row_length:])
+    # Each column is a vector of row_count uint16's. Convert each uint16 into
+    # bits
     column_bits = uint16s_to_bits(columns[..., np.newaxis])
+    # Take the same linear combination the prover used to compute t_prime, and
+    # apply it to the columns of bits. The transpose ensures that we get a 32*16
+    # matrix of bit-columns
     computed_tprimes = multisubset(
         row_combination,
         np.transpose(column_bits, (0,2,1))
     )
+    # Convert our FFT-extended t_prime rows (or rather, the 32 uint16s at the
+    # column positions) into bits
     extended_slices_bits = uint16s_to_bits(
         extended_slices[:, challenges, np.newaxis]
     )
+    # The bits of the t_prime extension should equal the bits of the row linear
+    # combination of the column bits
     assert np.array_equal(
         computed_tprimes,
         bits_to_uint16s(np.transpose(extended_slices_bits, (1, 2, 0)))
