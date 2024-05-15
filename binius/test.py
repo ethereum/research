@@ -16,13 +16,13 @@ from binary_ntt import (
 from optimized_utils import (
     int_to_bigbin, bigbin_to_int, Wi_eval_cache,
     multilinear_poly_eval as op_multilinear_poly_eval, big_mul, bytestobits,
-    evaluation_tensor_product as op_evaluation_tensor_product, multisubset
+    evaluation_tensor_product as op_evaluation_tensor_product, multisubset,
+    np
 )
-import numpy as np
 from hashlib import sha256
 
-# 32 MB
-TEST_DATA_STREAM = b''.join(sha256(b'').digest() for _ in range(2**20))
+# 256 MB
+TEST_DATA_STREAM = b''.join(sha256(b'').digest() for _ in range(2**23))
 
 def compute_size(x):
     if isinstance(x, bytes):
@@ -66,8 +66,8 @@ def test_vectorized_operations():
     # Check that the two Wi cache implementations give correct values
     assert (
         Wi_eval_cache[7, 383] ==
-        get_Wi_eval(7, 383) ==
-        eval_poly_at(get_Wi(7), B(383))
+        get_Wi_eval(7, 383).value ==
+        eval_poly_at(get_Wi(7), B(383)).value
     )
     # Single value by single value
     assert (
@@ -140,10 +140,9 @@ def test_vectorized_operations():
     )
 
 
-def test_simple_binius():
-    SIZE = 16384
-    z = [B(int(byte)) for byte in TEST_DATA_STREAM[:SIZE]]
-    eval_point = [B((999**i)%2**128) for i in range(log2(SIZE))]
+def test_simple_binius(size):
+    z = [B(int(byte)) for byte in TEST_DATA_STREAM[:size]]
+    eval_point = [B((999**i)%2**128) for i in range(log2(size))]
     proof = simple_binius_proof(z, eval_point)
     print("Generated simple-binius proof")
     print("Proof size: {} bytes".format(compute_size(proof)))
@@ -151,10 +150,9 @@ def test_simple_binius():
     verify_simple_binius_proof(proof)
     print("Verified simple-binius proof")
 
-def test_packed_binius():
-    SIZE = 2**17
-    z = [B((int(TEST_DATA_STREAM[i//8]) >> (i%8)) & 1) for i in range(SIZE)]
-    eval_point = [B((999**i)%2**128) for i in range(log2(SIZE))]
+def test_packed_binius(size):
+    z = [B((int(TEST_DATA_STREAM[i//8]) >> (i%8)) & 1) for i in range(size)]
+    eval_point = [B((999**i)%2**128) for i in range(log2(size))]
     proof = packed_binius_proof(z, eval_point)
     print("Generated packed-binius proof")
     print("Proof size: {} bytes".format(compute_size(proof)))
@@ -162,10 +160,9 @@ def test_packed_binius():
     verify_packed_binius_proof(proof)
     print("Verified packed-binius proof")
 
-def test_optimized_binius():
-    SIZE = 2**27
-    z = TEST_DATA_STREAM[:SIZE//8]
-    eval_point = [(999**i)%2**128 for i in range(log2(SIZE))]
+def test_optimized_binius(size):
+    z = TEST_DATA_STREAM[:size//8]
+    eval_point = [(999**i)%2**128 for i in range(log2(size))]
     proof = optimized_binius_proof(z, eval_point)
     print("Generated packed-binius proof")
     print("Proof size: {} bytes".format(compute_size(proof)))
@@ -176,6 +173,6 @@ def test_optimized_binius():
 if __name__ == '__main__':
     test_binary_operations()
     test_vectorized_operations()
-    test_simple_binius()
-    test_packed_binius()
-    test_optimized_binius()
+    test_simple_binius(2**14)
+    test_packed_binius(2**17)
+    test_optimized_binius(2**31)

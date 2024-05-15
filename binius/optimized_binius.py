@@ -1,15 +1,15 @@
-EXPANSION_FACTOR = 8
-NUM_CHALLENGES = 32
+EXPANSION_FACTOR = 4
+NUM_CHALLENGES = 40
 PACKING_FACTOR = 16
 
 from utils import log2
 from optimized_utils import (
     extend, multilinear_poly_eval,
     bytestobits, bitstobytes, uint16s_to_bits, bits_to_uint16s,
-    evaluation_tensor_product, bigbin_to_int, big_mul, multisubset
+    evaluation_tensor_product, bigbin_to_int, big_mul, multisubset,
+    np, xor_along_axis
 )
 from merkle import hash, merkelize, get_root, get_branch, verify_branch
-import numpy as np
 
 def choose_row_length_and_count(log_evaluation_count):
     log_row_length = (log_evaluation_count + 2) // 2
@@ -20,10 +20,11 @@ def choose_row_length_and_count(log_evaluation_count):
 
 # Get the Merkle branch challenge indices from a root
 def get_challenges(root, extended_row_length):
-    return np.array([
+    o = np.array([
         int.from_bytes(hash(root+bytes([i])), 'little') % extended_row_length
         for i in range(NUM_CHALLENGES)
     ], dtype=np.uint16)
+    return o
 
 # "Block-level encoding-based polynomial commitment scheme", section 3.11 of
 # https://eprint.iacr.org/2023/1784.pdf
@@ -52,9 +53,19 @@ def optimized_binius_proof(evaluations, evaluation_point):
     row_combination = \
         evaluation_tensor_product(evaluation_point[log_row_length:])
     assert len(row_combination) == len(rows) == row_count
-    rows_as_bits = uint16s_to_bits(rows)
-    # t_prime[i] = sum(row_combination[j] * rows_as_bits[j][i])
-    t_prime = multisubset(row_combination, rows_as_bits.transpose())
+    rows_as_bits_transpose = uint16s_to_bits(rows).transpose()
+    t_prime = np.zeros(
+        (rows_as_bits_transpose.shape[0], row_combination.shape[1]),
+        dtype=np.uint16
+    )
+    for j in range(row_combination.shape[1]):
+        t_prime[:,j:j+1] ^= xor_along_axis(
+            (
+                rows_as_bits_transpose[:,:,np.newaxis] *
+                row_combination[np.newaxis,:,j:j+1]
+            ), 1
+        )
+    #t_prime = multisubset(row_combination, rows_as_bits_transpose)
 
     # Pack columns into a Merkle tree, to commit to them
     columns = np.transpose(extended_rows)
@@ -70,8 +81,9 @@ def optimized_binius_proof(evaluations, evaluation_point):
     # "directly"
     col_combination = \
         evaluation_tensor_product(evaluation_point[:log_row_length])
-    computed_eval = np.bitwise_xor.reduce(
-        big_mul(t_prime, col_combination)
+    computed_eval = xor_along_axis(
+        big_mul(t_prime, col_combination),
+        0
     )
     return {
         'root': root,
@@ -103,10 +115,11 @@ def verify_optimized_binius_proof(proof):
 
     # Verify the correctness of the Merkle branches
     bytes_per_element = PACKING_FACTOR//8
-    for challenge, branch, col in zip(challenges, branches, columns):
+    for challenge, branch, col in zip(challenges + 0, branches, columns):
         packed_column = col.tobytes('C')
         print(f"Verifying Merkle branch for column {challenge}")
         assert verify_branch(root, challenge, packed_column, branch)
+
 
     # Use the same Reed-Solomon code that the prover used to extend the rows,
     # but to extend t_prime. We do this separately for each bit of t_prime
@@ -135,6 +148,7 @@ def verify_optimized_binius_proof(proof):
     )
     # Convert our FFT-extended t_prime rows (or rather, the 32 uint16s at the
     # column positions) into bits
+
     extended_slices_bits = uint16s_to_bits(
         extended_slices[:, challenges, np.newaxis]
     )
@@ -151,8 +165,9 @@ def verify_optimized_binius_proof(proof):
     # the desired point
     col_combination = \
         evaluation_tensor_product(evaluation_point[:log_row_length])
-    computed_eval = np.bitwise_xor.reduce(
-        big_mul(t_prime, col_combination)
+    computed_eval = xor_along_axis(
+        big_mul(t_prime, col_combination),
+        0
     )
     print(f"Testing evaluation: expected {value} computed {computed_eval}")
     assert np.array_equal(computed_eval, value)

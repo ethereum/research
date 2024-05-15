@@ -18,7 +18,7 @@ def get_root(tree):
 
 # Get a Merkle branch for the value at a particular position
 def get_branch(tree, pos):
-    offset_pos = pos + len(tree) // 2
+    offset_pos = int(pos + len(tree) // 2)
     branch_length = len(tree).bit_length() - 2
     return [tree[(offset_pos >> i)^1] for i in range(branch_length)]
 
