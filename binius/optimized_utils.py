@@ -51,12 +51,9 @@ def build_mul_table_small():
                 for table in (table_low, table_high):
                     table[i][j] = table[i][top_p_of_2] ^ table[i][j-top_p_of_2]
     
-    for i in range(1, 65536):
-        if (i & (i-1)) == 0:
-            top_p_of_2 = i
-        else:
-            for table in (table_low, table_high):
-                table[i] = table[top_p_of_2] ^ table[i - top_p_of_2]
+    for i in [2**x for x in range(1, 16)]:
+       for table in (table_low, table_high):
+           table[i:2*i] = table[i] ^ table[:i]
     
     return table_low, table_high
 

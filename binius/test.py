@@ -22,7 +22,12 @@ from optimized_utils import (
 from hashlib import sha256
 
 # 256 MB
-TEST_DATA_STREAM = b''.join(sha256(b'').digest() for _ in range(2**23))
+TEST_DATA_STREAM = bytearray(2**28)
+for pos in range(0, 2**28, 32):
+    TEST_DATA_STREAM[pos: pos+32] = sha256(pos.to_bytes(4, 'big')).digest()
+TEST_DATA_STREAM = bytes(TEST_DATA_STREAM)
+
+#TEST_DATA_STREAM = b''.join(sha256(i.to_bytes(4, 'big')).digest() for i in range(2**23))
 
 def compute_size(x):
     if isinstance(x, bytes):
