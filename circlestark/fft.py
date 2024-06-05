@@ -36,14 +36,19 @@ def halve_domain(domain):
     else:
         return [2*x**2-1 for x in domain[:len(domain)//2]]
 
+def get_domain_of_size(field, n):
+    assert n & (n-1) == 0
+    domain = get_initial_domain(field)
+    while len(domain) > n:
+        domain = halve_domain(domain)
+    return domain
+
 def fft(vals, domain=None):
     #print('i', vals)
     if len(vals) == 1:
         return vals
     if domain is None:
-        domain = get_initial_domain(vals[0].__class__)
-        while len(domain) > len(vals):
-            domain = domain[::2]
+        domain = get_domain_of_size(vals[0].__class__, len(vals))
     half_domain = halve_domain(domain)
     if len(vals) == (vals[0].modulus + 1) // 2:
         left = vals[:len(domain)//2]
@@ -55,19 +60,23 @@ def fft(vals, domain=None):
         right = vals[len(domain)//2:][::-1]
         f0 = [(L+R)/2 for L,R in zip(left, right)]
         f1 = [(L-R)/(2*x) for L,R,x in zip(left, right, domain)]
-    return fft(f0, half_domain) + fft(f1, half_domain)
+    o = [0] * len(domain)
+    o[::2] = fft(f0, half_domain)
+    o[1::2] = fft(f1, half_domain)
+    return o
+    #return fft(f0, half_domain) + fft(f1, half_domain)
 
 def inv_fft(vals, domain=None):
     if len(vals) == 1:
         #print('o', vals)
         return vals
     if domain is None:
-        domain = get_initial_domain(vals[0].__class__)
-        while len(domain) > len(vals):
-            domain = domain[::2]
+        domain = get_domain_of_size(vals[0].__class__, len(vals))
     half_domain = halve_domain(domain)
-    f0 = inv_fft(vals[:len(domain)//2], half_domain)
-    f1 = inv_fft(vals[len(domain)//2:], half_domain)
+    f0 = inv_fft(vals[::2], half_domain)
+    f1 = inv_fft(vals[1::2], half_domain)
+    #f0 = inv_fft(vals[:len(domain)//2], half_domain)
+    #f1 = inv_fft(vals[len(domain)//2:], half_domain)
     if len(vals) == (vals[0].modulus + 1) // 2:
         left = [L+y*R for L,R,(x,y) in zip(f0, f1, domain)]
         right = [L-y*R for L,R,(x,y) in zip(f0, f1, domain)]
@@ -76,3 +85,4 @@ def inv_fft(vals, domain=None):
         right = [L-x*R for L,R,x in zip(f0, f1, domain)]
     #print('o', left + right[::-1])
     return left+right[::-1]
+
