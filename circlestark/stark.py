@@ -1,5 +1,5 @@
 from fft import (
-    fft, inv_fft, get_initial_domain_of_size,
+    fft, inv_fft, get_initial_domain_of_size, log2,
     halve_domain, get_single_domain_value, halve_single_domain_value
 )
 from merkle import merkelize, hash, get_branch, verify_branch
@@ -24,22 +24,25 @@ def line_function(P1, P2, domain):
     c = -(a * x1 + b * y1)
     return [a * x + b * y + c for x,y in domain]
 
-def reverse_bit_order(values):
+def folded_reverse_bit_order(values):
     if len(values) == 1:
         return values
-    L = reverse_bit_order(values[:len(values)//2])
-    R = reverse_bit_order(values[len(values)//2:][::-1])
+    L = folded_reverse_bit_order(values[:len(values)//2])
+    R = folded_reverse_bit_order(values[len(values)//2:][::-1])
     o = [0] * len(values)
     o[::2] = L
     o[1::2] = R
     return o
 
-def unreverse_bit_order(values):
+def undo_folded_reverse_bit_order(values):
     if len(values) == 1:
         return values
     L = values[::2]
     R = values[1::2]
-    return unreverse_bit_order(L) + unreverse_bit_order(R)[::-1]
+    return (
+        undo_folded_reverse_bit_order(L) +
+        undo_folded_reverse_bit_order(R)[::-1]
+    )
 
 def rbo_index_to_original(length, index):
     assert index < length
@@ -50,8 +53,8 @@ def rbo_index_to_original(length, index):
     else:
         return length - 1 - rbo_index_to_original(length // 2, index // 2)
 
-def fold(values, rounds, coeff, domain):
-    for _ in range(rounds):
+def fold(values, coeff, domain):
+    for i in range(FOLDS_PER_ROUND):
         left, right = values[::2], values[1::2]
         f0 = [(L+R)/2 for L,R in zip(left, right)]
         if isinstance(domain[0], tuple):
@@ -62,6 +65,21 @@ def fold(values, rounds, coeff, domain):
         domain = halve_domain(domain[::2], preserve_length=True)
     return values, domain
 
+
+# Get the Merkle branch challenge indices from a root
+def get_challenges(root, domain_size, num_challenges):
+    return [
+        int.from_bytes(hash(root+bytes([i])), 'little') % domain_size
+        for i in range(num_challenges)
+    ]
+
+def is_rbo_low_degree(evaluations, domain):
+    halflen = len(evaluations)//2
+    return fft(
+        undo_folded_reverse_bit_order(evaluations),
+        undo_folded_reverse_bit_order(domain)
+    )[halflen:] == [0] * halflen
+
 def chunkify(values):
     return [
         b''.join(x.to_bytes() for x in values[i:i+FOLD_SIZE_RATIO])
@@ -71,55 +89,31 @@ def chunkify(values):
 def unchunkify(field, data):
     return [field.from_bytes(data[i:i+16]) for i in range(0, len(data), 16)]
 
-# Get the Merkle branch challenge indices from a root
-def get_challenges(root, domain_size, num_challenges):
-    return [
-        int.from_bytes(hash(root+bytes([i])), 'little') % domain_size
-        for i in range(num_challenges)
-    ]
-
-def is_low_degree(evaluations, domain):
-    return (
-        fft(evaluations, domain)[len(evaluations)//2:]
-        == [0] * (len(evaluations)//2)
-    )
-
-def is_rbo_low_degree(evaluations, domain):
-    halflen = len(evaluations)//2
-    return fft(
-        unreverse_bit_order(evaluations),
-        unreverse_bit_order(domain)
-    )[halflen:] == [0] * halflen
-
 def prove_low_degree(evaluations):
     # Input must already be in extension field
     assert hasattr(evaluations[0].__class__, 'subclass')
     E = evaluations[0].__class__
     M = E.subclass.modulus
-    domain = reverse_bit_order(
+    domain = folded_reverse_bit_order(
         get_initial_domain_of_size(E.subclass, len(evaluations))
     )
     # Commit Merkle root
-    values = reverse_bit_order(evaluations)
+    values = folded_reverse_bit_order(evaluations)
     leaves = []
     trees = []
     roots = []
-    # Sanity check: make sure they're actually low degree
-    #assert is_rbo_low_degree(values, domain)
     # Prove descent
-    rounds = (
-        ((len(evaluations) // BASE_CASE_SIZE).bit_length() - 1)
-        // FOLDS_PER_ROUND
-    )
+    rounds = log2(len(evaluations) // BASE_CASE_SIZE) // FOLDS_PER_ROUND
     print("Generating proof")
     for i in range(rounds):
         leaves.append(values)
         trees.append(merkelize(chunkify(values)))
         roots.append(trees[-1][1])
+        print('Root:', roots[-1])
         print("Descent round {}: {} values".format(i+1, len(values)))
         fold_factor = E(get_challenges(b''.join(roots), M, 4))
         print("Fold factor: {}".format(fold_factor))
-        values, domain = fold(values, FOLDS_PER_ROUND, fold_factor, domain)
+        values, domain = fold(values, fold_factor, domain)
     entropy = b''.join(roots + [x.to_bytes() for x in values])
     challenges = get_challenges(
         entropy, len(evaluations) >> FOLDS_PER_ROUND, NUM_CHALLENGES
@@ -177,12 +171,7 @@ def verify_low_degree(proof):
         ) for pos in positions]
         for _ in range(i * FOLDS_PER_ROUND):
             domain = [halve_single_domain_value(x) for x in domain]
-        folded_values, _ = fold(
-            sum(leaf_values[i], []),
-            FOLDS_PER_ROUND,
-            fold_factor,
-            domain
-        )
+        folded_values, _ = fold(sum(leaf_values[i], []), fold_factor, domain)
         if i < len(roots) - 1:
             expected_values = [
                 leaf_values[i+1][j][c % FOLD_SIZE_RATIO]
@@ -196,7 +185,7 @@ def verify_low_degree(proof):
                 roots[i], c, chunkify(leaf_values[i][j])[0], branches[i][j]
             )
         challenges = [c >> FOLDS_PER_ROUND for c in challenges]
-    final_domain = reverse_bit_order(
+    final_domain = folded_reverse_bit_order(
         halve_domain(
             get_initial_domain_of_size(E.subclass, len(final_values)*2)
         )

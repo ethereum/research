@@ -1,3 +1,7 @@
+def log2(x):
+    assert x & (x-1) == 0
+    return x.bit_length() - 1
+
 def point_add(pt1, pt2):
     (x1, y1), (x2, y2) = pt1, pt2
     return (
@@ -28,7 +32,7 @@ def get_generator(field):
         Y_pt = field(y)
         X_pt = field(1-y**2).sqrt()
         point = X_pt, Y_pt
-        for _ in range(modulus.bit_length()-1):
+        for _ in range(log2(modulus + 1) - 1):
             point = point_double(point)
         if point != (1, 0):
             return (X_pt, Y_pt)
@@ -37,7 +41,7 @@ def get_generator(field):
 def get_initial_domain_of_size(field, size):
     assert size < field(0).modulus
     G = get_generator(field)
-    for i in range(((field.modulus + 1) // size).bit_length() - 2):
+    for i in range(log2((field.modulus + 1) // size) - 1):
         G = point_double(G)
     Gx2 = point_double(G)
     o = [G]
@@ -48,7 +52,7 @@ def get_initial_domain_of_size(field, size):
 def get_single_domain_value(field, size, index):
     assert size < field(0).modulus
     G = get_generator(field)
-    for i in range(((field.modulus + 1) // size).bit_length() - 2):
+    for i in range(log2((field.modulus + 1) // size) - 1):
         G = point_double(G)
     return point_multiply(G, 2*index+1)
 

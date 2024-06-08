@@ -61,60 +61,67 @@ def modinv(x):
         o = (o * pow_of_x) % M31
     return o
 
-x = sub_domains[:,0]
-y = sub_domains[:,1]
-invx = modinv(x)
-invy = modinv(y)
+xfac = sub_domains[:,0]
+yfac = sub_domains[:,1]
+invx = modinv(xfac)
+invy = modinv(yfac)
+
+def reverse_bit_order(vals):
+    shape_suffix = vals.shape[1:]
+    size = vals.shape[0]
+    return (
+        vals.reshape((2,)*log2(size) + shape_suffix)
+            .transpose(
+                tuple(range(log2(size)-1,-1,-1))
+                + tuple(range(log2(size), log2(size) + len(shape_suffix)))
+            ).reshape((size,) + shape_suffix)
+    )
 
 def fft(vals):
     vals = np.array(vals, dtype=np.uint64)
-    shape_prefix = vals.shape[:-1]
-    size = vals.shape[-1]
+    shape_suffix = vals.shape[1:]
+    size = vals.shape[0]
     for i in range(log2(size)):
-        vals = np.reshape(vals, shape_prefix + (1 << i, size >> i))
-        full_len = vals.shape[-1]
+        vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
+        full_len = vals.shape[1]
         half_len = full_len >> 1
-        L = vals[..., :, :half_len]
-        R = vals[..., :, full_len-1:half_len-1:-1]
+        L = vals[:, :half_len]
+        R = vals[:, full_len-1:half_len-1:-1]
         f0 = ((L + R) * HALF) % M31
         if i==0:
             twiddle = invy[full_len: full_len + half_len]
         else:
             twiddle = invx[full_len*2: full_len*2 + half_len]
-        f1 = (((L + M31 - R) * HALF) % M31) * twiddle % M31
-        vals[..., :, :half_len] = f0
-        vals[..., :, half_len:] = f1
-    return (
-        vals.reshape(shape_prefix + (2,)*log2(size))
-            .transpose(
-                tuple(range(len(shape_prefix))) +
-                tuple(range(-1,-log2(size)-1,-1))
-            ).reshape(shape_prefix + (size,))
-    )
+        twiddle = np.expand_dims(
+            np.broadcast_to(twiddle, (1 << i, L.shape[1])),
+            axis=tuple(range(2, len(L.shape)))
+        )
+        f1 = ((((L + M31 - R) * HALF) % M31) * twiddle) % M31
+        vals[:, :half_len] = f0
+        vals[:, half_len:] = f1
+    return reverse_bit_order(vals.reshape((size,) + shape_suffix))
 
 def inv_fft(vals):
     vals = np.array(vals, dtype=np.uint64)
-    shape_prefix = vals.shape[:-1]
-    size = vals.shape[-1]
-    vals = (
-        vals.reshape(shape_prefix + (2,)*log2(size))
-            .transpose(
-                tuple(range(len(shape_prefix))) +
-                tuple(range(-1,-log2(size)-1,-1))
-            ).reshape(shape_prefix + (size,))
-    )
+    shape_suffix = vals.shape[1:]
+    size = vals.shape[0]
+    vals = reverse_bit_order(vals)
     for i in range(log2(size)-1, -1, -1):
-        vals = np.reshape(vals, shape_prefix + (1 << i, size >> i))
-        full_len = vals.shape[-1]
+        vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
+        full_len = vals.shape[1]
         half_len = full_len >> 1
-        f0 = vals[..., :, :half_len]
-        f1 = vals[..., :, half_len:]
+        f0 = vals[:, :half_len]
+        f1 = vals[:, half_len:]
         if i==0:
-            twiddle = y[full_len: full_len + half_len]
+            twiddle = yfac[full_len: full_len + half_len]
         else:
-            twiddle = x[full_len*2: full_len*2 + half_len]
+            twiddle = xfac[full_len*2: full_len*2 + half_len]
+        twiddle = np.expand_dims(
+            np.broadcast_to(twiddle, (1 << i, f0.shape[1])),
+            axis=tuple(range(2, len(f0.shape)))
+        )
         L = (f0 + f1 * twiddle) % M31
         R = (f0 + M31SQ - f1 * twiddle) % M31
-        vals[..., :, :half_len] = L
-        vals[..., :, full_len-1:half_len-1:-1] = R
-    return np.reshape(vals, shape_prefix + (size,))
+        vals[:, :half_len] = L
+        vals[:, full_len-1:half_len-1:-1] = R
+    return np.reshape(vals, (size,) + shape_suffix)
