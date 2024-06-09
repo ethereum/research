@@ -85,9 +85,8 @@ def test_mega_fri():
     coeffs = np.zeros(INPUT_SIZE * 2, dtype=np.uint64)
     coeffs[:INPUT_SIZE] = 1
     coeffs[1] = 3
-    power_of_3 = 3
     for i in range(1, log2(INPUT_SIZE)):
-        coeffs[2**i] == (coeffs[2**(i-1)]**2) % M31
+        coeffs[2**i] = (coeffs[2**(i-1)]**2) % M31
     for i in range(1, log2(INPUT_SIZE)):
         coeffs[2**i+1:2**(i+1)] = (coeffs[1:2**i] * coeffs[2**i]) % M31
     t1 = time.time()
