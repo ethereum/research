@@ -77,7 +77,7 @@ def reverse_bit_order(vals):
             ).reshape((size,) + shape_suffix)
     )
 
-def fft(vals):
+def fft(vals, is_top_level=True):
     vals = np.array(vals, dtype=np.uint64)
     shape_suffix = vals.shape[1:]
     size = vals.shape[0]
@@ -88,7 +88,7 @@ def fft(vals):
         L = vals[:, :half_len]
         R = vals[:, full_len-1:half_len-1:-1]
         f0 = ((L + R) * HALF) % M31
-        if i==0:
+        if i==0 and is_top_level:
             twiddle = invy[full_len: full_len + half_len]
         else:
             twiddle = invx[full_len*2: full_len*2 + half_len]

@@ -1,9 +1,10 @@
 from fields import S, M, B, ES, EM, EB
 from fft import fft, inv_fft, log2
-from stark import prove_low_degree, verify_low_degree
+from fri import prove_low_degree, verify_low_degree
 from fast_fft import fft as f_fft, inv_fft as f_inv_fft, np, M31
-from fast_stark import (
-    prove_low_degree as f_prove_low_degree, to_extension_field
+from fast_fri import (
+    prove_low_degree as f_prove_low_degree, to_extension_field,
+    verify_low_degree as f_verify_low_degree
 )
 import time
 
@@ -66,6 +67,7 @@ def test_fast_fri():
     )
     evaluations = f_inv_fft(coeffs)
     proof = f_prove_low_degree(to_extension_field(evaluations))
+    assert f_verify_low_degree(proof)
     global fri_proof
     if fri_proof is None:
         raise Exception("Need slow fri proof to check against")

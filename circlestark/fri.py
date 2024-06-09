@@ -109,7 +109,7 @@ def prove_low_degree(evaluations):
         leaves.append(values)
         trees.append(merkelize(chunkify(values)))
         roots.append(trees[-1][1])
-        print('Root:', roots[-1])
+        print('Root: 0x{}'.format(roots[-1].hex()))
         print("Descent round {}: {} values".format(i+1, len(values)))
         fold_factor = E(get_challenges(b''.join(roots), M, 4))
         print("Fold factor: {}".format(fold_factor))
@@ -120,7 +120,7 @@ def prove_low_degree(evaluations):
     )
     round_challenges = [
         [c >> (i * FOLDS_PER_ROUND) for c in challenges]
-        for i in range(rounds+1)
+        for i in range(rounds)
     ]
     branches = [
         [get_branch(tree, c) for c in r_challenges]
@@ -164,13 +164,22 @@ def verify_low_degree(proof):
             list(range(c*FOLD_SIZE_RATIO, (c+1)*FOLD_SIZE_RATIO))
             for c in challenges
         ], [])
-        domain = [get_single_domain_value(
-            E.subclass,
-            len_evaluations,
-            rbo_index_to_original(len_evaluations, pos << (i*FOLDS_PER_ROUND))
-        ) for pos in positions]
-        for _ in range(i * FOLDS_PER_ROUND):
-            domain = [halve_single_domain_value(x) for x in domain]
+        if i == 0:
+            domain = [
+                get_single_domain_value(
+                    E.subclass,
+                    evaluation_size,
+                    rbo_index_to_original(evaluation_size, pos)
+                ) for pos in positions
+            ]
+        else:
+            domain = [
+                halve_single_domain_value(get_single_domain_value(
+                    E.subclass,
+                    evaluation_size * 2,
+                    rbo_index_to_original(evaluation_size * 2, pos * 2)
+                )) for pos in positions
+            ]
         folded_values, _ = fold(sum(leaf_values[i], []), fold_factor, domain)
         if i < len(roots) - 1:
             expected_values = [

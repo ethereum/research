@@ -42,23 +42,3 @@ def merkelize_by_levels(vals):
         L = levels[-1]
         levels.append([hash(L[i] + L[i+1]) for i in range(0, len(L), 2)])
     return levels[::-1]
-
-# Function to execute in parallel
-def pooled_merkelize(data):
-    inputs = [
-        data[i * len(data) // 8: (i+1) * len(data) // 8]
-        for i in range(8)
-    ]
-    with concurrent.futures.ProcessPoolExecutor(max_workers=8) as executor:
-        # Submit the function with each input to the executor
-        futures = [executor.submit(merkelize_by_levels, i) for i in inputs]
-        
-        # Collect the results as they complete
-        results = [future.result() for future in concurrent.futures.as_completed(futures)]
-        head = merkelize([x[0][0] for x in results])[:8]
-        output = head
-        for i in range(len(results[0])):
-            for result in results:
-                output.extend(result[i])
-    
-    return output
