@@ -101,6 +101,33 @@ def fft(vals, is_top_level=True):
         vals[:, half_len:] = f1
     return reverse_bit_order(vals.reshape((size,) + shape_suffix))
 
+def bary_eval(vals, pt):
+    vals = np.array(vals, dtype=np.uint64)
+    shape_suffix = vals.shape[1:]
+    size = vals.shape[0]
+    for i in range(log2(size)):
+        #vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
+        full_len = vals.shape[0]
+        half_len = full_len >> 1
+        L = vals[:half_len]
+        R = vals[full_len-1:half_len-1:-1]
+        f0 = ((L + R) * HALF) % M31
+        if i==0:
+            twiddle = invy[full_len: full_len + half_len]
+            baryfac = pt[1]
+        else:
+            twiddle = invx[full_len*2: full_len*2 + half_len]
+            baryfac = pt[0]
+            for _ in range(i-1):
+                baryfac = (2 * baryfac**2 + M31 - 1) % M31
+        twiddle = np.expand_dims(
+            np.broadcast_to(twiddle, (L.shape[0],)),
+            axis=tuple(range(1, len(L.shape)))
+        )
+        f1 = ((((L + M31 - R) * HALF) % M31) * twiddle) % M31
+        vals = (f0 + baryfac * f1) % M31
+    return vals[0]
+
 def inv_fft(vals):
     vals = np.array(vals, dtype=np.uint64)
     shape_suffix = vals.shape[1:]

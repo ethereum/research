@@ -1,14 +1,8 @@
 from fast_fft import np, modinv, M31, log2
 
 def mk_junk_data(length):
-    log_buffer_size = length.bit_length()
-    coeffs = np.ones(2**log_buffer_size, dtype=np.uint64)
-    coeffs[1] = 3
-    for i in range(1, log_buffer_size):
-        coeffs[2**i] = (coeffs[2**(i-1)]**2) % (2**31-19)
-    for i in range(1, log_buffer_size):
-        coeffs[2**i+1:2**(i+1)] = (coeffs[1:2**i] * coeffs[2**i]) % (2**31-19)
-    return coeffs[-length:]
+    a = np.arange(length, length*2, dtype=np.uint64)
+    return ((3**a) ^ (7**a)) % M31
 
 round_constants = mk_junk_data(1536).reshape((64, 24))
 
@@ -35,17 +29,24 @@ def hash(in1, in2):
     state[...,:8] = in1
     state[...,8:16] = in2
     for i in range(64):
-        state += round_constants[i]
+        #print('Round {}: {}'.format(i*4, [int(x) for x in state[:3]]))
+        state = (state + round_constants[i]) % M31
         if i >= 4 and i < 60:
-            x = state[...,0]
+            x = np.copy(state[...,0])
             state[...,0] = (x * x) % M31
+            #print('Round {}: {}'.format(i*4+1, [int(x) for x in state[:3]]))
             state[...,0] = (state[...,0] * state[...,0]) % M31
+            #print('Round {}: {}'.format(i*4+2, [int(x) for x in state[:3]]))
             state[...,0] = (state[...,0] * x) % M31
+            #print('Round {}: {}'.format(i*4+3, [int(x) for x in state[:3]]))
         else:
             x = state
             state = (x * x) % M31
+            #print('Round {}: {}'.format(i*4+1, [int(x) for x in state[:3]]))
             state = (state * state) % M31
+            #print('Round {}: {}'.format(i*4+2, [int(x) for x in state[:3]]))
             state = (state * x) % M31
+            #print('Round {}: {}'.format(i*4+3, [int(x) for x in state[:3]]))
 
         state = np.matmul(state, mds) % M31
     return state[...,8:16]

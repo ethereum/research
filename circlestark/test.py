@@ -1,11 +1,15 @@
 from fields import S, M, B, ES, EM, EB
 from fft import fft, inv_fft, log2
 from fri import prove_low_degree, verify_low_degree
-from fast_fft import fft as f_fft, inv_fft as f_inv_fft, np, M31
+from fast_fft import (
+    fft as f_fft, inv_fft as f_inv_fft, np, M31, modinv,
+    sub_domains, bary_eval
+)
 from fast_fri import (
     prove_low_degree as f_prove_low_degree, to_extension_field,
     verify_low_degree as f_verify_low_degree
 )
+from fast_arithmetize import pad_to
 import time
 
 def test_basic_arithmetic():
@@ -85,18 +89,47 @@ def test_mega_fri():
     print("Testing FRI")
     INPUT_SIZE = 2**20
     coeffs = np.zeros(INPUT_SIZE * 2, dtype=np.uint64)
-    coeffs[:INPUT_SIZE] = 1
-    coeffs[1] = 3
-    for i in range(1, log2(INPUT_SIZE)):
-        coeffs[2**i] = (coeffs[2**(i-1)]**2) % M31
-    for i in range(1, log2(INPUT_SIZE)):
-        coeffs[2**i+1:2**(i+1)] = (coeffs[1:2**i] * coeffs[2**i]) % M31
+
+    def mk_junk_data(length):
+        a = np.arange(length, length*2, dtype=np.uint64)
+        return ((3**a) ^ (7**a)) % M31
+
+    coeffs[:INPUT_SIZE] = mk_junk_data(INPUT_SIZE)
     t1 = time.time()
     evaluations = f_inv_fft(coeffs)
     print("Low-degree extended coeffs in time {}".format(time.time() - t1))
     t2 = time.time()
     proof = f_prove_low_degree(to_extension_field(evaluations))
     print("Generated proof in time {}".format(time.time() - t2))
+
+def test_simple_arithmetize():
+    print("Testing simple arithmetization")
+    SIZE = 128
+    trace = np.zeros(SIZE, dtype=np.uint64)
+    trace[0] = 1
+    for i in range(SIZE-1):
+        trace[i+1] = ((trace[i] ** 2 % M31) * trace[i] + 1) % M31
+    ext_trace = f_inv_fft(pad_to(f_fft(trace), SIZE*4))
+    assert bary_eval(ext_trace, sub_domains[SIZE]) == 1
+    assert bary_eval(ext_trace, sub_domains[SIZE+1]) == 2
+    assert bary_eval(ext_trace, sub_domains[SIZE+2]) == 9
+    C_left = np.roll(ext_trace, -4)
+    C_right = ((ext_trace**2 % M31) * ext_trace + M31 + 1) % M31
+    C = (
+        np.roll(ext_trace, -4)
+        + M31 - ((ext_trace**2 % M31) * ext_trace + M31 + 1) % M31
+    ) % M31
+    C_exempt_start = C * (
+        sub_domains[SIZE*4:SIZE*8, 0] + M31 - sub_domains[SIZE, 0]
+    ) % M31
+    Z = sub_domains[SIZE*4:SIZE*8, 0]
+    for i in range(1, log2(SIZE)):
+        Z = (2*Z**2 + M31 - 1) % M31
+    assert np.array_equal(
+        f_fft(C_exempt_start * modinv(Z) % M31)[SIZE*3+1:],
+        np.zeros(SIZE-1, dtype=np.uint64)
+    )
+    print("Simple arithmetization test passed")
 
 if __name__ == '__main__':
     test_basic_arithmetic()
@@ -105,3 +138,4 @@ if __name__ == '__main__':
     test_fast_fft()
     test_fast_fri()
     test_mega_fri()
+    test_simple_arithmetize()
