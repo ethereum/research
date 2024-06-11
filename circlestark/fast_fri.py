@@ -4,7 +4,8 @@ except:
     import numpy as np
 
 from fast_fft import (
-    reverse_bit_order, log2, M31, M31SQ, HALF, invx, invy, fft
+    reverse_bit_order, log2, M31, M31SQ, HALF, invx, invy, fft,
+    to_extension_field, extension_field_mul
 )
 from merkle import merkelize, hash, get_branch, verify_branch
 
@@ -12,7 +13,6 @@ BASE_CASE_SIZE = 128
 FOLDS_PER_ROUND = 3
 FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
 NUM_CHALLENGES = 80
-EXTENSION_I = 2
 
 def chunkify(values):
     o = values.astype(np.uint32).tobytes()
@@ -39,21 +39,25 @@ def get_challenges(root, domain_size, num_challenges):
         for i in range(num_challenges)
     ], dtype=np.uint64)
 
-def extension_field_mul(A, B):
-    # todo: needs moar karatsuba
-    A = A.transpose()
-    B = B.transpose()
-    o_LL = [A[0] * B[0] + M31SQ - A[1] * B[1], A[0] * B[1] + A[1] * B[0]]
-    o_LR = [A[0] * B[2] + M31SQ - A[1] * B[3], A[0] * B[3] + A[1] * B[2]]
-    o_RL = [A[2] * B[0] + M31SQ - A[3] * B[1], A[2] * B[1] + A[3] * B[0]]
-    o_RR = [A[2] * B[2] + M31SQ - A[3] * B[3], A[2] * B[3] + A[3] * B[2]]
-    o = np.array([
-        o_LL[0] + M31SQ - o_RR[0] + (o_RR[1] % M31) * EXTENSION_I,
-        o_LL[1] + M31SQ - o_RR[1] - (o_RR[0] % M31) * EXTENSION_I,
-        o_LR[0] + o_RL[0],
-        o_LR[1] + o_RL[1]
-    ])
-    return (o % M31).transpose()
+def modinv_ext(x):
+    o = np.zeros_like(x, dtype=np.uint64)
+    o[...,0] = 1
+    power = (2**31-1)**4-2
+    pow_of_x = x
+    while power > 0:
+        if power % 2:
+            o = extension_field_mul(o, pow_of_x)
+        pow_of_x = extension_field_mul(pow_of_x, pow_of_x)
+        power //= 2
+    return o
+
+def extension_point_add(pt1, pt2):
+    return np.array([
+        extension_field_mul(pt1[0], pt2[0])
+        + M31SQ - extension_field_mul(pt1[1], pt2[0]),
+        extension_field_mul(pt1[0], pt2[1]) +
+        extension_field_mul(pt1[1], pt2[0])
+    ], dtype=np.uint64) % M31
 
 def rbo_index_to_original(length, index):
     if length == 1:
@@ -99,9 +103,6 @@ def fold_with_positions(values, domain_size, positions, coeff, first_round):
         positions = positions[::2]
         domain_size //= 2
     return values
-
-def to_extension_field(values):
-    return np.pad(values[...,np.newaxis], ((0,0), (0,3)))
 
 def prove_low_degree(evaluations):
     assert len(evaluations.shape) == 2 and evaluations.shape[-1] == 4

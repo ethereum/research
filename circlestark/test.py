@@ -3,13 +3,13 @@ from fft import fft, inv_fft, log2
 from fri import prove_low_degree, verify_low_degree
 from fast_fft import (
     fft as f_fft, inv_fft as f_inv_fft, np, M31, modinv,
-    sub_domains, bary_eval
+    sub_domains, bary_eval, to_extension_field
 )
 from fast_fri import (
-    prove_low_degree as f_prove_low_degree, to_extension_field,
+    prove_low_degree as f_prove_low_degree,
     verify_low_degree as f_verify_low_degree
 )
-from fast_arithmetize import pad_to
+from fast_arithmetize import pad_to, mk_stark
 import time
 
 def test_basic_arithmetic():
@@ -131,6 +131,15 @@ def test_simple_arithmetize():
     )
     print("Simple arithmetization test passed")
 
+def test_mk_stark():
+    def next_state(state, c): 
+        o = ((state**2 % M31) * state + c[0]) % M31
+        return o
+
+    constants = np.arange(127, dtype=np.uint64).reshape((127,1))
+    start_state = np.array([1], dtype=np.uint64)
+    stark = mk_stark(next_state, start_state, constants)
+
 if __name__ == '__main__':
     test_basic_arithmetic()
     test_fft()
@@ -139,3 +148,4 @@ if __name__ == '__main__':
     test_fast_fri()
     test_mega_fri()
     test_simple_arithmetize()
+    test_mk_stark()
