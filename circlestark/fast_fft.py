@@ -155,7 +155,10 @@ def inv_fft(vals):
     return np.reshape(vals, (size,) + shape_suffix)
 
 def to_extension_field(values):
-    return np.pad(values[...,np.newaxis], ((0,0), (0,3)))
+    return np.pad(
+        values[...,np.newaxis],
+        ((0,0),) * len(values.shape) + ((0,3),)
+    )
 
 def extension_field_mul(A, B):
     # todo: needs moar karatsuba
@@ -217,9 +220,10 @@ def bary_eval_ext(vals, pt):
         else:
             twiddle = invx[full_len*2: full_len*2 + half_len]
             baryfac = pt[0]
+            one = np.array([1,0,0,0], dtype=np.uint64)
             for _ in range(i-1):
                 baryfac = (
-                    (2 * extension_field_mul(baryfac, baryfac) + M31 - 1)
+                    (2 * extension_field_mul(baryfac, baryfac) + M31 - one)
                     % M31
                 )
         twiddle = np.expand_dims(

@@ -1,6 +1,6 @@
 from fast_fft import (
     np, modinv, M31, M31SQ, log2, fft, inv_fft, sub_domains,
-    bary_eval, point_add, to_extension_field
+    bary_eval, point_add, to_extension_field, bary_eval_ext
 )
 from fast_fri import (
     get_challenges, extension_field_mul, extension_point_add,
@@ -162,6 +162,15 @@ def projective_to_point(t):
         extension_field_mul((2 * t) % M31, inv_1pt2)
     ], dtype=np.uint64)
 
+def mulM31(x, y):
+    return x * y % M31
+
+def fold(vector, fold_factors):
+    return np.sum(vector[...,np.newaxis] * fold_factors % M31, axis=-2) % M31
+
+def fold_ext(vector, fold_factors):
+    return np.sum(extension_field_mul(vector, fold_factors), axis=-2) % M31
+
 def mk_stark(get_next_state_vector, start_state, constants):
     rounds = constants.shape[0]
     trace_length = 2**rounds.bit_length()
@@ -169,7 +178,7 @@ def mk_stark(get_next_state_vector, start_state, constants):
     trace = np.zeros((trace_length,) + start_state.shape, dtype=np.uint64)
     trace[0] = start_state
     for i in range(rounds):
-        trace[i+1] = get_next_state_vector(trace[i], constants[i])
+        trace[i+1] = get_next_state_vector(trace[i], constants[i], mulM31)
     output_state = trace[rounds]
     trace_coeffs = fft(trace)
     trace_ext = inv_fft(pad_to(trace_coeffs, trace_length*8))
@@ -189,7 +198,7 @@ def mk_stark(get_next_state_vector, start_state, constants):
     rolled_trace = np.roll(trace_ext, -8)
     for i in range(trace_length * 8):
         C[i] = (
-            get_next_state_vector(trace_ext[i], constants_ext[i])
+            get_next_state_vector(trace_ext[i], constants_ext[i], mulM31)
             + M31 - rolled_trace[i]
         ) % M31
     #C = (get_next_state_vector(trace_ext, constants_ext) + M31 - np.roll(trace_ext, -8)) % M31
@@ -215,45 +224,69 @@ def mk_stark(get_next_state_vector, start_state, constants):
     L = line_function(start_point, output_point, ext_domain)[:,np.newaxis]
     T_quotient = ((trace_ext + M31 - I) * modinv(L)) % M31
     assert confirm_max_degree(fft(T_quotient), trace_length)
-    # Sanity check
-    baryL = bary_eval(L, sub_domains[9999])
-    baryI = bary_eval(I, sub_domains[9999])
-    baryLplus = bary_eval(L, point_add(sub_domains[9999], G))
-    baryIplus = bary_eval(I, point_add(sub_domains[9999], G))
-    assert ((
-        get_next_state_vector(
-            (bary_eval(T_quotient, sub_domains[9999]) * baryL + baryI)[0] % M31,
-            bary_eval(constants_ext, sub_domains[9999])
-        ) + M31 - (
-            bary_eval(T_quotient, point_add(sub_domains[9999], G)) * baryLplus + baryIplus
-        ) % M31
-    ) % M31) * (
-        bary_eval(ext_domain[:,0], sub_domains[9999]) + M31 - start_point[0]
-    ) % M31 == (
-        bary_eval(H, sub_domains[9999])
-        * bary_eval(Z, sub_domains[9999])
-    ) % M31
     T_tree = merkelize(chunkify(T_quotient))
+    K_tree = merkelize(chunkify(constants_ext))
     fold_factors = (
         get_challenges(T_tree[1], M31, 4 * start_state.size)
         .reshape((start_state.size, 4))
     )
     # Fold and prove
-    H_folded = np.sum(H[...,np.newaxis] * fold_factors % M31, axis=-2) % M31
+    H_folded = fold_ext(to_extension_field(H), fold_factors)
     w = projective_to_point(get_challenges(T_tree[1], M31, 4))
     w_plus_G = extension_point_add(w, to_extension_field(G))
 
     Lw = line_function_ext(w, w_plus_G, ext_domain)
-    Iw = interpolant_ext(w, bary_eval(H_folded, w), w_plus_G, bary_eval(H_folded, w_plus_G), ext_domain)
+    Iw = interpolant_ext(w, bary_eval_ext(H_folded, w), w_plus_G, bary_eval_ext(H_folded, w_plus_G), ext_domain)
     H_deep = extension_field_mul(
         (H_folded + M31 - Iw) % M31,
         modinv_ext(Lw)
+    )
+    # Sanity check
+    #Q = to_extension_field(sub_domains[9999])
+    #Q_plus_G = extension_point_add(Q, to_extension_field(G))
+    Q = w
+    Q_plus_G = w_plus_G
+    baryL = bary_eval_ext(to_extension_field(L), Q)
+    baryI = bary_eval_ext(to_extension_field(I), Q)
+    baryLplus = bary_eval_ext(to_extension_field(L), Q_plus_G)
+    baryIplus = bary_eval_ext(to_extension_field(I), Q_plus_G)
+    C_eval = (
+        get_next_state_vector(
+            (extension_field_mul(bary_eval_ext(to_extension_field(T_quotient), Q), baryL) + baryI)[0] % M31,
+            bary_eval_ext(to_extension_field(constants_ext), Q),
+            extension_field_mul
+        ) + M31 - (
+            extension_field_mul(bary_eval_ext(to_extension_field(T_quotient), Q_plus_G), baryLplus) + baryIplus
+        ) % M31
+    ) % M31
+    L_eval = (
+        bary_eval_ext(to_extension_field(ext_domain[:,0]), Q) + M31 - to_extension_field(start_point[0])
+    ) % M31
+    Z_eval = bary_eval_ext(to_extension_field(Z), Q)
+    assert np.array_equal(
+        fold_ext(
+            extension_field_mul(extension_field_mul(C_eval, L_eval), modinv_ext(Z_eval)),
+            fold_factors
+        ),
+        bary_eval_ext(H_folded, Q)
     )
     folded_fri = prove_low_degree(H_deep)
     entropy = b''.join(folded_fri["roots"] + [x.astype(np.uint32).tobytes() for x in folded_fri["final_values"]])
     challenges = get_challenges(
         entropy, H_deep.shape[0], NUM_CHALLENGES
     )
-    branches = [get_branch(T_tree, c) for c in challenges]
+    TQ_branches = [get_branch(T_tree, c) for c in challenges]
+    K_branches = [get_branch(K_tree, c) for c in challenges]
 
-    return folded_fri, branches
+    return {
+        "fri": folded_fri,
+        "TQ_branches": TQ_branches,
+        "TQ_leaves": T_quotient[challenges],
+        "K_branches": K_branches,
+        "K_leaves": constants_ext[challenges],
+        "H_at_w": bary_eval_ext(H_folded, w),
+        "H_at_w_plus_G": bary_eval_ext(H_folded, w_plus_G)
+    }
+
+def verify_stark(next_state, constants_root, start_state, end_state, stark):
+    pass

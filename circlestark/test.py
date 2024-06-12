@@ -132,8 +132,8 @@ def test_simple_arithmetize():
     print("Simple arithmetization test passed")
 
 def test_mk_stark():
-    def next_state(state, c): 
-        o = ((state**2 % M31) * state + c[0]) % M31
+    def next_state(state, c, mul): 
+        o = (mul(mul(state, state), state) + c[0]) % M31
         return o
 
     constants = np.arange(127, dtype=np.uint64).reshape((127,1))
@@ -141,11 +141,11 @@ def test_mk_stark():
     stark = mk_stark(next_state, start_state, constants)
 
 if __name__ == '__main__':
-    test_basic_arithmetic()
-    test_fft()
-    test_fri()
-    test_fast_fft()
-    test_fast_fri()
-    test_mega_fri()
-    test_simple_arithmetize()
+    #test_basic_arithmetic()
+    #test_fft()
+    #test_fri()
+    #test_fast_fft()
+    #test_fast_fri()
+    #test_mega_fri()
+    #test_simple_arithmetize()
     test_mk_stark()

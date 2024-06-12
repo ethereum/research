@@ -54,7 +54,7 @@ def modinv_ext(x):
 def extension_point_add(pt1, pt2):
     return np.array([
         extension_field_mul(pt1[0], pt2[0])
-        + M31SQ - extension_field_mul(pt1[1], pt2[0]),
+        + M31SQ - extension_field_mul(pt1[1], pt2[1]),
         extension_field_mul(pt1[0], pt2[1]) +
         extension_field_mul(pt1[1], pt2[0])
     ], dtype=np.uint64) % M31
