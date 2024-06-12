@@ -113,7 +113,7 @@ def prove_low_degree(evaluations):
     roots = []
     # Prove descent
     rounds = log2(len(evaluations) // BASE_CASE_SIZE) // FOLDS_PER_ROUND
-    print("Generating proof")
+    print("Generating FRI proof")
     for i in range(rounds):
         leaves.append(values)
         trees.append(merkelize(chunkify(values)))
@@ -158,7 +158,7 @@ def verify_low_degree(proof):
     leaf_values = proof["leaf_values"]
     final_values = proof["final_values"]
     len_evaluations = final_values.shape[0] << (FOLDS_PER_ROUND * len(roots))
-    print("Verifying proof")
+    print("Verifying FRI proof")
     # Prove descent
     entropy = b''.join(
         roots

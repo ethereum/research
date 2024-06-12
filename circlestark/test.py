@@ -9,7 +9,7 @@ from fast_fri import (
     prove_low_degree as f_prove_low_degree,
     verify_low_degree as f_verify_low_degree
 )
-from fast_arithmetize import pad_to, mk_stark
+from fast_arithmetize import pad_to, mk_stark, verify_stark, get_vk
 import time
 
 def test_basic_arithmetic():
@@ -138,7 +138,12 @@ def test_mk_stark():
 
     constants = np.arange(127, dtype=np.uint64).reshape((127,1))
     start_state = np.array([1], dtype=np.uint64)
+    print("Generating STARK")
     stark = mk_stark(next_state, start_state, constants)
+    vk = get_vk(constants)
+    print("Verifying STARK")
+    verify_stark(next_state, vk, start_state, stark)
+    print("Verified!")
 
 if __name__ == '__main__':
     #test_basic_arithmetic()

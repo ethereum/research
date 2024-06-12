@@ -4,7 +4,7 @@ from fast_fft import (
 )
 from fast_fri import (
     get_challenges, extension_field_mul, extension_point_add,
-    modinv_ext, prove_low_degree
+    modinv_ext, prove_low_degree, verify_low_degree
 )
 from merkle import merkelize, hash, get_branch, verify_branch
 
@@ -15,6 +15,8 @@ def mk_junk_data(length):
 round_constants = mk_junk_data(1536).reshape((64, 24))
 
 NUM_CHALLENGES = 80
+FOLDS_PER_ROUND = 3
+FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
 
 mds44 = np.array([
     [5, 7, 1, 3],
@@ -118,7 +120,14 @@ def line_function_ext(P1, P2, domain):
     c = (M31 * 2 - (
         extension_field_mul(a, P1[0]) + extension_field_mul(b, P1[1])
     )) % M31
-    return (a * domain[:,0,np.newaxis] + b * domain[:,1,np.newaxis] + c) % M31
+    if len(domain.shape) == 2:
+        return (a * domain[:,0,np.newaxis] + b * domain[:,1,np.newaxis] + c) % M31
+    else:
+        return (
+            extension_field_mul(a, domain[:,0])
+            + extension_field_mul(b, domain[:,1])
+            + c
+        ) % M31
 
 def interpolant(P1, v1, P2, v2, domain):
     if P1[0] == P2[0]:
@@ -140,12 +149,10 @@ def interpolant_ext(P1, v1, P2, v2, domain):
         (v2 + M31 - v1) % M31,
         modinv_ext((coord2 + M31 - coord1) % M31)
     )
+    if len(domain_coords.shape) == 1:
+        domain_coords = to_extension_field(domain_coords)
     return (
-        v1 +
-        extension_field_mul(
-            to_extension_field(domain_coords) + M31 - coord1,
-            slope
-        )
+        v1 + extension_field_mul(domain_coords + M31 - coord1, slope)
     ) % M31
 
 def chunkify(values):
@@ -172,7 +179,8 @@ def fold_ext(vector, fold_factors):
     return np.sum(extension_field_mul(vector, fold_factors), axis=-2) % M31
 
 def mk_stark(get_next_state_vector, start_state, constants):
-    rounds = constants.shape[0]
+    rounds, constants_width = constants.shape[:2]
+    width = start_state.shape[0]
     trace_length = 2**rounds.bit_length()
     print('Trace length: {}'.format(trace_length))
     trace = np.zeros((trace_length,) + start_state.shape, dtype=np.uint64)
@@ -226,67 +234,131 @@ def mk_stark(get_next_state_vector, start_state, constants):
     assert confirm_max_degree(fft(T_quotient), trace_length)
     T_tree = merkelize(chunkify(T_quotient))
     K_tree = merkelize(chunkify(constants_ext))
-    fold_factors = (
-        get_challenges(T_tree[1], M31, 4 * start_state.size)
-        .reshape((start_state.size, 4))
-    )
     # Fold and prove
-    H_folded = fold_ext(to_extension_field(H), fold_factors)
     w = projective_to_point(get_challenges(T_tree[1], M31, 4))
     w_plus_G = extension_point_add(w, to_extension_field(G))
+    L3 = line_function_ext(w, w_plus_G, ext_domain)
+    H_at_w = bary_eval_ext(to_extension_field(H), w)
+    H_at_w_plus_G = bary_eval_ext(to_extension_field(H), w_plus_G)
+    TQ_at_w = bary_eval_ext(to_extension_field(T_quotient), w)
+    TQ_at_w_plus_G = bary_eval_ext(to_extension_field(T_quotient), w_plus_G)
+    K_at_w = bary_eval_ext(to_extension_field(constants_ext), w)
+    K_at_w_plus_G = bary_eval_ext(to_extension_field(constants_ext), w_plus_G)
+    entropy = T_tree[1] + b''.join(
+        H_at_w.astype(np.uint32).tobytes() for x in
+        (TQ_at_w, TQ_at_w_plus_G, H_at_w, H_at_w_plus_G, K_at_w, K_at_w_plus_G)
+    )
+    fold_factors = (
+        get_challenges(T_tree[1], M31, (width * 2 + constants_width) * 4)
+        .reshape((width * 2 + constants_width, 4))
+    )
+    merge_factor = get_challenges(entropy, M31, 4)
+    merged_poly = (
+        fold_ext(to_extension_field(T_quotient), fold_factors[:width]) + 
+        fold_ext(to_extension_field(H), fold_factors[width: width*2]) +
+        fold_ext(to_extension_field(constants_ext), fold_factors[width*2:])
+    ) % M31
+    I3 = interpolant_ext(
+        w,
+        bary_eval_ext(merged_poly, w),
+        w_plus_G,
+        bary_eval_ext(merged_poly, w_plus_G),
+        ext_domain
+    )
+    master_quotient = extension_field_mul(
+        (merged_poly + M31 - I3) % M31,
+        modinv_ext(L3)
+    )
 
-    Lw = line_function_ext(w, w_plus_G, ext_domain)
-    Iw = interpolant_ext(w, bary_eval_ext(H_folded, w), w_plus_G, bary_eval_ext(H_folded, w_plus_G), ext_domain)
-    H_deep = extension_field_mul(
-        (H_folded + M31 - Iw) % M31,
-        modinv_ext(Lw)
-    )
-    # Sanity check
-    #Q = to_extension_field(sub_domains[9999])
-    #Q_plus_G = extension_point_add(Q, to_extension_field(G))
-    Q = w
-    Q_plus_G = w_plus_G
-    baryL = bary_eval_ext(to_extension_field(L), Q)
-    baryI = bary_eval_ext(to_extension_field(I), Q)
-    baryLplus = bary_eval_ext(to_extension_field(L), Q_plus_G)
-    baryIplus = bary_eval_ext(to_extension_field(I), Q_plus_G)
-    C_eval = (
-        get_next_state_vector(
-            (extension_field_mul(bary_eval_ext(to_extension_field(T_quotient), Q), baryL) + baryI)[0] % M31,
-            bary_eval_ext(to_extension_field(constants_ext), Q),
-            extension_field_mul
-        ) + M31 - (
-            extension_field_mul(bary_eval_ext(to_extension_field(T_quotient), Q_plus_G), baryLplus) + baryIplus
-        ) % M31
-    ) % M31
-    L_eval = (
-        bary_eval_ext(to_extension_field(ext_domain[:,0]), Q) + M31 - to_extension_field(start_point[0])
-    ) % M31
-    Z_eval = bary_eval_ext(to_extension_field(Z), Q)
-    assert np.array_equal(
-        fold_ext(
-            extension_field_mul(extension_field_mul(C_eval, L_eval), modinv_ext(Z_eval)),
-            fold_factors
-        ),
-        bary_eval_ext(H_folded, Q)
-    )
-    folded_fri = prove_low_degree(H_deep)
+    folded_fri = prove_low_degree(master_quotient)
+    assert verify_low_degree(folded_fri)
     entropy = b''.join(folded_fri["roots"] + [x.astype(np.uint32).tobytes() for x in folded_fri["final_values"]])
     challenges = get_challenges(
-        entropy, H_deep.shape[0], NUM_CHALLENGES
+        entropy, master_quotient.shape[0], NUM_CHALLENGES
     )
     TQ_branches = [get_branch(T_tree, c) for c in challenges]
     K_branches = [get_branch(K_tree, c) for c in challenges]
 
     return {
+        "output_state": output_state,
         "fri": folded_fri,
+        "TQ_root": T_tree[1],
         "TQ_branches": TQ_branches,
         "TQ_leaves": T_quotient[challenges],
         "K_branches": K_branches,
         "K_leaves": constants_ext[challenges],
-        "H_at_w": bary_eval_ext(H_folded, w),
-        "H_at_w_plus_G": bary_eval_ext(H_folded, w_plus_G)
+        "H_at_w": H_at_w,
+        "H_at_w_plus_G": H_at_w_plus_G,
+        "TQ_at_w": TQ_at_w,
+        "TQ_at_w_plus_G": TQ_at_w_plus_G,
+        "K_at_w": K_at_w,
+        "K_at_w_plus_G": K_at_w_plus_G
     }
 
-def verify_stark(next_state, constants_root, start_state, end_state, stark):
-    pass
+def get_vk(constants):
+    rounds = constants.shape[0]
+    trace_length = 2**rounds.bit_length()
+    constants_coeffs = fft(pad_to(constants, trace_length))
+    constants_ext = inv_fft(pad_to(constants_coeffs, trace_length*8))
+    return {
+        "root": merkelize(chunkify(constants_ext))[1],
+        "rounds": rounds
+    }
+    
+
+def verify_stark(get_next_state_vector, vk, start_state, proof):
+    fri = proof["fri"]
+    len_evaluations = (
+        fri["final_values"].shape[0] << (FOLDS_PER_ROUND * len(fri["roots"]))
+    )
+    TQ_at_w = proof["TQ_at_w"]
+    TQ_at_w_plus_G = proof["TQ_at_w_plus_G"]
+    H_at_w = proof["H_at_w"]
+    H_at_w_plus_G = proof["H_at_w_plus_G"]
+    K_at_w = proof["K_at_w"]
+    K_at_w_plus_G = proof["K_at_w_plus_G"]
+    K_root = vk["root"]
+    rounds = vk["rounds"]
+    trace_length = len_evaluations // 8
+    G = sub_domains[trace_length//2]
+    start_point = sub_domains[trace_length]
+    output_point = sub_domains[trace_length + rounds]
+    output_state = proof["output_state"]
+    TQ_root = proof["TQ_root"]
+    w = projective_to_point(get_challenges(TQ_root, M31, 4))
+    w_plus_G = extension_point_add(w, to_extension_field(G))
+    L_at_w, L_at_w_plus_G = line_function_ext(
+        to_extension_field(start_point),
+        to_extension_field(output_point),
+        np.array([w, w_plus_G])
+    )
+    I_at_w, I_at_w_plus_G = interpolant_ext(
+        to_extension_field(start_point),
+        to_extension_field(start_state),
+        to_extension_field(output_point),
+        to_extension_field(output_state),
+        np.array([w, w_plus_G])
+    )
+    C_eval = (
+        get_next_state_vector(
+            (extension_field_mul(TQ_at_w, L_at_w) + I_at_w)[0] % M31,
+            K_at_w,
+            extension_field_mul
+        ) + M31 - (
+            extension_field_mul(TQ_at_w_plus_G, L_at_w_plus_G) + I_at_w_plus_G
+        ) % M31
+    ) % M31
+    # Z = ext_domain[:,0,np.newaxis]
+    # for i in range(1, log2(trace_length)):
+    #     Z = (2 * Z**2 + M31 - 1) % M31
+    Z_at_w = np.array([w[0]])
+    one = np.array([1,0,0,0], dtype=np.uint64)
+    for i in range(1, log2(trace_length)):
+        Z_at_w = (2 * extension_field_mul(Z_at_w, Z_at_w) + M31 - one) % M31
+    L_eval = (
+        w[0] + M31 - to_extension_field(start_point[0])
+    ) % M31
+    assert np.array_equal(
+        extension_field_mul(extension_field_mul(C_eval, L_eval), modinv_ext(Z_at_w)),
+        H_at_w
+    )
