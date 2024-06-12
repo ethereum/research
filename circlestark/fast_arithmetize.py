@@ -436,11 +436,11 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
         sub_domains[trace_length * 8 + challenges, 0]
         + M31 - start_point[0]
     ) % M31
-    L3_leaves = line_function_ext(
+    inv_L3_leaves = modinv_ext(line_function_ext(
         w,
         w_plus_G,
         sub_domains[trace_length * 8 + challenges]
-    )
+    ))
     M_at_w = (
         fold_ext(TQ_at_w, fold_factors[:width]) +
         fold_ext(H_at_w, fold_factors[width:width*2]) +
@@ -481,7 +481,7 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
         ) % M31
         computed_U_leaf = extension_field_mul(
             (merged_leaf + M31 - I3_leaves[i]) % M31,
-            modinv_ext(L3_leaves[i])
+            inv_L3_leaves[i]
         )
         assert np.array_equal(computed_U_leaf, U_leaf)
 
