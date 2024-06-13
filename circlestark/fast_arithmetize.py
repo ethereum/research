@@ -9,90 +9,9 @@ from fast_fri import (
 )
 from merkle import merkelize, hash, get_branch, verify_branch
 
-def mk_junk_data(length):
-    a = np.arange(length, length*2, dtype=np.uint64)
-    return ((3**a) ^ (7**a)) % M31
-
-round_constants = mk_junk_data(1536).reshape((64, 24))
-
 NUM_CHALLENGES = 80
 FOLDS_PER_ROUND = 3
 FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
-
-mds44 = np.array([
-    [5, 7, 1, 3],
-    [4, 6, 1, 1],
-    [1, 3, 5, 7],
-    [1, 1, 4, 6]
-], dtype=np.uint64)
-
-mds = np.zeros((24, 24), dtype=np.uint64)
-for i in range(0, 24, 4):
-    for j in range(0, 24, 4):
-        mds[i:i+4, j:j+4] = mds44 * (2 if i==j else 1)
-
-# 0: state[0...23] = state_prev[0...23] ** 2, state[24...47] = state_prev[0...23]
-# 1: state[0...23] = state_prev[0...23] ** 2, state[24...47] = state_prev[24...47]
-# 2: state[0...23] = state_prev[0...23] * state_prev[24...47], state_prev[24...47] = 0
-# 3: state[0] = state_prev[0]**2, state[24] = state_prev[0]
-# 4: state[0] = state_prev[0]**2, state[24] = state_prev[24]
-# 5: state[0] = state_prev[0] * state_prev[24]
-# 6: state[0...23] = MDS * state_prev[0...23], state_prev[24...47] = 0
-
-# N(P(x) = P(xw))
-# C(P(xw), P(x)) = N(P(x)) - P(xw) = 0
-
-def get_next_state_vector(state, c):
-    L = state[...,:24]
-    R = state[...,24:]
-    L_plus_rc = (L + c[...,8:]) % M31
-
-    new_L = (
-        c[...,0] * (L_plus_rc ** 2) +
-        c[...,1] * (L ** 2) +
-        c[...,2] * (L * R) +
-        c[...,3] * np.append(L_plus_rc[:1] ** 2, L_plus_rc[1:], axis=0) +
-        c[...,4] * np.append(L[:1] ** 2, L[1:24], axis=0) +
-        c[...,5] * np.append(L[:1] * R[:1], L[1:24], axis=0) +
-        c[...,6] * np.matmul(L, mds)
-    ) % M31
-    new_R = (
-        c[...,0] * L_plus_rc +
-        c[...,1] * R +
-        c[...,3] * L_plus_rc +
-        c[...,4] * R
-    )
-    return np.append(new_L, new_R, axis=-1)
-
-OUTER = [
-    [1,0,0,0,0,0,0,0],
-    [0,1,0,0,0,0,0,0],
-    [0,0,1,0,0,0,0,0],
-    [0,0,0,0,0,0,1,0]
-]
-
-INNER = [
-    [0,0,0,1,0,0,0,0],
-    [0,0,0,0,1,0,0,0],
-    [0,0,0,0,0,1,0,0],
-    [0,0,0,0,0,0,1,0]
-]
-
-constants_vector = np.array(
-    OUTER * 4 + INNER * 56 + OUTER * 4,
-    dtype=np.uint64
-)
-constants_vector = np.pad(constants_vector, ((0,0),(0,24)))
-constants_vector[::4, 8:] = round_constants
-
-def arith_hash(in1, in2):
-    state = np.zeros(48, dtype=np.uint64)
-    state[:8] = in1
-    state[8:16] = in2
-    for i in range(256):
-        #print('Round {}: {}'.format(i, [int(x) for x in state[:3]]))
-        state = get_next_state_vector(state, constants_vector[i])
-    return state[8:16]
 
 def pad_to(arr, new_len):
     return np.pad(
@@ -101,26 +20,22 @@ def pad_to(arr, new_len):
     )
 
 def confirm_max_degree(coeffs, bound):
+    #print(coeffs, bound, coeffs[:bound+4])
     return np.array_equal(coeffs[bound:], np.zeros_like(coeffs[bound:]))
 
 def line_function(P1, P2, domain):
-    denominator = (P1[0] * P2[1] + M31SQ - P1[1] * P2[0]) % M31
-    a = (P2[1] + M31 - P1[1]) * modinv(denominator) % M31
-    b = (P1[0] + M31 - P2[0]) * modinv(denominator) % M31
-    c = (M31SQ * 2 - (a * P1[0] + b * P1[1])) % M31
+    a = (P2[1] + M31 - P1[1]) % M31
+    b = (P1[0] + M31 - P2[0]) % M31
+    c = (M31SQ + P2[0] * P1[1] - P1[0] * P2[1]) % M31
     return (a * domain[:,0] + b * domain[:,1] + c) % M31
 
 def line_function_ext(P1, P2, domain):
-    denominator = (
-        extension_field_mul(P1[0], P2[1])
-        + M31 - extension_field_mul(P1[1], P2[0])
+    a = (P2[1] + M31 - P1[1]) % M31
+    b = (P1[0] + M31 - P2[0]) % M31
+    c = (
+        extension_field_mul(P2[0], P1[1])
+        + M31 - extension_field_mul(P1[0], P2[1])
     ) % M31
-    inv_denominator = modinv_ext(denominator)
-    a = extension_field_mul((P2[1] + M31 - P1[1]) % M31, inv_denominator)
-    b = extension_field_mul((P1[0] + M31 - P2[0]) % M31, inv_denominator)
-    c = (M31 * 2 - (
-        extension_field_mul(a, P1[0]) + extension_field_mul(b, P1[1])
-    )) % M31
     if len(domain.shape) == 2:
         return (a * domain[:,0,np.newaxis] + b * domain[:,1,np.newaxis] + c) % M31
     else:
@@ -133,12 +48,13 @@ def line_function_ext(P1, P2, domain):
 def interpolant(P1, v1, P2, v2, domain):
     if P1[0] == P2[0]:
         slope = (v2 + M31 - v1) * modinv(P2[1] + M31 - P1[1]) % M31
-        return v1 + (domain[:,1] + M31 - P1[1]) * slope % M31
+        return v1 + (domain[:,1,np.newaxis] + M31 - P1[1]) * slope % M31
     else:
         slope = (v2 + M31 - v1) * modinv(P2[0] + M31 - P1[0]) % M31
-        return v1 + (domain[:,0] + M31 - P1[0]) * slope % M31
+        return v1 + (domain[:,0,np.newaxis] + M31 - P1[0]) * slope % M31
 
 def interpolant_ext(P1, v1, P2, v2, domain):
+    assert v1.shape[-1] == v2.shape[-1] == 4
     if np.array_equal(P1[0], P2[0]):
         coord1, coord2 = P1[1], P2[1]
         domain_coords = domain[:,1]
@@ -179,55 +95,72 @@ def fold(vector, fold_factors):
 def fold_ext(vector, fold_factors):
     return np.sum(extension_field_mul(vector, fold_factors), axis=-2) % M31
 
+m31_arith = (1, lambda *x: sum(x) % M31, lambda x,y: x*y % M31)
+ext_arith = (
+    np.array([1,0,0,0], dtype=np.uint64),
+    lambda *x: sum(x) % M31,
+    extension_field_mul
+)
+
 def mk_stark(get_next_state_vector, start_state, constants):
     rounds, constants_width = constants.shape[:2]
     width = start_state.shape[0]
-    trace_length = 2**rounds.bit_length()
+    trace_length = 2**(rounds+1).bit_length()
     print('Trace length: {}'.format(trace_length))
     trace = np.zeros((trace_length,) + start_state.shape, dtype=np.uint64)
     trace[0] = start_state
-    for i in range(rounds):
-        trace[i+1] = get_next_state_vector(trace[i], constants[i], mulM31)
+    for i in range(trace_length-1):
+        trace[i+1] = get_next_state_vector(
+            trace[i],
+            constants[i] if i < rounds else np.zeros_like(constants[0]),
+            m31_arith
+        )
     output_state = trace[rounds]
     trace_coeffs = fft(trace)
+    trace_ext4 = inv_fft(pad_to(trace_coeffs, trace_length*4))
     trace_ext = inv_fft(pad_to(trace_coeffs, trace_length*8))
     constants_coeffs = fft(pad_to(constants, trace_length))
+    constants_ext4 = inv_fft(pad_to(constants_coeffs, trace_length*4))
     constants_ext = inv_fft(pad_to(constants_coeffs, trace_length*8))
     assert confirm_max_degree(fft(constants_ext), trace_length)
     assert confirm_max_degree(fft(trace_ext), trace_length)
     ext_domain = sub_domains[trace_length*8: trace_length*16]
     start_point = sub_domains[trace_length]
     output_point = sub_domains[trace_length + rounds]
+    nm1_point = sub_domains[trace_length*2-1]
+    nm2_point = sub_domains[trace_length*2-2]
     G = sub_domains[trace_length//2]
     # Trace must satisfy
     #   C(T[x], T[x+G]) * (X - p0)
     # = Z(x) * H(x)
-    C = np.zeros_like(trace_ext)
-    rolled_trace = np.roll(trace_ext, -8)
-    for i in range(trace_length * 8):
-        C[i] = (
-            get_next_state_vector(trace_ext[i], constants_ext[i], mulM31)
-            + M31 - rolled_trace[i]
+    C4 = np.zeros((trace_length * 4, width))
+    rolled_trace4 = np.roll(trace_ext4, -4, axis=0)
+    for i in range(trace_length * 4):
+        C4[i] = (
+            get_next_state_vector(trace_ext4[i], constants_ext4[i], m31_arith)
+            + M31 - rolled_trace4[i]
         ) % M31
-    assert confirm_max_degree(fft(np.roll(trace_ext, -8)), trace_length)
+    C = inv_fft(pad_to(fft(C4), trace_length*8))
+    assert confirm_max_degree(fft(np.roll(trace_ext, -8, axis=0)), trace_length)
     assert confirm_max_degree(fft(C), trace_length*3+1)
     C_exempt_start = C * (
-        ext_domain[:,0,np.newaxis]
-        + M31 - start_point[0]
+        #ext_domain[:,0,np.newaxis]
+        #+ M31 - start_point[0]
+        line_function(nm1_point, nm2_point, ext_domain)[:,np.newaxis]
     ) % M31
     C_coeffs = fft(C_exempt_start)
-    assert confirm_max_degree(C_coeffs, trace_length*3+2)
+    assert confirm_max_degree(C_coeffs, trace_length*3+3)
     Z = ext_domain[:,0,np.newaxis]
     for i in range(1, log2(trace_length)):
         Z = (2 * Z**2 + M31 - 1) % M31
     H = C_exempt_start * modinv(Z) % M31
     H_coeffs = fft(H)
-    assert confirm_max_degree(H_coeffs, trace_length*2+2)
+    assert confirm_max_degree(H_coeffs, trace_length*2+3)
     I = interpolant(
         start_point, start_state,
         output_point, output_state,
         ext_domain
-    )[:,np.newaxis]
+    )
     L = line_function(start_point, output_point, ext_domain)[:,np.newaxis]
     T_quotient = ((trace_ext + M31 - I) * modinv(L)) % M31
     assert confirm_max_degree(fft(T_quotient), trace_length)
@@ -339,52 +272,66 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
     rounds = vk["rounds"]
     constants_width = vk["constants_width"]
     width = start_state.shape[0]
-    trace_length = len_evaluations // 8
+    trace_length = 2**(rounds+1).bit_length()
     G = sub_domains[trace_length//2]
     start_point = sub_domains[trace_length]
     output_point = sub_domains[trace_length + rounds]
+    nm1_point = sub_domains[trace_length*2-1]
+    nm2_point = sub_domains[trace_length*2-2]
     output_state = proof["output_state"]
     TQ_root = proof["TQ_root"]
     w = projective_to_point(get_challenges(TQ_root, M31, 4))
     w_plus_G = extension_point_add(w, to_extension_field(G))
-    L_at_w, L_at_w_plus_G = line_function_ext(
+    L_at_w = line_function_ext(
         to_extension_field(start_point),
         to_extension_field(output_point),
-        np.array([w, w_plus_G])
+        np.repeat(np.array([w]), width, axis=0)
     )
-    I_at_w, I_at_w_plus_G = interpolant_ext(
+    L_at_w_plus_G = line_function_ext(
+        to_extension_field(start_point),
+        to_extension_field(output_point),
+        np.repeat(np.array([w_plus_G]), width, axis=0)
+    )
+    L2_at_w = line_function_ext(
+        to_extension_field(nm1_point),
+        to_extension_field(nm2_point),
+        np.repeat(np.array([w]), width, axis=0)
+    )
+    I_at_w = interpolant_ext(
         to_extension_field(start_point),
         to_extension_field(start_state),
         to_extension_field(output_point),
         to_extension_field(output_state),
-        np.array([w, w_plus_G])
+        np.array([w])
     )
+    I_at_w_plus_G = interpolant_ext(
+        to_extension_field(start_point),
+        to_extension_field(start_state),
+        to_extension_field(output_point),
+        to_extension_field(output_state),
+        np.array([w_plus_G])
+    )
+    T_at_w = (extension_field_mul(TQ_at_w, L_at_w) + I_at_w) % M31
+    T_at_w_plus_G = (
+        extension_field_mul(TQ_at_w_plus_G, L_at_w_plus_G)
+        + I_at_w_plus_G
+    ) % M31
     C_eval = (
-        get_next_state_vector(
-            (extension_field_mul(TQ_at_w, L_at_w) + I_at_w)[0] % M31,
-            K_at_w,
-            extension_field_mul
-        ) + M31 - (
-            extension_field_mul(TQ_at_w_plus_G, L_at_w_plus_G) + I_at_w_plus_G
-        ) % M31
+        get_next_state_vector(T_at_w, K_at_w, ext_arith)
+        + M31 - T_at_w_plus_G
     ) % M31
     # Z = ext_domain[:,0,np.newaxis]
     # for i in range(1, log2(trace_length)):
     #     Z = (2 * Z**2 + M31 - 1) % M31
     Z_at_w = np.array([w[0]])
-    one = np.array([1,0,0,0], dtype=np.uint64)
+    one, _, _ = ext_arith
     for i in range(1, log2(trace_length)):
         Z_at_w = (2 * extension_field_mul(Z_at_w, Z_at_w) + M31 - one) % M31
-    L2_eval = (
-        w[0] + M31 - to_extension_field(start_point[0])
-    ) % M31
-    assert np.array_equal(
-        extension_field_mul(
-            extension_field_mul(C_eval, L2_eval),
-            modinv_ext(Z_at_w)
-        ),
-        H_at_w
+    computed_H_at_w = extension_field_mul(
+        extension_field_mul(C_eval, L2_at_w),
+        modinv_ext(Z_at_w)
     )
+    assert np.array_equal(H_at_w, computed_H_at_w)
     entropy = b''.join(
         fri_proof["roots"] +
         [x.astype(np.uint32).tobytes() for x in fri_proof["final_values"]]
@@ -432,10 +379,11 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
     one = np.array([1,0,0,0], dtype=np.uint64)
     for i in range(1, log2(trace_length)):
         Z_leaves = (2 * Z_leaves ** 2 + M31 - 1) % M31
-    L2_leaves = (
-        sub_domains[trace_length * 8 + challenges, 0]
-        + M31 - start_point[0]
-    ) % M31
+    L2_leaves = line_function(
+        nm1_point,
+        nm2_point,
+        sub_domains[trace_length * 8 + challenges]
+    )
     inv_L3_leaves = modinv_ext(line_function_ext(
         w,
         w_plus_G,
@@ -470,7 +418,7 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
             + I_leaves[i + NUM_CHALLENGES]
         ) % M31
         C_leaf = (
-            get_next_state_vector(T_leaf, K_leaf, mulM31)
+            get_next_state_vector(T_leaf, K_leaf, m31_arith)
             + M31 - T_next_leaf
         ) % M31
         H_leaf = ((C_leaf * L2_leaves[i]) % M31) * modinv(Z_leaves[i]) % M31
@@ -496,3 +444,4 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
             TQ_root, nci, b(TQ_next_leaves[i]), TQ_next_branches[i])
         assert verify_branch(
             K_root, ci, b(K_leaves[i]), K_branches[i])
+    return True

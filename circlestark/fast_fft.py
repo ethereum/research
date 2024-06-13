@@ -162,8 +162,8 @@ def to_extension_field(values):
 
 def extension_field_mul(A, B):
     # todo: needs moar karatsuba
-    A = A.transpose()
-    B = B.transpose()
+    A = A.transpose((-1,)+tuple(range(len(A.shape)-1)))
+    B = B.transpose((-1,)+tuple(range(len(B.shape)-1)))
     o_LL = [A[0] * B[0] + M31SQ - A[1] * B[1], A[0] * B[1] + A[1] * B[0]]
     o_LR = [A[0] * B[2] + M31SQ - A[1] * B[3], A[0] * B[3] + A[1] * B[2]]
     o_RL = [A[2] * B[0] + M31SQ - A[3] * B[1], A[2] * B[1] + A[3] * B[0]]
@@ -174,7 +174,7 @@ def extension_field_mul(A, B):
         o_LR[0] + o_RL[0],
         o_LR[1] + o_RL[1]
     ], dtype=np.uint64)
-    return (o % M31).transpose()
+    return (o % M31).transpose(tuple(range(1, len(o.shape)))+(0,))
 
 def bary_eval(vals, pt):
     vals = np.array(vals, dtype=np.uint64)

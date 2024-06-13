@@ -1,3 +1,4 @@
+import sys
 from fields import S, M, B, ES, EM, EB
 from fft import fft, inv_fft, log2
 from fri import prove_low_degree, verify_low_degree
@@ -10,6 +11,9 @@ from fast_fri import (
     verify_low_degree as f_verify_low_degree
 )
 from fast_arithmetize import pad_to, mk_stark, verify_stark, get_vk
+from poseidon import (
+    poseidon_hash, arith_hash, poseidon_next_state, poseidon_constants
+)
 import time
 
 def test_basic_arithmetic():
@@ -132,25 +136,52 @@ def test_simple_arithmetize():
     print("Simple arithmetization test passed")
 
 def test_mk_stark():
-    def next_state(state, c, mul): 
-        o = (mul(mul(state, state), state) + c[0]) % M31
+    def next_state(state, c, arith): 
+        one, add, mul = arith
+        o = np.array([
+            add(mul(mul(state[0], state[0]), state[1]), c[0]),
+            add(mul(mul(state[1], state[1]), state[2]), c[0]),
+            add(mul(mul(state[2], state[2]), state[0]), c[0], one),
+        ])
         return o
 
-    constants = np.arange(127, dtype=np.uint64).reshape((127,1))
-    start_state = np.array([1], dtype=np.uint64)
+    constants = np.arange(100, dtype=np.uint64).reshape((100,1))
+    start_state = np.array([1,1,2], dtype=np.uint64)
     print("Generating STARK")
     stark = mk_stark(next_state, start_state, constants)
     vk = get_vk(constants)
     print("Verifying STARK")
-    verify_stark(next_state, vk, start_state, stark)
+    assert verify_stark(next_state, vk, start_state, stark)
+    print("Verified!")
+
+def test_poseidon_stark():
+    in1 = np.arange(8, dtype=np.uint64)
+    in2 = np.arange(8, 16, dtype=np.uint64)
+    h1 = poseidon_hash(in1, in2)
+    print("Directly computed hash:", h1)
+    h2 = arith_hash(in1, in2)
+    print("Hash from arithmetization:", h2)
+    #assert np.array_equal(h1, h2)
+    vk = get_vk(poseidon_constants)
+    print("Generating Poseidon STARK")
+    start_state = np.append(np.append(in1, in2), np.zeros(32, dtype=np.uint64))
+    stark = mk_stark(poseidon_next_state, start_state, poseidon_constants)
+    print("Generated")
+    print("Verifying Poseidon STARK")
+    assert verify_stark(poseidon_next_state, vk, start_state, stark)
     print("Verified!")
 
 if __name__ == '__main__':
-    #test_basic_arithmetic()
-    #test_fft()
-    #test_fri()
-    #test_fast_fft()
-    #test_fast_fri()
-    #test_mega_fri()
-    #test_simple_arithmetize()
-    test_mk_stark()
+    for name, func in dict(locals()).items():
+        if name in sys.argv:
+            func()
+    if len(sys.argv) <= 1:
+        test_basic_arithmetic()
+        test_fft()
+        test_fri()
+        test_fast_fft()
+        test_fast_fri()
+        test_mega_fri()
+        test_simple_arithmetize()
+        test_mk_stark()
+        test_poseidon_stark()
