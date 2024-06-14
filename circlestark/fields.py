@@ -109,8 +109,23 @@ class ExtendedFieldElement():
             return self.__pow__(other % 2) * self.__pow__(other // 2) ** 2
 
     def inv(self):
-        return self ** (self.modulus ** 4 - 2)
-
+        # return self ** (self.modulus ** 4 - 2)
+        x0, x1, x2, x3 = self.value
+        r20 = x2*x2 - x3*x3
+        r21 = 2 * x2 * x3
+        denom0 = x0**2 - x1**2 + r20 - r21 * 2
+        denom1 = 2*x0*x1 + r21 + r20 * 2
+        inv_denom_norm = (denom0 ** 2 + denom1 ** 2).inv()
+        inv_denom0 = denom0 * inv_denom_norm
+        inv_denom1 = -denom1 * inv_denom_norm
+        o = self.__class__([
+            x0 * inv_denom0 - x1 * inv_denom1,
+            x0 * inv_denom1 + x1 * inv_denom0,
+            -x2 * inv_denom0 + x3 * inv_denom1,
+            -x2 * inv_denom1 - x3 * inv_denom0,
+        ])
+        return o
+    
     def __truediv__(self, other):
         other = self.__class__(self._to_list(other))
         if other.value[1:] == [0,0,0]:

@@ -5,7 +5,7 @@ except:
 
 from fast_fft import (
     reverse_bit_order, log2, M31, M31SQ, HALF, invx, invy, fft,
-    to_extension_field, extension_field_mul
+    to_extension_field, extension_field_mul, modinv
 )
 from merkle import merkelize, hash, get_branch, verify_branch
 
@@ -41,16 +41,21 @@ def get_challenges(root, domain_size, num_challenges):
     ], dtype=np.uint64)
 
 def modinv_ext(x):
-    o = np.zeros_like(x, dtype=np.uint64)
-    o[...,0] = 1
-    power = (2**31-1)**4-2
-    pow_of_x = x
-    while power > 0:
-        if power % 2:
-            o = extension_field_mul(o, pow_of_x)
-        pow_of_x = extension_field_mul(pow_of_x, pow_of_x)
-        power //= 2
-    return o
+    x = x.transpose((-1,)+tuple(range(len(x.shape)-1)))
+    r20 = (x[2] * x[2] + M31SQ - x[3] * x[3]) % M31
+    r21 = (2 * x[2] * x[3]) % M31
+    denom0 = (x[0]**2 + M31SQ * 2 - x[1]**2 + r20 - r21 * 2) % M31
+    denom1 = (2*x[0]*x[1] + r21 + r20 * 2) % M31
+    inv_denom_norm = modinv((denom0 ** 2 + denom1 ** 2) % M31)
+    inv_denom0 = (denom0 * inv_denom_norm) % M31
+    inv_denom1 = (M31SQ - denom1 * inv_denom_norm) % M31
+    o = np.array([
+        x[0] * inv_denom0 + M31SQ - x[1] * inv_denom1,
+        x[0] * inv_denom1 + x[1] * inv_denom0,
+        M31SQ - x[2] * inv_denom0 + x[3] * inv_denom1,
+        M31SQ * 2 - x[2] * inv_denom1 - x[3] * inv_denom0,
+    ], dtype=np.uint64)
+    return (o % M31).transpose(tuple(range(1, len(o.shape)))+(0,))
 
 def extension_point_add(pt1, pt2):
     return np.array([
