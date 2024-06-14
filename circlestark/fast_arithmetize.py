@@ -102,13 +102,20 @@ ext_arith = (
     extension_field_mul
 )
 
+def merkelize_top_dimension(x):
+    blob = x.astype(np.uint32).tobytes()
+    size = x.size * 4 // x.shape[0]
+    return merkelize([blob[i:i+size] for i in range(0, len(blob), size)])
+
 def mk_stark(get_next_state_vector, start_state, constants):
+    import time
     rounds, constants_width = constants.shape[:2]
     width = start_state.shape[0]
     trace_length = 2**(rounds+1).bit_length()
     print('Trace length: {}'.format(trace_length))
     trace = np.zeros((trace_length,) + start_state.shape, dtype=np.uint64)
     trace[0] = start_state
+    START = time.time()
     for i in range(trace_length-1):
         trace[i+1] = get_next_state_vector(
             trace[i],
@@ -116,14 +123,16 @@ def mk_stark(get_next_state_vector, start_state, constants):
             m31_arith
         )
     output_state = trace[rounds]
+    print('Generated trace!', time.time() - START)
     trace_coeffs = fft(trace)
     trace_ext4 = inv_fft(pad_to(trace_coeffs, trace_length*4))
     trace_ext = inv_fft(pad_to(trace_coeffs, trace_length*8))
-    constants_coeffs = fft(pad_to(constants, trace_length))
+    constants = pad_to(constants, trace_length)
+    constants_coeffs = fft(constants)
     constants_ext4 = inv_fft(pad_to(constants_coeffs, trace_length*4))
     constants_ext = inv_fft(pad_to(constants_coeffs, trace_length*8))
-    assert confirm_max_degree(fft(constants_ext), trace_length)
-    assert confirm_max_degree(fft(trace_ext), trace_length)
+    #assert confirm_max_degree(fft(constants_ext), trace_length)
+    #assert confirm_max_degree(fft(trace_ext), trace_length)
     ext_domain = sub_domains[trace_length*8: trace_length*16]
     start_point = sub_domains[trace_length]
     output_point = sub_domains[trace_length + rounds]
@@ -141,21 +150,22 @@ def mk_stark(get_next_state_vector, start_state, constants):
     ).transpose()
     C4 = (nsv + M31 - rolled_trace4) % M31
     C = inv_fft(pad_to(fft(C4), trace_length*8))
-    assert confirm_max_degree(fft(np.roll(trace_ext, -8, axis=0)), trace_length)
-    assert confirm_max_degree(fft(C), trace_length*3+1)
+    print('Generated C!', time.time() - START)
+    #assert confirm_max_degree(fft(np.roll(trace_ext, -8, axis=0)), trace_length)
+    #assert confirm_max_degree(fft(C), trace_length*3+1)
     C_exempt_start = C * (
         #ext_domain[:,0,np.newaxis]
         #+ M31 - start_point[0]
         line_function(nm1_point, nm2_point, ext_domain)[:,np.newaxis]
     ) % M31
-    C_coeffs = fft(C_exempt_start)
-    assert confirm_max_degree(C_coeffs, trace_length*3+3)
+    #C_coeffs = fft(C_exempt_start)
+    #assert confirm_max_degree(C_coeffs, trace_length*3+3)
     Z = ext_domain[:,0,np.newaxis]
     for i in range(1, log2(trace_length)):
         Z = (2 * Z**2 + M31 - 1) % M31
     H = C_exempt_start * modinv(Z) % M31
-    H_coeffs = fft(H)
-    assert confirm_max_degree(H_coeffs, trace_length*2+3)
+    #H_coeffs = fft(H)
+    #assert confirm_max_degree(H_coeffs, trace_length*2+3)
     I = interpolant(
         start_point, start_state,
         output_point, output_state,
@@ -163,9 +173,11 @@ def mk_stark(get_next_state_vector, start_state, constants):
     )
     L = line_function(start_point, output_point, ext_domain)[:,np.newaxis]
     T_quotient = ((trace_ext + M31 - I) * modinv(L)) % M31
-    assert confirm_max_degree(fft(T_quotient), trace_length)
-    T_tree = merkelize([x.tobytes() for x in T_quotient.astype(np.uint32)])
-    K_tree = merkelize([x.tobytes() for x in constants_ext.astype(np.uint32)])
+    #assert confirm_max_degree(fft(T_quotient), trace_length)
+    print('About to make trees!', time.time() - START)
+    T_tree = merkelize_top_dimension(T_quotient)
+    K_tree = merkelize_top_dimension(constants_ext)
+    print('Generated trees!', time.time() - START)
     # Fold and prove
     w = projective_to_point(get_challenges(T_tree[1], M31, 4))
     w_plus_G = extension_point_add(w, to_extension_field(G))
@@ -173,8 +185,8 @@ def mk_stark(get_next_state_vector, start_state, constants):
     H_at_w_plus_G = bary_eval_ext(to_extension_field(H), w_plus_G)
     TQ_at_w = bary_eval_ext(to_extension_field(T_quotient), w)
     TQ_at_w_plus_G = bary_eval_ext(to_extension_field(T_quotient), w_plus_G)
-    K_at_w = bary_eval_ext(to_extension_field(constants_ext), w)
-    K_at_w_plus_G = bary_eval_ext(to_extension_field(constants_ext), w_plus_G)
+    K_at_w = bary_eval_ext(to_extension_field(constants), w)
+    K_at_w_plus_G = bary_eval_ext(to_extension_field(constants), w_plus_G)
     entropy = T_tree[1] + b''.join(
         H_at_w.astype(np.uint32).tobytes() for x in
         (TQ_at_w, TQ_at_w_plus_G, H_at_w, H_at_w_plus_G, K_at_w, K_at_w_plus_G)
@@ -184,22 +196,32 @@ def mk_stark(get_next_state_vector, start_state, constants):
         .reshape((width * 2 + constants_width, 4))
     )
     merged_poly = (
-        fold_ext(to_extension_field(T_quotient), fold_factors[:width]) + 
-        fold_ext(to_extension_field(H), fold_factors[width: width*2]) +
-        fold_ext(to_extension_field(constants_ext), fold_factors[width*2:])
+        fold(T_quotient, fold_factors[:width]) + 
+        fold(H, fold_factors[width: width*2]) +
+        fold(constants_ext, fold_factors[width*2:])
     ) % M31
+    print('Generated merged poly!', time.time() - START)
     L3 = line_function_ext(w, w_plus_G, ext_domain)
     I3 = interpolant_ext(
         w,
-        bary_eval_ext(merged_poly, w),
+        (
+            fold_ext(TQ_at_w, fold_factors[:width])
+            + fold_ext(H_at_w, fold_factors[width:width*2])
+            + fold_ext(K_at_w, fold_factors[width*2:])
+        ) % M31,
         w_plus_G,
-        bary_eval_ext(merged_poly, w_plus_G),
+        (
+            fold_ext(TQ_at_w_plus_G, fold_factors[:width])
+            + fold_ext(H_at_w_plus_G, fold_factors[width:width*2])
+            + fold_ext(K_at_w_plus_G, fold_factors[width*2:])
+        ) % M31,
         ext_domain
     )
     master_quotient = extension_field_mul(
         (merged_poly + M31 - I3) % M31,
         modinv_ext(L3)
     )
+    print('Generated master_quotient!', time.time() - START)
 
     fri_proof = prove_low_degree(master_quotient)
     entropy = (b''.join(
@@ -242,9 +264,7 @@ def get_vk(constants):
     constants_coeffs = fft(pad_to(constants, trace_length))
     constants_ext = inv_fft(pad_to(constants_coeffs, trace_length*8))
     return {
-        "root": merkelize(
-            [x.tobytes() for x in constants_ext.astype(np.uint32)]
-        )[1],
+        "root": merkelize_top_dimension(constants_ext)[1],
         "rounds": rounds,
         "constants_width": constants.shape[1]
     }

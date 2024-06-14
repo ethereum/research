@@ -192,8 +192,9 @@ def bary_eval(vals, pt):
             baryfac = pt[1]
         else:
             twiddle = invx[full_len*2: full_len*2 + half_len]
-            baryfac = pt[0]
-            for _ in range(i-1):
+            if i==1:
+                baryfac = pt[0]
+            else:
                 baryfac = (2 * baryfac**2 + M31 - 1) % M31
         twiddle = np.expand_dims(
             np.broadcast_to(twiddle, (L.shape[0],)),
@@ -202,6 +203,8 @@ def bary_eval(vals, pt):
         f1 = ((((L + M31 - R) * HALF) % M31) * twiddle) % M31
         vals = (f0 + baryfac * f1) % M31
     return vals[0]
+
+one = np.array([1,0,0,0], dtype=np.uint64)
 
 def bary_eval_ext(vals, pt):
     vals = np.array(vals, dtype=np.uint64)
@@ -219,9 +222,9 @@ def bary_eval_ext(vals, pt):
             baryfac = pt[1]
         else:
             twiddle = invx[full_len*2: full_len*2 + half_len]
-            baryfac = pt[0]
-            one = np.array([1,0,0,0], dtype=np.uint64)
-            for _ in range(i-1):
+            if i == 1:
+                baryfac = pt[0]
+            else:
                 baryfac = (
                     (2 * extension_field_mul(baryfac, baryfac) + M31 - one)
                     % M31
