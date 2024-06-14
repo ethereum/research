@@ -80,29 +80,42 @@ for i in range(0, 24, 4):
 # C(P(xw), P(x)) = N(P(x)) - P(xw) = 0
 
 def poseidon_next_state(state, c, arith):
+    if np.array_equal(c, np.zeros_like(c)):
+        return np.zeros_like(state)
     one, add, mul = arith
     L = state[:24]
     R = state[24:]
     Lp = add(L, c[8:])
 
-    new_L = (
-        mul(c[0], mul(Lp, Lp)) +
-        mul(c[1], mul(L, L)) +
-        mul(c[2], mul(L, R)) +
-        mul(c[3], np.append(mul(Lp[:1], Lp[:1]), Lp[1:], axis=0)) +
-        mul(c[4], np.append(mul(L[:1], L[:1]), L[1:24], axis=0)) +
-        mul(c[5], np.append(mul(L[:1], R[:1]), L[1:24], axis=0)) +
-        mul(c[6], np.matmul(L.transpose(), mds).transpose() % M31)
-    ) % M31
-    assert new_L.shape == L.shape
-    new_R = (
-        mul(c[0], Lp) +
-        mul(c[1], R) +
-        mul(c[3], Lp) +
-        mul(c[4], R)
-    ) % M31
+    cases_L = [
+        lambda: mul(Lp, Lp),
+        lambda: mul(L, L),
+        lambda: mul(L, R),
+        lambda: np.append(mul(Lp[:1], Lp[:1]), Lp[1:], axis=0),
+        lambda: np.append(mul(L[:1], L[:1]), L[1:24], axis=0),
+        lambda: np.append(mul(L[:1], R[:1]), L[1:24], axis=0),
+        lambda: np.matmul(L.transpose(), mds).transpose() % M31
+    ]
+    c_indices = np.where(c != 0)[0]
+    if c_indices.size != 1:
+        new_L = add(*[
+            mul(_case(), c[i])
+            for i, _case in enumerate(cases_L)
+        ])
+        new_R = (
+            mul(c[0], Lp) +
+            mul(c[1], R) +
+            mul(c[3], Lp) +
+            mul(c[4], R)
+        ) % M31
+    else:
+        new_L = cases_L[int(c_indices[0])]()
+        new_R = (
+            {0: Lp, 1: R, 3: Lp, 4: R}
+            .get(int(c_indices[0]), np.zeros_like(R))
+        )
     return np.append(new_L, new_R, axis=0)
-
+    
 OUTER = [
     [1,0,0,0,0,0,0,0],
     [0,1,0,0,0,0,0,0],

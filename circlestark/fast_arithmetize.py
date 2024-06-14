@@ -79,7 +79,6 @@ def chunkify(values):
 
 def projective_to_point(t):
     t2 = extension_field_mul(t, t)
-    one = np.array([1,0,0,0], dtype=np.uint64)
     inv_1pt2 = modinv_ext((one + t2) % M31)
     return np.array([
         extension_field_mul((one + M31 - t2) % M31, inv_1pt2),
@@ -95,9 +94,10 @@ def fold(vector, fold_factors):
 def fold_ext(vector, fold_factors):
     return np.sum(extension_field_mul(vector, fold_factors), axis=-2) % M31
 
+one = np.array([1,0,0,0], dtype=np.uint64)
 m31_arith = (1, lambda *x: sum(x) % M31, lambda x,y: x*y % M31)
 ext_arith = (
-    np.array([1,0,0,0], dtype=np.uint64),
+    one,
     lambda *x: sum(x) % M31,
     extension_field_mul
 )
@@ -133,13 +133,13 @@ def mk_stark(get_next_state_vector, start_state, constants):
     # Trace must satisfy
     #   C(T[x], T[x+G]) * (X - p0)
     # = Z(x) * H(x)
-    C4 = np.zeros((trace_length * 4, width))
     rolled_trace4 = np.roll(trace_ext4, -4, axis=0)
-    for i in range(trace_length * 4):
-        C4[i] = (
-            get_next_state_vector(trace_ext4[i], constants_ext4[i], m31_arith)
-            + M31 - rolled_trace4[i]
-        ) % M31
+    nsv = get_next_state_vector(
+        trace_ext4.transpose(),
+        constants_ext4.transpose(),
+        m31_arith
+    ).transpose()
+    C4 = (nsv + M31 - rolled_trace4) % M31
     C = inv_fft(pad_to(fft(C4), trace_length*8))
     assert confirm_max_degree(fft(np.roll(trace_ext, -8, axis=0)), trace_length)
     assert confirm_max_degree(fft(C), trace_length*3+1)
@@ -376,7 +376,6 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
         )
     )
     Z_leaves = sub_domains[trace_length * 8 + challenges, 0]
-    one = np.array([1,0,0,0], dtype=np.uint64)
     for i in range(1, log2(trace_length)):
         Z_leaves = (2 * Z_leaves ** 2 + M31 - 1) % M31
     L2_leaves = line_function(
@@ -406,32 +405,37 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
         M_at_w_plus_G,
         sub_domains[trace_length * 8 + challenges]
     )
-
-    for i in range(NUM_CHALLENGES):
-        TQ_leaf = TQ_leaves[i]
-        TQ_next_leaf = TQ_next_leaves[i]
-        K_leaf = K_leaves[i]
-        U_leaf = fri_proof["leaf_values"][0][i, challenges_bottom[i]]
-        T_leaf = (TQ_leaf * L_leaves[i] + I_leaves[i]) % M31
-        T_next_leaf = (
-            TQ_next_leaf * L_leaves[i + NUM_CHALLENGES]
-            + I_leaves[i + NUM_CHALLENGES]
-        ) % M31
-        C_leaf = (
-            get_next_state_vector(T_leaf, K_leaf, m31_arith)
-            + M31 - T_next_leaf
-        ) % M31
-        H_leaf = ((C_leaf * L2_leaves[i]) % M31) * modinv(Z_leaves[i]) % M31
-        merged_leaf = (
-            fold(TQ_leaf, fold_factors[:width]) +
-            fold(H_leaf, fold_factors[width: width*2]) + 
-            fold(K_leaf, fold_factors[width*2:])
-        ) % M31
-        computed_U_leaf = extension_field_mul(
-            (merged_leaf + M31 - I3_leaves[i]) % M31,
-            inv_L3_leaves[i]
-        )
-        assert np.array_equal(computed_U_leaf, U_leaf)
+    T_leaves = (
+        TQ_leaves * L_leaves[:NUM_CHALLENGES, np.newaxis]
+        + I_leaves[:NUM_CHALLENGES]
+    ) % M31
+    T_next_leaves = (
+        TQ_next_leaves * L_leaves[NUM_CHALLENGES:, np.newaxis]
+        + I_leaves[NUM_CHALLENGES:]
+    ) % M31
+    C_leaves = (get_next_state_vector(
+        T_leaves.transpose(),
+        K_leaves.transpose(),
+        m31_arith
+    ).transpose() + M31 - T_next_leaves) % M31
+    H_leaves = (
+        ((C_leaves * L2_leaves[:,np.newaxis]) % M31)
+        * modinv(Z_leaves[:,np.newaxis])
+    ) % M31
+    merged_leaves = (
+        fold(TQ_leaves, fold_factors[:width]) +
+        fold(H_leaves, fold_factors[width: width*2]) + 
+        fold(K_leaves, fold_factors[width*2:])
+    )
+    computed_U_leaves = extension_field_mul(
+        (merged_leaves + M31 - I3_leaves) % M31,
+        inv_L3_leaves
+    )
+    U_leaves = fri_proof["leaf_values"][0][
+        np.arange(NUM_CHALLENGES),
+        challenges_bottom[np.arange(NUM_CHALLENGES)]
+    ]
+    assert np.array_equal(U_leaves, computed_U_leaves)
 
     def b(x):
         return x.astype(np.uint32).tobytes()

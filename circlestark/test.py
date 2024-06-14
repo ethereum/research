@@ -15,6 +15,10 @@ from poseidon import (
     poseidon_hash, arith_hash, poseidon_next_state, poseidon_constants
 )
 import time
+import cProfile
+import pstats
+import io
+import os
 
 def test_basic_arithmetic():
     assert (S(12) + S(25)) * S(9) == S(12) * S(9) + S(25) * S(9)
@@ -154,6 +158,20 @@ def test_mk_stark():
     assert verify_stark(next_state, vk, start_state, stark)
     print("Verified!")
 
+def start_profile():
+    global profiler
+    profiler = cProfile.Profile()
+    profiler.enable()
+
+def end_profile():
+    global profiler
+    profiler.disable()
+    # Print the profiling results
+    s = io.StringIO()
+    ps = pstats.Stats(profiler, stream=s).sort_stats(pstats.SortKey.CUMULATIVE)
+    ps.print_stats()
+    print(s.getvalue().replace(os.getcwd(), '.')[:4000])
+
 def test_poseidon_stark():
     in1 = np.arange(8, dtype=np.uint64)
     in2 = np.arange(8, 16, dtype=np.uint64)
@@ -165,8 +183,10 @@ def test_poseidon_stark():
     vk = get_vk(poseidon_constants)
     print("Generating Poseidon STARK")
     start_state = np.append(np.append(in1, in2), np.zeros(32, dtype=np.uint64))
+    start_profile()
     stark = mk_stark(poseidon_next_state, start_state, poseidon_constants)
     print("Generated")
+    end_profile()
     print("Verifying Poseidon STARK")
     assert verify_stark(poseidon_next_state, vk, start_state, stark)
     print("Verified!")
