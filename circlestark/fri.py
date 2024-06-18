@@ -59,8 +59,10 @@ def fold(values, coeff, domain):
         f0 = [(L+R)/2 for L,R in zip(left, right)]
         if isinstance(domain[0], tuple):
             f1 = [(L-R)/(2*y) for L,R,(x,y) in zip(left, right, domain[::2])]
+            twiddle = [y for (x,y) in domain[::2]]
         else:
             f1 = [(L-R)/(2*x) for L,R,x in zip(left, right, domain[::2])]
+            twiddle = domain[::2]
         values = [f0val + coeff * f1val for f0val, f1val in zip(f0, f1)]
         domain = halve_domain(domain[::2], preserve_length=True)
     return values, domain

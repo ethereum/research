@@ -1,6 +1,7 @@
 from fast_fft import (
     np, modinv, M31, M31SQ, log2, fft, inv_fft, sub_domains,
-    bary_eval, point_add, to_extension_field, bary_eval_ext
+    bary_eval, point_add, to_extension_field, bary_eval_ext,
+    zeros, array, arange, tobytes, append
 )
 from fast_fri import (
     get_challenges, extension_field_mul, extension_point_add,
@@ -14,10 +15,8 @@ FOLDS_PER_ROUND = 3
 FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
 
 def pad_to(arr, new_len):
-    return np.pad(
-        arr,
-        ((0,new_len - arr.shape[0]),) + ((0,0),) * (len(arr.shape) - 1)
-    )
+    padding = zeros((new_len - arr.shape[0],) + arr.shape[1:])
+    return append(arr, padding)
 
 def confirm_max_degree(coeffs, bound):
     #print(coeffs, bound, coeffs[:bound+4])
@@ -37,7 +36,9 @@ def line_function_ext(P1, P2, domain):
         + M31 - extension_field_mul(P1[0], P2[1])
     ) % M31
     if len(domain.shape) == 2:
-        return (a * domain[:,0,np.newaxis] + b * domain[:,1,np.newaxis] + c) % M31
+        x = domain[:,0].reshape((domain.shape[0], 1))
+        y = domain[:,1].reshape((domain.shape[0], 1))
+        return (a * x + b * y + c) % M31
     else:
         return (
             extension_field_mul(a, domain[:,0])
@@ -47,11 +48,13 @@ def line_function_ext(P1, P2, domain):
 
 def interpolant(P1, v1, P2, v2, domain):
     if P1[0] == P2[0]:
+        y = domain[:,1].reshape((domain.shape[0], 1))
         slope = (v2 + M31 - v1) * modinv(P2[1] + M31 - P1[1]) % M31
-        return v1 + (domain[:,1,np.newaxis] + M31 - P1[1]) * slope % M31
+        return v1 + (y + M31 - P1[1]) * slope % M31
     else:
+        x = domain[:,0].reshape((domain.shape[0], 1))
         slope = (v2 + M31 - v1) * modinv(P2[0] + M31 - P1[0]) % M31
-        return v1 + (domain[:,0,np.newaxis] + M31 - P1[0]) * slope % M31
+        return v1 + (x + M31 - P1[0]) * slope % M31
 
 def interpolant_ext(P1, v1, P2, v2, domain):
     assert v1.shape[-1] == v2.shape[-1] == 4
@@ -80,22 +83,29 @@ def chunkify(values):
 def projective_to_point(t):
     t2 = extension_field_mul(t, t)
     inv_1pt2 = modinv_ext((one + t2) % M31)
-    return np.array([
+    return np.stack((
         extension_field_mul((one + M31 - t2) % M31, inv_1pt2),
         extension_field_mul((2 * t) % M31, inv_1pt2)
-    ], dtype=np.uint64)
+    ))
 
 def mulM31(x, y):
     return x * y % M31
 
 def fold(vector, fold_factors):
-    return np.sum(vector[...,np.newaxis] * fold_factors % M31, axis=-2) % M31
+    return np.sum(
+        vector.reshape(vector.shape+(1,)) * fold_factors % M31,
+        axis=-2
+    ) % M31
 
 def fold_ext(vector, fold_factors):
     return np.sum(extension_field_mul(vector, fold_factors), axis=-2) % M31
 
-one = np.array([1,0,0,0], dtype=np.uint64)
-m31_arith = (1, lambda *x: sum(x) % M31, lambda x,y: x*y % M31)
+one = array([1,0,0,0])
+m31_arith = (
+    1,
+    lambda *x: sum(x) % M31,
+    lambda x,y: x*y % M31
+)
 ext_arith = (
     one,
     lambda *x: sum(x) % M31,
@@ -103,23 +113,25 @@ ext_arith = (
 )
 
 def merkelize_top_dimension(x):
-    blob = x.astype(np.uint32).tobytes()
-    size = x.size * 4 // x.shape[0]
+    blob = tobytes(x)
+    size = len(blob) // x.shape[0]
     return merkelize([blob[i:i+size] for i in range(0, len(blob), size)])
 
-def mk_stark(get_next_state_vector, start_state, constants):
+def mk_stark(get_next_state_vector, start_state, constants, zero_outside_trace=False):
     import time
     rounds, constants_width = constants.shape[:2]
     width = start_state.shape[0]
     trace_length = 2**(rounds+1).bit_length()
     print('Trace length: {}'.format(trace_length))
-    trace = np.zeros((trace_length,) + start_state.shape, dtype=np.uint64)
+    trace = zeros((trace_length,) + start_state.shape)
     trace[0] = start_state
     START = time.time()
-    for i in range(trace_length-1):
+    bound = (rounds+1 if zero_outside_trace else trace_length-1)
+    constants = pad_to(constants, trace_length)
+    for i in range(bound):
         trace[i+1] = get_next_state_vector(
             trace[i],
-            constants[i] if i < rounds else np.zeros_like(constants[0]),
+            constants[i],
             m31_arith
         )
     output_state = trace[rounds]
@@ -127,7 +139,6 @@ def mk_stark(get_next_state_vector, start_state, constants):
     trace_coeffs = fft(trace)
     trace_ext4 = inv_fft(pad_to(trace_coeffs, trace_length*4))
     trace_ext = inv_fft(pad_to(trace_coeffs, trace_length*8))
-    constants = pad_to(constants, trace_length)
     constants_coeffs = fft(constants)
     constants_ext4 = inv_fft(pad_to(constants_coeffs, trace_length*4))
     constants_ext = inv_fft(pad_to(constants_coeffs, trace_length*8))
@@ -138,16 +149,16 @@ def mk_stark(get_next_state_vector, start_state, constants):
     output_point = sub_domains[trace_length + rounds]
     nm1_point = sub_domains[trace_length*2-1]
     nm2_point = sub_domains[trace_length*2-2]
-    G = sub_domains[trace_length//2]
+
     # Trace must satisfy
     #   C(T[x], T[x+G]) * (X - p0)
     # = Z(x) * H(x)
-    rolled_trace4 = np.roll(trace_ext4, -4, axis=0)
+    rolled_trace4 = append(trace_ext4[4:], trace_ext4[:4])
     nsv = get_next_state_vector(
-        trace_ext4.transpose(),
-        constants_ext4.transpose(),
+        trace_ext4.swapaxes(0, 1),
+        constants_ext4.swapaxes(0, 1),
         m31_arith
-    ).transpose()
+    ).swapaxes(0, 1)
     C4 = (nsv + M31 - rolled_trace4) % M31
     C = inv_fft(pad_to(fft(C4), trace_length*8))
     print('Generated C!', time.time() - START)
@@ -156,11 +167,12 @@ def mk_stark(get_next_state_vector, start_state, constants):
     C_exempt_start = C * (
         #ext_domain[:,0,np.newaxis]
         #+ M31 - start_point[0]
-        line_function(nm1_point, nm2_point, ext_domain)[:,np.newaxis]
+        line_function(nm1_point, nm2_point, ext_domain)
+        .reshape((trace_length*8, 1))
     ) % M31
     #C_coeffs = fft(C_exempt_start)
     #assert confirm_max_degree(C_coeffs, trace_length*3+3)
-    Z = ext_domain[:,0,np.newaxis]
+    Z = ext_domain[:,0].reshape((trace_length*8, 1))
     for i in range(1, log2(trace_length)):
         Z = (2 * Z**2 + M31 - 1) % M31
     H = C_exempt_start * modinv(Z) % M31
@@ -171,7 +183,7 @@ def mk_stark(get_next_state_vector, start_state, constants):
         output_point, output_state,
         ext_domain
     )
-    L = line_function(start_point, output_point, ext_domain)[:,np.newaxis]
+    L = line_function(start_point, output_point, ext_domain).reshape((trace_length*8, 1))
     T_quotient = ((trace_ext + M31 - I) * modinv(L)) % M31
     #assert confirm_max_degree(fft(T_quotient), trace_length)
     print('About to make trees!', time.time() - START)
@@ -179,16 +191,29 @@ def mk_stark(get_next_state_vector, start_state, constants):
     K_tree = merkelize_top_dimension(constants_ext)
     print('Generated trees!', time.time() - START)
     # Fold and prove
+    G = sub_domains[trace_length//2]
+    bump = to_extension_field(sub_domains[trace_length*8])
     w = projective_to_point(get_challenges(T_tree[1], M31, 4))
     w_plus_G = extension_point_add(w, to_extension_field(G))
-    H_at_w = bary_eval_ext(to_extension_field(H), w)
-    H_at_w_plus_G = bary_eval_ext(to_extension_field(H), w_plus_G)
-    TQ_at_w = bary_eval_ext(to_extension_field(T_quotient), w)
-    TQ_at_w_plus_G = bary_eval_ext(to_extension_field(T_quotient), w_plus_G)
-    K_at_w = bary_eval_ext(to_extension_field(constants), w)
-    K_at_w_plus_G = bary_eval_ext(to_extension_field(constants), w_plus_G)
+    w_bump = extension_point_add(w, bump)
+    comb = np.hstack((
+        H[::2],
+        append(H[8::2],H[:8:2]),
+        T_quotient[::2],
+        append(T_quotient[8::2],T_quotient[:8:2]),
+        constants_ext[::2],
+        append(constants_ext[8::2],constants_ext[:8:2])
+    ))
+    comb_bary = bary_eval_ext(to_extension_field(comb), w_bump)
+    H_at_w = comb_bary[:width]
+    H_at_w_plus_G = comb_bary[width:width*2]
+    TQ_at_w = comb_bary[width*2:width*3]
+    TQ_at_w_plus_G = comb_bary[width*3:width*4]
+    K_at_w = comb_bary[width*4:width*4+constants_width]
+    K_at_w_plus_G = comb_bary[width*4+constants_width:]
+    print("Computed evals at w and w+G", time.time() - START)
     entropy = T_tree[1] + b''.join(
-        H_at_w.astype(np.uint32).tobytes() for x in
+        tobytes(H_at_w) for x in
         (TQ_at_w, TQ_at_w_plus_G, H_at_w, H_at_w_plus_G, K_at_w, K_at_w_plus_G)
     )
     fold_factors = (
@@ -200,6 +225,8 @@ def mk_stark(get_next_state_vector, start_state, constants):
         fold(H, fold_factors[width: width*2]) +
         fold(constants_ext, fold_factors[width*2:])
     ) % M31
+    #merged_poly_coeffs = fft(merged_poly)
+    #assert confirm_max_degree(merged_poly_coeffs, trace_length * 3 + 3)
     print('Generated merged poly!', time.time() - START)
     L3 = line_function_ext(w, w_plus_G, ext_domain)
     I3 = interpolant_ext(
@@ -222,18 +249,20 @@ def mk_stark(get_next_state_vector, start_state, constants):
         modinv_ext(L3)
     )
     print('Generated master_quotient!', time.time() - START)
+    #master_quotient_coeffs = fft(master_quotient)
+    #assert confirm_max_degree(master_quotient_coeffs, trace_length * 3 + 3)
 
     fri_proof = prove_low_degree(master_quotient)
-    entropy = (b''.join(
-        fri_proof["roots"] +
-        [x.astype(np.uint32).tobytes() for x in fri_proof["final_values"]]
-    ))
+    entropy = (
+        b''.join(fri_proof["roots"]) +
+        tobytes(fri_proof["final_values"])
+    )
     challenges_raw = get_challenges(
         entropy, trace_length*8, NUM_CHALLENGES
     )
     fri_top_leaf_count = trace_length*8 >> FOLDS_PER_ROUND
     challenges_top = challenges_raw % fri_top_leaf_count
-    challenges_bottom = challenges_raw // fri_top_leaf_count
+    challenges_bottom = challenges_raw >> log2(fri_top_leaf_count)
     challenges = rbo_index_to_original(
         trace_length*8,
         challenges_top * 8 + challenges_bottom
@@ -305,31 +334,31 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
     L_at_w = line_function_ext(
         to_extension_field(start_point),
         to_extension_field(output_point),
-        np.repeat(np.array([w]), width, axis=0)
+        w.reshape((1,2,4)) + zeros((width, 1, 1))
     )
     L_at_w_plus_G = line_function_ext(
         to_extension_field(start_point),
         to_extension_field(output_point),
-        np.repeat(np.array([w_plus_G]), width, axis=0)
+        w_plus_G.reshape((1,2,4)) + zeros((width, 1, 1))
     )
     L2_at_w = line_function_ext(
         to_extension_field(nm1_point),
         to_extension_field(nm2_point),
-        np.repeat(np.array([w]), width, axis=0)
+        w.reshape((1,2,4)) + zeros((width, 1, 1))
     )
     I_at_w = interpolant_ext(
         to_extension_field(start_point),
         to_extension_field(start_state),
         to_extension_field(output_point),
         to_extension_field(output_state),
-        np.array([w])
+        w.reshape((1,2,4)) + zeros((width, 1, 1))
     )
     I_at_w_plus_G = interpolant_ext(
         to_extension_field(start_point),
         to_extension_field(start_state),
         to_extension_field(output_point),
         to_extension_field(output_state),
-        np.array([w_plus_G])
+        w_plus_G.reshape((1,2,4)) + zeros((width, 1, 1))
     )
     T_at_w = (extension_field_mul(TQ_at_w, L_at_w) + I_at_w) % M31
     T_at_w_plus_G = (
@@ -343,7 +372,7 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
     # Z = ext_domain[:,0,np.newaxis]
     # for i in range(1, log2(trace_length)):
     #     Z = (2 * Z**2 + M31 - 1) % M31
-    Z_at_w = np.array([w[0]])
+    Z_at_w = w[0].reshape((1,4))
     one, _, _ = ext_arith
     for i in range(1, log2(trace_length)):
         Z_at_w = (2 * extension_field_mul(Z_at_w, Z_at_w) + M31 - one) % M31
@@ -354,7 +383,7 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
     assert np.array_equal(H_at_w, computed_H_at_w)
     entropy = b''.join(
         fri_proof["roots"] +
-        [x.astype(np.uint32).tobytes() for x in fri_proof["final_values"]]
+        [tobytes(x) for x in fri_proof["final_values"]]
     )
     challenges_raw = get_challenges(
         entropy, len_evaluations, NUM_CHALLENGES
@@ -368,7 +397,7 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
     )
     challenges_next = (challenges+8) % (trace_length*8)
     entropy = TQ_root + b''.join(
-        H_at_w.astype(np.uint32).tobytes() for x in
+        tobytes(H_at_w) for x in
         (TQ_at_w, TQ_at_w_plus_G, H_at_w, H_at_w_plus_G, K_at_w, K_at_w_plus_G)
     )
     fold_factors = (
@@ -378,10 +407,9 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
     L_leaves = line_function(
         start_point,
         output_point,
-        np.append(
+        append(
             sub_domains[trace_length * 8 + challenges],
             sub_domains[trace_length * 8 + challenges_next],
-            axis=0
         )
     )
     I_leaves = interpolant(
@@ -389,10 +417,9 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
         start_state,
         output_point,
         output_state,
-        np.append(
+        append(
             sub_domains[trace_length * 8 + challenges],
             sub_domains[trace_length * 8 + challenges_next],
-            axis=0
         )
     )
     Z_leaves = sub_domains[trace_length * 8 + challenges, 0]
@@ -426,21 +453,21 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
         sub_domains[trace_length * 8 + challenges]
     )
     T_leaves = (
-        TQ_leaves * L_leaves[:NUM_CHALLENGES, np.newaxis]
+        TQ_leaves * L_leaves.reshape(L_leaves.shape+(1,))[:NUM_CHALLENGES]
         + I_leaves[:NUM_CHALLENGES]
     ) % M31
     T_next_leaves = (
-        TQ_next_leaves * L_leaves[NUM_CHALLENGES:, np.newaxis]
+        TQ_next_leaves * L_leaves.reshape(L_leaves.shape+(1,))[NUM_CHALLENGES:]
         + I_leaves[NUM_CHALLENGES:]
     ) % M31
     C_leaves = (get_next_state_vector(
-        T_leaves.transpose(),
-        K_leaves.transpose(),
+        T_leaves.swapaxes(0, T_leaves.ndim-1),
+        K_leaves.swapaxes(0, T_leaves.ndim-1),
         m31_arith
-    ).transpose() + M31 - T_next_leaves) % M31
+    ).swapaxes(0, T_leaves.ndim-1) + M31 - T_next_leaves) % M31
     H_leaves = (
-        ((C_leaves * L2_leaves[:,np.newaxis]) % M31)
-        * modinv(Z_leaves[:,np.newaxis])
+        ((C_leaves * L2_leaves.reshape(L2_leaves.shape+(1,))) % M31)
+        * modinv(Z_leaves.reshape(Z_leaves.shape+(1,)))
     ) % M31
     merged_leaves = (
         fold(TQ_leaves, fold_factors[:width]) +
@@ -457,15 +484,12 @@ def verify_stark(get_next_state_vector, vk, start_state, proof):
     ]
     assert np.array_equal(U_leaves, computed_U_leaves)
 
-    def b(x):
-        return x.astype(np.uint32).tobytes()
-
     for i in range(NUM_CHALLENGES):
         ci, nci = int(challenges[i]), int(challenges_next[i])
         assert verify_branch(
-            TQ_root, ci, b(TQ_leaves[i]), TQ_branches[i])
+            TQ_root, ci, tobytes(TQ_leaves[i]), TQ_branches[i])
         assert verify_branch(
-            TQ_root, nci, b(TQ_next_leaves[i]), TQ_next_branches[i])
+            TQ_root, nci, tobytes(TQ_next_leaves[i]), TQ_next_branches[i])
         assert verify_branch(
-            K_root, ci, b(K_leaves[i]), K_branches[i])
+            K_root, ci, tobytes(K_leaves[i]), K_branches[i])
     return True

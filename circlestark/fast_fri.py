@@ -1,11 +1,7 @@
-try:
-    import cupy as np
-except:
-    import numpy as np
-
 from fast_fft import (
     reverse_bit_order, log2, M31, M31SQ, HALF, invx, invy, fft,
-    to_extension_field, extension_field_mul, modinv
+    to_extension_field, extension_field_mul, modinv, np,
+    array, zeros, tobytes, arange
 )
 from merkle import merkelize, hash, get_branch, verify_branch
 
@@ -15,60 +11,60 @@ FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
 NUM_CHALLENGES = 80
 
 def chunkify(values):
-    o = values.astype(np.uint32).tobytes()
+    o = tobytes(values)
     return [
         o[i:i+16*FOLD_SIZE_RATIO]
         for i in range(0, len(o), 16*FOLD_SIZE_RATIO)
     ]
 
 def folded_reverse_bit_order(vals):
-    vals = np.array(vals, dtype=np.uint64)
+    vals = np.copy(vals)
     size = vals.shape[0]
     shape_suffix = vals.shape[1:]
     for i in range(log2(size)):
         vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
         full_len = vals.shape[1]
         half_len = full_len >> 1
-        vals[:, half_len:] = vals[:, full_len-1: half_len-1: -1]
+        vals[:, half_len:] = np.flip(vals[:, half_len:], (1,))
     return reverse_bit_order(vals.reshape((size,) + shape_suffix))
 
 # Get the Merkle branch challenge indices from a root
 def get_challenges(root, domain_size, num_challenges):
-    return np.array([
+    return array([
         int.from_bytes(hash(root + bytes([i//256, i%256])), 'little')
         % domain_size
         for i in range(num_challenges)
-    ], dtype=np.uint64)
+    ])
 
 def modinv_ext(x):
-    x = x.transpose((-1,)+tuple(range(len(x.shape)-1)))
+    x = x.swapaxes(0, x.ndim-1)
     r20 = (x[2] * x[2] + M31SQ - x[3] * x[3]) % M31
     r21 = (2 * x[2] * x[3]) % M31
-    denom0 = (x[0]**2 + M31SQ * 2 - x[1]**2 + r20 - r21 * 2) % M31
+    denom0 = (x[0]**2 - x[1]**2 + r20 - r21 * 2) % M31
     denom1 = (2*x[0]*x[1] + r21 + r20 * 2) % M31
     inv_denom_norm = modinv((denom0 ** 2 + denom1 ** 2) % M31)
     inv_denom0 = (denom0 * inv_denom_norm) % M31
     inv_denom1 = (M31SQ - denom1 * inv_denom_norm) % M31
-    o = np.array([
+    o = np.stack((
         x[0] * inv_denom0 + M31SQ - x[1] * inv_denom1,
         x[0] * inv_denom1 + x[1] * inv_denom0,
         M31SQ - x[2] * inv_denom0 + x[3] * inv_denom1,
         M31SQ * 2 - x[2] * inv_denom1 - x[3] * inv_denom0,
-    ], dtype=np.uint64)
-    return (o % M31).transpose(tuple(range(1, len(o.shape)))+(0,))
+    ))
+    return (o % M31).swapaxes(0, o.ndim-1)
 
 def extension_point_add(pt1, pt2):
-    return np.array([
+    return np.stack((
         extension_field_mul(pt1[0], pt2[0])
         + M31SQ - extension_field_mul(pt1[1], pt2[1]),
         extension_field_mul(pt1[0], pt2[1]) +
         extension_field_mul(pt1[1], pt2[0])
-    ], dtype=np.uint64) % M31
+    )) % M31
 
 def rbo_index_to_original(length, index):
     if length == 1:
         return np.zeros_like(index)
-    sub = rbo_index_to_original(length // 2, index // 2)
+    sub = rbo_index_to_original(length >> 1, index >> 1)
     return (1 - (index % 2)) * sub + (index % 2) * (length - 1 - sub)
 
 def fold(values, coeff, first_round):
@@ -84,8 +80,9 @@ def fold(values, coeff, first_round):
             twiddle = folded_reverse_bit_order(
                 invx[full_len*2: full_len*2 + half_len]
             )
-        twiddle = np.expand_dims(twiddle, axis=tuple(range(1, len(f0.shape))))
-        f1 = ((((left + M31 - right) * HALF) % M31) * twiddle) % M31
+        twiddle_box = np.zeros_like(left)
+        twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (left.ndim-1))
+        f1 = ((((left + M31 - right) * HALF) % M31) * twiddle_box) % M31
         values = (f0 + extension_field_mul(f1, coeff)) % M31
     return values
 
@@ -103,8 +100,9 @@ def fold_with_positions(values, domain_size, positions, coeff, first_round):
                 (positions << 1) >> i
             )
             twiddle = invx[domain_size * 2 + unrbo_positions]
-        twiddle = np.expand_dims(twiddle, axis=tuple(range(1, len(f0.shape))))
-        f1 = ((((left + M31 - right) * HALF) % M31) * twiddle) % M31
+        twiddle_box = np.zeros_like(left)
+        twiddle_box[:] = twiddle.reshape((left.shape[0],) + (1,)*(left.ndim-1))
+        f1 = ((((left + M31 - right) * HALF) % M31) * twiddle_box) % M31
         values = (f0 + extension_field_mul(f1, coeff)) % M31
         positions = positions[::2]
         domain_size //= 2
@@ -129,26 +127,25 @@ def prove_low_degree(evaluations):
         fold_factor = get_challenges(b''.join(roots), M31, 4)
         print("Fold factor: {}".format(fold_factor))
         values = fold(values, fold_factor, i==0)
-    entropy = b''.join(roots + [x.astype(np.uint32).tobytes() for x in values])
+    entropy = b''.join(roots) + tobytes(values)
     challenges = get_challenges(
         entropy, len(evaluations) >> FOLDS_PER_ROUND, NUM_CHALLENGES
     )
-    round_challenges = np.broadcast_to(
-        challenges[np.newaxis,:],
-        (rounds, challenges.size)
-    ) >> (np.arange(rounds, dtype=np.uint64) * FOLDS_PER_ROUND)[:,np.newaxis]
+    round_challenges = (
+        challenges.reshape((1,)+challenges.shape)
+        >> arange(0, rounds * FOLDS_PER_ROUND, FOLDS_PER_ROUND)
+        .reshape((rounds,) + (1,) * challenges.ndim)
+    )
 
     branches = [
         [get_branch(tree, c) for c in r_challenges]
         for i, (r_challenges, tree) in enumerate(zip(round_challenges, trees))
     ]
+    round_challenges_xfold = zeros(round_challenges.shape + (FOLD_SIZE_RATIO,))
+    round_challenges_xfold = round_challenges.reshape(round_challenges.shape + (1,)) * 8 + arange(FOLD_SIZE_RATIO).reshape(1, 1, FOLD_SIZE_RATIO)
+
     leaf_values = [
-        leaves[i][
-            np.broadcast_to(
-                round_challenges[i][...,np.newaxis],
-                round_challenges[i].shape + (FOLD_SIZE_RATIO,)
-            ) * FOLD_SIZE_RATIO + np.arange(FOLD_SIZE_RATIO, dtype=np.uint64)
-        ]
+        leaves[i][round_challenges_xfold[i]]
         for i in range(rounds)
     ]
     return {
@@ -166,10 +163,7 @@ def verify_low_degree(proof):
     len_evaluations = final_values.shape[0] << (FOLDS_PER_ROUND * len(roots))
     print("Verifying FRI proof")
     # Prove descent
-    entropy = b''.join(
-        roots
-        + [x.astype(np.uint32).tobytes() for x in final_values]
-    )
+    entropy = b''.join(roots) + tobytes(final_values)
     challenges = get_challenges(
         entropy, len_evaluations >> FOLDS_PER_ROUND, NUM_CHALLENGES
     )
@@ -179,9 +173,9 @@ def verify_low_degree(proof):
         print("Fold factor: {}".format(fold_factor))
         evaluation_size = len_evaluations >> (i * FOLDS_PER_ROUND)
         positions = (
-            np.repeat(challenges, FOLD_SIZE_RATIO) * FOLD_SIZE_RATIO
-            + np.tile(np.arange(FOLD_SIZE_RATIO, dtype=np.uint64), challenges.size)
-        )
+            challenges.reshape((NUM_CHALLENGES, 1)) * FOLD_SIZE_RATIO
+            + arange(FOLD_SIZE_RATIO)
+        ).reshape((NUM_CHALLENGES * FOLD_SIZE_RATIO))
         folded_values = fold_with_positions(
             leaf_values[i].reshape((-1,4)),
             evaluation_size,
@@ -192,7 +186,7 @@ def verify_low_degree(proof):
         if i < len(roots) - 1:
             expected_values = (
                 leaf_values[i+1][
-                    np.arange(challenges.size),
+                    arange(NUM_CHALLENGES),
                     challenges % FOLD_SIZE_RATIO
                 ]
             )
@@ -206,7 +200,7 @@ def verify_low_degree(proof):
         challenges >>= FOLDS_PER_ROUND
     o = np.zeros_like(final_values)
     N = final_values.shape[0]
-    o[rbo_index_to_original(N, np.arange(N))] = final_values
+    o[rbo_index_to_original(N, arange(N))] = final_values
     coeffs = fft(o, is_top_level=False)
-    assert np.array_equal(coeffs[N//2:], np.zeros_like(coeffs[N//2:]))
+    assert not np.any(coeffs[N//2:])
     return True

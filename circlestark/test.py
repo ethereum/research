@@ -4,7 +4,8 @@ from fft import fft, inv_fft, log2
 from fri import prove_low_degree, verify_low_degree
 from fast_fft import (
     fft as f_fft, inv_fft as f_inv_fft, np, M31, modinv,
-    sub_domains, bary_eval, to_extension_field
+    sub_domains, bary_eval, to_extension_field, zeros, arange, array,
+    append
 )
 from fast_fri import (
     prove_low_degree as f_prove_low_degree,
@@ -57,13 +58,14 @@ def test_fast_fft():
     print("Testing fast FFT")
     INPUT_SIZE = 2**13
     data = [pow(3, i, 2**31-1) for i in range(INPUT_SIZE)]
-    npdata = np.array(data, dtype=np.uint64)
+    npdata = np.array(data, dtype=np.int64)
     t0 = time.time()
     coeffs1 = fft([B(x) for x in data])
     t1 = time.time()
     print("Computed size-{} slow fft in {} sec".format(INPUT_SIZE, t1 - t0))
     t1 = time.time()
     coeffs2 = f_fft(npdata)
+    print(coeffs2)
     t2 = time.time()
     print("Computed size-{} fast fft in {} sec".format(INPUT_SIZE, t2 - t1))
     assert [int(x) for x in coeffs2] == coeffs1
@@ -74,8 +76,8 @@ def test_fast_fri():
     print("Testing FRI")
     INPUT_SIZE = 4096
     coeffs = np.array(
-        [(3**i) % M31 for i in range(INPUT_SIZE)] + [0] * INPUT_SIZE,
-        dtype=np.uint64
+        [pow(3, i, M31) for i in range(INPUT_SIZE)] + [0] * INPUT_SIZE,
+        dtype=np.int64
     )
     evaluations = f_inv_fft(coeffs)
     proof = f_prove_low_degree(to_extension_field(evaluations))
@@ -95,11 +97,11 @@ def test_fast_fri():
 
 def test_mega_fri():
     print("Testing FRI")
-    INPUT_SIZE = 2**20
-    coeffs = np.zeros(INPUT_SIZE * 2, dtype=np.uint64)
+    INPUT_SIZE = 2**22
+    coeffs = np.zeros(INPUT_SIZE * 2, dtype=np.int64)
 
     def mk_junk_data(length):
-        a = np.arange(length, length*2, dtype=np.uint64)
+        a = np.arange(length, length*2, dtype=np.int64)
         return ((3**a) ^ (7**a)) % M31
 
     coeffs[:INPUT_SIZE] = mk_junk_data(INPUT_SIZE)
@@ -113,7 +115,7 @@ def test_mega_fri():
 def test_simple_arithmetize():
     print("Testing simple arithmetization")
     SIZE = 128
-    trace = np.zeros(SIZE, dtype=np.uint64)
+    trace = zeros(SIZE)
     trace[0] = 1
     for i in range(SIZE-1):
         trace[i+1] = ((trace[i] ** 2 % M31) * trace[i] + 1) % M31
@@ -135,22 +137,22 @@ def test_simple_arithmetize():
         Z = (2*Z**2 + M31 - 1) % M31
     assert np.array_equal(
         f_fft(C_exempt_start * modinv(Z) % M31)[SIZE*3+1:],
-        np.zeros(SIZE-1, dtype=np.uint64)
+        zeros(SIZE-1)
     )
     print("Simple arithmetization test passed")
 
 def test_mk_stark():
     def next_state(state, c, arith): 
         one, add, mul = arith
-        o = np.array([
+        o = np.stack((
             add(mul(mul(state[0], state[0]), state[1]), c[0]),
             add(mul(mul(state[1], state[1]), state[2]), c[0]),
             add(mul(mul(state[2], state[2]), state[0]), c[0], one),
-        ])
+        ))
         return o
 
-    constants = np.arange(100, dtype=np.uint64).reshape((100,1))
-    start_state = np.array([1,1,2], dtype=np.uint64)
+    constants = arange(100).reshape((100,1))
+    start_state = array([1,1,2])
     print("Generating STARK")
     stark = mk_stark(next_state, start_state, constants)
     vk = get_vk(constants)
@@ -173,18 +175,18 @@ def end_profile():
     print(s.getvalue().replace(os.getcwd(), '.')[:4000])
 
 def test_poseidon_stark():
-    in1 = np.arange(8, dtype=np.uint64)
-    in2 = np.arange(8, 16, dtype=np.uint64)
+    in1 = arange(8)
+    in2 = arange(8, 16)
     h1 = poseidon_hash(in1, in2)
     print("Directly computed hash:", h1)
     h2 = arith_hash(in1, in2)
     print("Hash from arithmetization:", h2)
-    #assert np.array_equal(h1, h2)
+    assert np.array_equal(h1, h2)
     vk = get_vk(poseidon_constants)
     print("Generating Poseidon STARK")
-    start_state = np.append(np.append(in1, in2), np.zeros(32, dtype=np.uint64))
+    start_state = append(append(in1, in2), zeros(32))
     start_profile()
-    stark = mk_stark(poseidon_next_state, start_state, poseidon_constants)
+    stark = mk_stark(poseidon_next_state, start_state, poseidon_constants, zero_outside_trace=True)
     print("Generated")
     end_profile()
     print("Verifying Poseidon STARK")
