@@ -80,17 +80,6 @@ yfac = sub_domains[:,1]
 invx = modinv(xfac)
 invy = modinv(yfac)
 
-def old_reverse_bit_order(vals):
-    shape_suffix = vals.shape[1:]
-    size = vals.shape[0]
-    return (
-        vals.reshape((2,)*log2(size) + shape_suffix)
-            .transpose(
-                tuple(range(log2(size)-1,-1,-1))
-                + tuple(range(log2(size), log2(size) + len(shape_suffix)))
-            ).reshape((size,) + shape_suffix)
-    )
-
 def reverse_bit_order(vals):
     size = vals.shape[0]
     shape_suffix = vals.shape[1:]
@@ -105,6 +94,25 @@ def reverse_bit_order(vals):
         o[:, half_len:] = R
         vals = o
     return vals.reshape((size,) + shape_suffix)
+
+def folded_reverse_bit_order(vals):
+    vals = np.copy(vals)
+    size = vals.shape[0]
+    shape_suffix = vals.shape[1:]
+    for i in range(log2(size)):
+        vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
+        full_len = vals.shape[1]
+        half_len = full_len >> 1
+        vals[:, half_len:] = np.flip(vals[:, half_len:], (1,))
+    return reverse_bit_order(vals.reshape((size,) + shape_suffix))
+
+rbos = zeros(TOP_DOMAIN_SIZE * 2)
+for i in range(log2(TOP_DOMAIN_SIZE)):
+    rbos[2**i:2**(i+1)] = reverse_bit_order(arange(2**i))
+
+folded_rbos = zeros(TOP_DOMAIN_SIZE * 2)
+for i in range(log2(TOP_DOMAIN_SIZE)):
+    folded_rbos[2**i:2**(i+1)] = folded_reverse_bit_order(arange(2**i))
 
 def fft(vals, is_top_level=True):
     vals = np.copy(vals)
@@ -127,7 +135,10 @@ def fft(vals, is_top_level=True):
         vals[:, :half_len] = f0
         vals[:, half_len:] = f1
     inv_size = (1 << (31-log2(size))) % M31
-    return (reverse_bit_order(vals.reshape((size,) + shape_suffix)) * inv_size) % M31
+    return (
+        (vals.reshape((size,) + shape_suffix))[rbos[size:size*2]]
+        * inv_size
+     ) % M31
 
 def bary_eval(vals, pt):
     vals = np.copy(vals)

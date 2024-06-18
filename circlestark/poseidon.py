@@ -84,7 +84,7 @@ def poseidon_next_state(state, c, arith):
     one, add, mul = arith
     L = state[:24]
     R = state[24:]
-    Lp = add(L, c[8:])
+    Lp = (L + c[8:]) % M31
 
     newL = np.zeros_like(L)
     newR = np.zeros_like(R)

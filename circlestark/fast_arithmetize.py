@@ -6,7 +6,7 @@ from fast_fft import (
 from fast_fri import (
     get_challenges, extension_field_mul, extension_point_add,
     modinv_ext, prove_low_degree, verify_low_degree,
-    folded_reverse_bit_order, rbo_index_to_original
+    rbo_index_to_original
 )
 from merkle import merkelize, hash, get_branch, verify_branch
 

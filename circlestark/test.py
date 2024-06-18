@@ -58,7 +58,7 @@ def test_fast_fft():
     print("Testing fast FFT")
     INPUT_SIZE = 2**13
     data = [pow(3, i, 2**31-1) for i in range(INPUT_SIZE)]
-    npdata = np.array(data, dtype=np.int64)
+    npdata = array(data)
     t0 = time.time()
     coeffs1 = fft([B(x) for x in data])
     t1 = time.time()
@@ -75,9 +75,8 @@ def test_fast_fft():
 def test_fast_fri():
     print("Testing FRI")
     INPUT_SIZE = 4096
-    coeffs = np.array(
+    coeffs = array(
         [pow(3, i, M31) for i in range(INPUT_SIZE)] + [0] * INPUT_SIZE,
-        dtype=np.int64
     )
     evaluations = f_inv_fft(coeffs)
     proof = f_prove_low_degree(to_extension_field(evaluations))

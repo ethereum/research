@@ -1,7 +1,7 @@
 from fast_fft import (
     reverse_bit_order, log2, M31, M31SQ, HALF, invx, invy, fft,
     to_extension_field, extension_field_mul, modinv, np,
-    array, zeros, tobytes, arange
+    array, zeros, tobytes, arange, folded_rbos
 )
 from merkle import merkelize, hash, get_branch, verify_branch
 
@@ -17,23 +17,14 @@ def chunkify(values):
         for i in range(0, len(o), 16*FOLD_SIZE_RATIO)
     ]
 
-def folded_reverse_bit_order(vals):
-    vals = np.copy(vals)
-    size = vals.shape[0]
-    shape_suffix = vals.shape[1:]
-    for i in range(log2(size)):
-        vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
-        full_len = vals.shape[1]
-        half_len = full_len >> 1
-        vals[:, half_len:] = np.flip(vals[:, half_len:], (1,))
-    return reverse_bit_order(vals.reshape((size,) + shape_suffix))
-
 # Get the Merkle branch challenge indices from a root
 def get_challenges(root, domain_size, num_challenges):
+    challenge_data = b''.join(
+        hash(root + bytes([i])) for i in range((num_challenges + 7) // 8)
+    )
     return array([
-        int.from_bytes(hash(root + bytes([i//256, i%256])), 'little')
-        % domain_size
-        for i in range(num_challenges)
+        int.from_bytes(challenge_data[i:i+4], 'little') % domain_size
+        for i in range(0, num_challenges * 4, 4)
     ])
 
 def modinv_ext(x):
@@ -73,13 +64,11 @@ def fold(values, coeff, first_round):
         left, right = values[::2], values[1::2]
         f0 = ((left + right) * HALF) % M31
         if i == 0 and first_round:
-            twiddle = folded_reverse_bit_order(
-                invy[full_len: full_len + half_len]
-            )
+            twiddle = \
+                invy[full_len: full_len + half_len][folded_rbos[half_len:full_len]]
         else:
-            twiddle = folded_reverse_bit_order(
-                invx[full_len*2: full_len*2 + half_len]
-            )
+            twiddle = \
+                invx[full_len*2: full_len*2 + half_len][folded_rbos[half_len:full_len]]
         twiddle_box = np.zeros_like(left)
         twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (left.ndim-1))
         f1 = ((((left + M31 - right) * HALF) % M31) * twiddle_box) % M31
@@ -111,7 +100,7 @@ def fold_with_positions(values, domain_size, positions, coeff, first_round):
 def prove_low_degree(evaluations):
     assert len(evaluations.shape) == 2 and evaluations.shape[-1] == 4
     # Commit Merkle root
-    values = folded_reverse_bit_order(evaluations)
+    values = evaluations[folded_rbos[len(evaluations):len(evaluations)*2]]
     leaves = []
     trees = []
     roots = []
