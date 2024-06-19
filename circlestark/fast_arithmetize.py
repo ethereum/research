@@ -6,7 +6,7 @@ from fast_fft import (
 from fast_fri import (
     get_challenges, extension_field_mul, extension_point_add,
     modinv_ext, prove_low_degree, verify_low_degree,
-    rbo_index_to_original
+    rbo_index_to_original, merkelize_top_dimension
 )
 from merkle import merkelize, hash, get_branch, verify_branch
 
@@ -111,11 +111,6 @@ ext_arith = (
     lambda *x: sum(x) % M31,
     extension_field_mul
 )
-
-def merkelize_top_dimension(x):
-    blob = tobytes(x)
-    size = len(blob) // x.shape[0]
-    return merkelize([blob[i:i+size] for i in range(0, len(blob), size)])
 
 def mk_stark(get_next_state_vector, start_state, constants, zero_outside_trace=False):
     import time

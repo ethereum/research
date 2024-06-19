@@ -10,12 +10,11 @@ FOLDS_PER_ROUND = 3
 FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
 NUM_CHALLENGES = 80
 
-def chunkify(values):
-    o = tobytes(values)
-    return [
-        o[i:i+16*FOLD_SIZE_RATIO]
-        for i in range(0, len(o), 16*FOLD_SIZE_RATIO)
-    ]
+
+def merkelize_top_dimension(x):
+    blob = tobytes(x)
+    size = len(blob) // x.shape[0]
+    return merkelize([blob[i:i+size] for i in range(0, len(blob), size)])
 
 # Get the Merkle branch challenge indices from a root
 def get_challenges(root, domain_size, num_challenges):
@@ -109,7 +108,10 @@ def prove_low_degree(evaluations):
     print("Generating FRI proof")
     for i in range(rounds):
         leaves.append(values)
-        trees.append(merkelize(chunkify(values)))
+        trees.append(merkelize_top_dimension(values.reshape(
+            (len(values) // FOLD_SIZE_RATIO, FOLD_SIZE_RATIO)
+            + values.shape[1:]
+        )))
         roots.append(trees[-1][1])
         print('Root: 0x{}'.format(roots[-1].hex()))
         print("Descent round {}: {} values".format(i+1, len(values)))
@@ -184,7 +186,7 @@ def verify_low_degree(proof):
         assert np.array_equal(folded_values, expected_values)
         for j, c in enumerate(np.copy(challenges)):
             assert verify_branch(
-                roots[i], c, chunkify(leaf_values[i][j])[0], branches[i][j]
+                roots[i], c, tobytes(leaf_values[i][j]), branches[i][j]
             )
         challenges >>= FOLDS_PER_ROUND
     o = np.zeros_like(final_values)

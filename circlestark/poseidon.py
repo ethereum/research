@@ -105,13 +105,12 @@ def poseidon_next_state(state, c, arith):
         newR += mul(c[4], R)
     if multidim or c[5]:
         newL += mul(c[5], append(mul(L[:1], R[:1]), L[1:24]))
-    if multidim or c[6]:
-        newL += mul(
-            c[6],
-            _matmul(L.swapaxes(0, L.ndim-1), mds).swapaxes(0, L.ndim-1) % M31
-        )
+    if multidim or c[6] or c[7]:
+        MAT = _matmul(L.swapaxes(0, L.ndim-1), mds).swapaxes(0, L.ndim-1) % M31
+        newL += mul(c[6], MAT)
+        newL[8:16] += mul(c[7], MAT[8:16])
 
-    return append(newL, newR)
+    return append(newL, newR) % M31
     
 OUTER = [
     [1,0,0,0,0,0,0,0],
@@ -127,11 +126,20 @@ INNER = [
     [0,0,0,0,0,0,1,0]
 ]
 
+FINAL = [
+    [0,0,0,0,0,0,0,1]
+]
+
+COMPONENT = (OUTER * 4 + INNER * 56 + OUTER * 4)[:-1] + FINAL
+
+NUM_HASHES = 50
+
 poseidon_constants = np.hstack((
-    array(OUTER * 4 + INNER * 56 + OUTER * 4),
-    zeros((256, 24))
+    array(COMPONENT * NUM_HASHES),
+    zeros((256 * NUM_HASHES, 24))
 ))
-poseidon_constants[::4, 8:] = round_constants
+for i in range(NUM_HASHES):
+    poseidon_constants[256*i:256*(i+1):4, 8:] = round_constants
 
 def arith_hash(in1, in2):
     state = zeros(48)
