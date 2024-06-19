@@ -84,33 +84,45 @@ def poseidon_next_state(state, c, arith):
     one, add, mul = arith
     L = state[:24]
     R = state[24:]
-    Lp = (L + c[8:]) % M31
 
-    newL = np.zeros_like(L)
-    newR = np.zeros_like(R)
-    multidim = (c.ndim > 1)
-    if multidim or c[0]:
-        newL += mul(c[0], mul(Lp, Lp))
-        newR += mul(c[0], Lp)
-    if multidim or c[1]:
-        newL += mul(c[1], mul(L, L))
-        newR += mul(c[1], R)
-    if multidim or c[2]:
-        newL += mul(c[2], mul(L, R))
-    if multidim or c[3]:
-        newL += mul(c[3], append(mul(Lp[:1], Lp[:1]), Lp[1:]))
-        newR += mul(c[3], Lp)
-    if multidim or c[4]:
-        newL += mul(c[4], append(mul(L[:1], L[:1]), L[1:24]))
-        newR += mul(c[4], R)
-    if multidim or c[5]:
-        newL += mul(c[5], append(mul(L[:1], R[:1]), L[1:24]))
-    if multidim or c[6] or c[7]:
+    if c.ndim > 1 or np.count_nonzero(c[:8]) > 1:
+        Lp = (L + c[8:]) % M31
         MAT = _matmul(L.swapaxes(0, L.ndim-1), mds).swapaxes(0, L.ndim-1) % M31
-        newL += mul(c[6], MAT)
-        newL[8:16] += mul(c[7], MAT[8:16])
-
-    return append(newL, newR) % M31
+        Z24 = np.zeros_like(R)
+        Z8 = np.zeros_like(R[:8])
+        return (
+            mul(c[0], append(mul(Lp, Lp), Lp)) +
+            mul(c[1], append(mul(L, L), R)) +
+            mul(c[2], append(mul(L, R), Z24)) +
+            mul(c[3], append(mul(Lp[:1], Lp[:1]), Lp[1:], Lp)) +
+            mul(c[4], append(mul(L[:1], L[:1]), L[1:24], R)) +
+            mul(c[5], append(mul(L[:1], R[:1]), L[1:24], Z24)) +
+            mul(c[6], append(mul(c[6], MAT), Z24)) +
+            mul(c[7], append(Z8, mul(c[7], MAT[8:16]), Z24, Z8))
+        ) % M31
+    else:
+        if c[0]:
+            Lp = (L + c[8:]) % M31
+            return append(mul(Lp, Lp), Lp)
+        elif c[1]:
+            return append(mul(L, L), R)
+        elif c[2]:
+            return append(mul(L, R), zeros(24))
+        elif c[3]:
+            Lp = (L + c[8:]) % M31
+            return append(mul(Lp[:1], Lp[:1]), Lp[1:], Lp)
+        elif c[4]:
+            return append(mul(L[:1], L[:1]), L[1:24], R)
+        elif c[5]:
+            return append(mul(L[:1], R[:1]), L[1:24], zeros(24))
+        elif c[6]:
+            MAT = _matmul(L, mds) % M31
+            return append(mul(c[6], MAT), zeros(24))
+        elif c[7]:
+            MAT = _matmul(L, mds) % M31
+            return append(zeros(8), mul(c[7], MAT[8:16]), zeros(32))
+        else:
+            return zeros(48)
     
 OUTER = [
     [1,0,0,0,0,0,0,0],
