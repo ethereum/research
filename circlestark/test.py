@@ -2,24 +2,35 @@ import sys
 from fields import S, M, B, ES, EM, EB
 from fft import fft, inv_fft, log2
 from fri import prove_low_degree, verify_low_degree
-from fast_fft import (
-    fft as f_fft, inv_fft as f_inv_fft, np, M31, modinv,
-    sub_domains, bary_eval, to_extension_field, zeros, arange, array,
-    append
+from utils import (
+    np, M31, modinv, to_extension_field, zeros, arange, array,
+    append, pad_to, m31_arith, ext_arith,
 )
+
+from precomputes import sub_domains
+
+from fast_fft import (
+    fft as f_fft, inv_fft as f_inv_fft, bary_eval
+)
+
 from fast_fri import (
     prove_low_degree as f_prove_low_degree,
     verify_low_degree as f_verify_low_degree
 )
-from fast_arithmetize import (
-    pad_to, mk_stark, verify_stark, get_vk,
-    line_function, interpolant, m31_arith, ext_arith,
-    public_args_to_vanish_and_interp
+
+from line_functions import (
+    line_function, interpolant, public_args_to_vanish_and_interp
 )
+
+from fast_arithmetize import (
+    mk_stark, verify_stark, get_vk,
+)
+
 from poseidon import (
     poseidon_hash, arith_hash, poseidon_next_state, poseidon_constants,
     NUM_HASHES
 )
+
 import time
 import cProfile
 import pstats
@@ -124,9 +135,9 @@ def test_simple_arithmetize():
     for i in range(SIZE-1):
         trace[i+1] = ((trace[i] ** 2 % M31) * trace[i] + 1) % M31
     ext_trace = f_inv_fft(pad_to(f_fft(trace), SIZE*4))
-    assert bary_eval(ext_trace, sub_domains[SIZE]) == 1
-    assert bary_eval(ext_trace, sub_domains[SIZE+1]) == 2
-    assert bary_eval(ext_trace, sub_domains[SIZE+2]) == 9
+    assert bary_eval(ext_trace, sub_domains[SIZE], m31_arith) == 1
+    assert bary_eval(ext_trace, sub_domains[SIZE+1], m31_arith) == 2
+    assert bary_eval(ext_trace, sub_domains[SIZE+2], m31_arith) == 9
     C_left = np.roll(ext_trace, -4)
     C_right = ((ext_trace**2 % M31) * ext_trace + M31 + 1) % M31
     C = (

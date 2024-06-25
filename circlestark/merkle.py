@@ -7,10 +7,11 @@ def hash(x):
 # o[2i] and o[2i+1], the second half of o is the original data, and o[1]
 # is the root
 def merkelize(vals):
+    print('merkelizing', len(vals), len(vals[0]))
     assert len(vals) & (len(vals)-1) == 0
-    o = [None] * len(vals) + [hash(x) for x in vals]
+    o = [None] * len(vals) + [sha256(x).digest() for x in vals]
     for i in range(len(vals)-1, 0, -1):
-        o[i] = hash(o[i*2] + o[i*2+1])
+        o[i] = sha256(o[i*2] + o[i*2+1]).digest()
     return o
 
 def get_root(tree):
@@ -35,10 +36,10 @@ def verify_branch(root, pos, val, branch):
 
 import concurrent.futures
 
-def merkelize_by_levels(vals):
+def _merkelize(vals):
     assert len(vals) & (len(vals)-1) == 0
     levels = [[hash(x) for x in vals]]
     while len(levels[-1]) > 1:
         L = levels[-1]
         levels.append([hash(L[i] + L[i+1]) for i in range(0, len(L), 2)])
-    return levels[::-1]
+    return sum([[None]] + levels[::-1], [])

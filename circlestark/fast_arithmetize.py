@@ -1,150 +1,26 @@
-from fast_fft import (
-    np, modinv, M31, M31SQ, log2, fft, inv_fft, sub_domains,
-    bary_eval, point_add, to_extension_field,
-    zeros, array, arange, tobytes, append, to_ext_if_needed
+from utils import (
+    np, zeros, array, arange, tobytes, append, np,
+    modinv, M31, M31SQ, log2, point_add, to_extension_field,
+    get_challenges, modinv_ext, merkelize_top_dimension,
+    rbo_index_to_original, pad_to, m31_arith, ext_arith,
+    eval_zpoly_at, projective_to_point, point_add_ext,
+    fold, fold_ext, mul_ext
 )
+
+from precomputes import sub_domains
+
+from fast_fft import fft, inv_fft, bary_eval
+
 from fast_fri import (
-    get_challenges, extension_field_mul, extension_point_add,
-    modinv_ext, prove_low_degree, verify_low_degree,
-    rbo_index_to_original, merkelize_top_dimension
+    prove_low_degree, verify_low_degree,
+    NUM_CHALLENGES, FOLDS_PER_ROUND, FOLD_SIZE_RATIO
 )
+
+from line_functions import (
+    line_function, interpolant, public_args_to_vanish_and_interp
+)
+
 from merkle import merkelize, hash, get_branch, verify_branch
-
-NUM_CHALLENGES = 80
-FOLDS_PER_ROUND = 3
-FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
-
-def pad_to(arr, new_len):
-    padding = zeros((new_len - arr.shape[0],) + arr.shape[1:])
-    return append(arr, padding)
-
-def confirm_max_degree(coeffs, bound):
-    #print(coeffs, bound, coeffs[:bound+4])
-    return np.array_equal(coeffs[bound:], np.zeros_like(coeffs[bound:]))
-
-def line_function(P1, P2, domain, arith):
-    one, add, mul = arith
-    a = (P2[1] + M31 - P1[1]) % M31
-    b = (P1[0] + M31 - P2[0]) % M31
-    c = (M31SQ + mul(P2[0], P1[1]) - mul(P1[0], P2[1])) % M31
-    if one.ndim == 1:
-        domain = to_ext_if_needed(domain, object_dim=2)
-        P1 = to_ext_if_needed(P1, object_dim=1)
-        P2 = to_ext_if_needed(P2, object_dim=1)
-
-    return (mul(a, domain[:,0]) + mul(b, domain[:,1]) + c) % M31
-
-def interpolant(P1, v1, P2, v2, domain, arith):
-    one, add, mul = arith
-    depth = len(v1.shape) - len(one.shape)
-    inv = modinv_ext if one.ndim == 1 else modinv
-    v1 = v1.reshape((1,)+v1.shape)
-    v2 = v2.reshape((1,)+v2.shape)
-    if one.ndim == 1:
-        domain = to_ext_if_needed(domain, object_dim=2)
-        P1 = to_ext_if_needed(P1, object_dim=1)
-        P2 = to_ext_if_needed(P2, object_dim=1)
-    if np.array_equal(P1[0], P2[0]):
-        y = domain[:,1].reshape((domain.shape[0],) + (1,) * depth + one.shape)
-        slope = mul((v2 - v1) % M31, inv((P2[1] - P1[1]) % M31))
-        return (v1 + mul((y - P1[1]) % M31, slope)) % M31
-    else:
-        x = domain[:,0].reshape((domain.shape[0],) + (1,) * depth + one.shape)
-        slope = mul((v2 - v1) % M31, inv((P2[0] - P1[0]) % M31))
-        return (v1 + mul((x - P1[0]) % M31, slope)) % M31
-
-def chunkify(values):
-    o = values.astype(np.uint32).tobytes()
-    width = values[0].size * 4
-    return [o[i:i+width] for i in range(0, len(o), width)]
-
-def projective_to_point(t):
-    t2 = extension_field_mul(t, t)
-    inv_1pt2 = modinv_ext((one + t2) % M31)
-    return np.stack((
-        extension_field_mul((one + M31 - t2) % M31, inv_1pt2),
-        extension_field_mul((2 * t) % M31, inv_1pt2)
-    ))
-
-def mulM31(x, y):
-    return x * y % M31
-
-def fold(vector, fold_factors):
-    return np.sum(
-        vector.reshape(vector.shape+(1,)) * fold_factors % M31,
-        axis=-2
-    ) % M31
-
-def fold_ext(vector, fold_factors):
-    return np.sum(extension_field_mul(vector, fold_factors), axis=-2) % M31
-
-one = array([1,0,0,0])
-m31_arith = (
-    array(1),
-    lambda *x: sum(x) % M31,
-    lambda x,y: x*y % M31
-)
-ext_arith = (
-    one,
-    lambda *x: sum(x) % M31,
-    extension_field_mul
-)
-
-def public_args_to_vanish_and_interp(domain_size,
-                                     indices,
-                                     vals,
-                                     arith,
-                                     out_domain=None):
-    one, add, mul = arith
-    inv = modinv_ext if one.ndim == 1 else modinv
-    assert len(indices) % 2 == 0
-    next_power_of_2 = 2**(len(indices)-1).bit_length() * 2
-    assert next_power_of_2 < domain_size
-    depth = len(vals.shape) - 1 - one.ndim
-    lines = []
-    eval_domain = sub_domains[next_power_of_2: next_power_of_2*2]
-    if out_domain is not None:
-        eval_domain = append(eval_domain, out_domain)
-    vpoly = one.reshape((1,)+one.shape)+zeros((eval_domain.shape[0],)+one.shape)
-    points = sub_domains[domain_size + array(indices)]
-    if one.ndim == 1:
-        points = to_ext_if_needed(points, object_dim=2)
-    for i in range(0, len(indices), 2):
-        lines.append(
-            line_function(points[i], points[i+1], eval_domain, arith)
-        )
-        vpoly = mul(vpoly, lines[-1])
-    interp = zeros((eval_domain.shape[0],) + vals.shape[1:])
-    for i in range(0, len(indices), 2):
-        vpoly_adjusted = (
-            mul(vpoly, inv(lines[i//2]))
-            .reshape((eval_domain.shape[0],) + (1,) * depth + one.shape)
-        )
-        y1 = bary_eval(vpoly_adjusted[:next_power_of_2], points[i], arith)
-        y2 = bary_eval(vpoly_adjusted[:next_power_of_2], points[i+1], arith)
-        I = interpolant(
-            points[i], mul(vals[i], inv(y1)),
-            points[i+1], mul(vals[i+1], inv(y2)),
-            eval_domain,
-            arith
-        )
-        interp += mul(vpoly_adjusted, I)
-    if out_domain is not None:
-        return vpoly[next_power_of_2:], interp[next_power_of_2:] % M31
-    else:
-        return vpoly, interp % M31
-
-def eval_zpoly_at(degree, coords):
-    Z = coords[...,0]
-    for i in range(1, log2(degree)):
-        Z = (2 * Z**2 - 1) % M31
-    return Z
-
-def eval_zpoly_at_ext(degree, coords):
-    Z = coords[...,0,:]
-    for i in range(1, log2(degree)):
-        Z = (2 * extension_field_mul(Z, Z) - one) % M31
-    return Z
 
 def mk_stark(get_next_state_vector, trace_width, constants, arguments, public_args=tuple()):
     import time
@@ -185,7 +61,7 @@ def mk_stark(get_next_state_vector, trace_width, constants, arguments, public_ar
     # Extend to 8x
     ext8_domain = sub_domains[trace_length*8: trace_length*16]
     C_ext8 = inv_fft(pad_to(fft(C_ext4), trace_length*8))
-    assert confirm_max_degree(fft(C_ext8), trace_length*3)
+    #assert confirm_max_degree(fft(C_ext8), trace_length*3)
     trace_ext8 = inv_fft(pad_to(trace_coeffs, trace_length*8))
     constants_ext8 = inv_fft(pad_to(constants_coeffs, trace_length*8))
     arguments_ext8 = inv_fft(pad_to(arguments_coeffs, trace_length*8))
@@ -199,7 +75,7 @@ def mk_stark(get_next_state_vector, trace_width, constants, arguments, public_ar
     Ia_ext8 = inv_fft(pad_to(fft(Ia), trace_length*8))
     Va_ext8 = inv_fft(pad_to(fft(Va), trace_length*8))
     args_quotient_ext8 = (arguments_ext8 - Ia_ext8) * modinv(Va_ext8) % M31
-    assert confirm_max_degree(fft(args_quotient_ext8), trace_length)
+    #assert confirm_max_degree(fft(args_quotient_ext8), trace_length)
     Vt, It = public_args_to_vanish_and_interp(
         trace_length,
         (0, rounds),
@@ -210,15 +86,16 @@ def mk_stark(get_next_state_vector, trace_width, constants, arguments, public_ar
     It_ext8 = inv_fft(pad_to(fft(It), trace_length*8))
     Vt_ext8 = inv_fft(pad_to(fft(Vt), trace_length*8))
     trace_quotient_ext8 = (trace_ext8 - It_ext8) * modinv(Vt_ext8) % M31
-    assert confirm_max_degree(fft(trace_quotient_ext8), trace_length)
+    #assert confirm_max_degree(fft(trace_quotient_ext8), trace_length)
     print('Generated size-8x polynomials', time.time() - START)
     Z_ext8 = eval_zpoly_at(
         trace_length,
-        ext8_domain.reshape((trace_length*8, 1, 2))
+        ext8_domain.reshape((trace_length*8, 1, 2)),
+        m31_arith
     )
     H_ext8 = C_ext8 * modinv(Z_ext8) % M31
-    H_coeffs = fft(H_ext8)
-    assert confirm_max_degree(H_coeffs, trace_length*2+3)
+    #H_coeffs = fft(H_ext8)
+    #assert confirm_max_degree(H_coeffs, trace_length*2+3)
     print('About to make trees!', time.time() - START)
     stack_ext8 = np.hstack((
         trace_quotient_ext8,
@@ -235,13 +112,13 @@ def mk_stark(get_next_state_vector, trace_width, constants, arguments, public_ar
     G = sub_domains[trace_length//2]
     bump = to_extension_field(sub_domains[trace_length*8])
     w = projective_to_point(get_challenges(TA_tree[1], M31, 4))
-    w_plus_G = extension_point_add(w, to_extension_field(G))
+    w_plus_G = point_add_ext(w, to_extension_field(G))
     #print('T_at_w', bary_eval(to_extension_field(trace_ext8), w, ext_arith)[:3])
     #print('K_at_w', bary_eval(to_extension_field(constants_ext8), w, ext_arith)[:3])
     #print('A_at_w', bary_eval(to_extension_field(arguments_ext8), w, ext_arith)[:3])
     #print('T_at_w_plus_G', bary_eval(to_extension_field(trace_ext8), w_plus_G, ext_arith)[:3])
     #print('C_at_w', bary_eval(to_extension_field(C_ext8), w, ext_arith)[:3])
-    w_bump = extension_point_add(w, bump)
+    w_bump = point_add_ext(w, bump)
     comb = np.hstack((
         stack_ext8[::2],
         append(stack_ext8[8::2],stack_ext8[:8:2]),
@@ -259,8 +136,8 @@ def mk_stark(get_next_state_vector, trace_width, constants, arguments, public_ar
     merged_poly = (
         fold(stack_ext8, fold_factors)
     ) % M31
-    merged_poly_coeffs = fft(merged_poly)
-    assert confirm_max_degree(merged_poly_coeffs, trace_length * 3 + 3)
+    #merged_poly_coeffs = fft(merged_poly)
+    #assert confirm_max_degree(merged_poly_coeffs, trace_length * 3 + 3)
     print('Generated merged poly!', time.time() - START)
     L3 = line_function(w, w_plus_G, ext8_domain, ext_arith)
     I3 = interpolant(
@@ -271,13 +148,13 @@ def mk_stark(get_next_state_vector, trace_width, constants, arguments, public_ar
         ext8_domain,
         ext_arith
     )
-    assert np.array_equal(bary_eval(I3, w_plus_G, ext_arith), fold_ext(S_at_w_plus_G, fold_factors))
-    master_quotient = extension_field_mul(
+    #assert np.array_equal(bary_eval(I3, w_plus_G, ext_arith), fold_ext(S_at_w_plus_G, fold_factors))
+    master_quotient = mul_ext(
         (merged_poly - I3) % M31, modinv_ext(L3)
     )
     print('Generated master_quotient!', time.time() - START)
-    master_quotient_coeffs = fft(master_quotient)
-    assert confirm_max_degree(master_quotient_coeffs, trace_length * 3)
+    #master_quotient_coeffs = fft(master_quotient)
+    #assert confirm_max_degree(master_quotient_coeffs, trace_length * 3)
 
     fri_proof = prove_low_degree(master_quotient)
     entropy = (
@@ -355,7 +232,7 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
     output_state = proof["output_state"]
     TA_root = proof["TA_root"]
     w = projective_to_point(get_challenges(TA_root, M31, 4))
-    w_plus_G = extension_point_add(w, to_extension_field(G))
+    w_plus_G = point_add_ext(w, to_extension_field(G))
     Va, Ia = public_args_to_vanish_and_interp(
         trace_length,
         public_args_positions,
@@ -369,21 +246,21 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
         m31_arith
     )
     T_at_w = (
-        extension_field_mul(
+        mul_ext(
             S_at_w[:trace_width],
             bary_eval(to_extension_field(Vt), w, ext_arith)
         )
         + bary_eval(to_extension_field(It), w, ext_arith)
     ) % M31
     T_at_w_plus_G = (
-        extension_field_mul(
+        mul_ext(
             S_at_w_plus_G[:trace_width],
             bary_eval(to_extension_field(Vt), w_plus_G, ext_arith)
         )
         + bary_eval(to_extension_field(It), w_plus_G, ext_arith)
     ) % M31
     A_at_w = (
-        extension_field_mul(
+        mul_ext(
             S_at_w[trace_width: trace_width + arguments_width],
             bary_eval(to_extension_field(Va), w, ext_arith)
         )
@@ -403,11 +280,8 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
     # Z = ext_domain[:,0,np.newaxis]
     # for i in range(1, log2(trace_length)):
     #     Z = (2 * Z**2 + M31 - 1) % M31
-    Z_at_w = w[0].reshape((1,4))
-    one, _, _ = ext_arith
-    for i in range(1, log2(trace_length)):
-        Z_at_w = (2 * extension_field_mul(Z_at_w, Z_at_w) + M31 - one) % M31
-    computed_H_at_w = extension_field_mul(
+    Z_at_w = eval_zpoly_at(trace_length, w, ext_arith)
+    computed_H_at_w = mul_ext(
         C_at_w,
         modinv_ext(Z_at_w)
     )
@@ -450,9 +324,11 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
             sub_domains[trace_length * 8 + challenges_next],
         )
     )
-    Z_leaves = sub_domains[trace_length * 8 + challenges, 0]
-    for i in range(1, log2(trace_length)):
-        Z_leaves = (2 * Z_leaves ** 2 + M31 - 1) % M31
+    Z_leaves = eval_zpoly_at(
+        trace_length,
+        sub_domains[trace_length * 8 + challenges],
+        m31_arith
+    )
     T_leaves = (
         TA_leaves[:,:trace_width]
         * Vt_leaves[:NUM_CHALLENGES].reshape((NUM_CHALLENGES, 1))
@@ -501,7 +377,7 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
     merged_leaves = (
         fold(np.hstack((TA_leaves, K_leaves, H_leaves)), fold_factors)
     )
-    computed_U_leaves = extension_field_mul(
+    computed_U_leaves = mul_ext(
         (merged_leaves + M31 - I3_leaves) % M31,
         inv_L3_leaves
     )

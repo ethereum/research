@@ -1,7 +1,6 @@
-from fast_fft import (
-    np, modinv, M31, log2, arange, array, zeros, append
+from utils import (
+    np, modinv, M31, log2, arange, array, zeros, append, m31_arith
 )
-from fast_arithmetize import m31_arith
 
 def mk_junk_data(length):
     a = arange(length, length*2)

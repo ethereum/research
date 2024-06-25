@@ -1,61 +1,16 @@
-from fast_fft import (
-    reverse_bit_order, log2, M31, M31SQ, HALF, invx, invy, fft,
-    to_extension_field, extension_field_mul, modinv, np,
-    array, zeros, tobytes, arange, folded_rbos
+from utils import (
+    log2, M31, M31SQ, HALF, to_extension_field, mul_ext, modinv,
+    np, array, zeros, tobytes, arange, reverse_bit_order,
+    merkelize_top_dimension, get_challenges, rbo_index_to_original
 )
+from precomputes import folded_rbos, invx, invy
+from fast_fft import fft
 from merkle import merkelize, hash, get_branch, verify_branch
 
 BASE_CASE_SIZE = 128
 FOLDS_PER_ROUND = 3
 FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
 NUM_CHALLENGES = 80
-
-
-def merkelize_top_dimension(x):
-    blob = tobytes(x)
-    size = len(blob) // x.shape[0]
-    return merkelize([blob[i:i+size] for i in range(0, len(blob), size)])
-
-# Get the Merkle branch challenge indices from a root
-def get_challenges(root, domain_size, num_challenges):
-    challenge_data = b''.join(
-        hash(root + bytes([i])) for i in range((num_challenges + 7) // 8)
-    )
-    return array([
-        int.from_bytes(challenge_data[i:i+4], 'little') % domain_size
-        for i in range(0, num_challenges * 4, 4)
-    ])
-
-def modinv_ext(x):
-    x = x.swapaxes(0, x.ndim-1)
-    r20 = (x[2] * x[2] + M31SQ - x[3] * x[3]) % M31
-    r21 = (2 * x[2] * x[3]) % M31
-    denom0 = (x[0]**2 - x[1]**2 + r20 - r21 * 2) % M31
-    denom1 = (2*x[0]*x[1] + r21 + r20 * 2) % M31
-    inv_denom_norm = modinv((denom0 ** 2 + denom1 ** 2) % M31)
-    inv_denom0 = (denom0 * inv_denom_norm) % M31
-    inv_denom1 = (M31SQ - denom1 * inv_denom_norm) % M31
-    o = np.stack((
-        x[0] * inv_denom0 + M31SQ - x[1] * inv_denom1,
-        x[0] * inv_denom1 + x[1] * inv_denom0,
-        M31SQ - x[2] * inv_denom0 + x[3] * inv_denom1,
-        M31SQ * 2 - x[2] * inv_denom1 - x[3] * inv_denom0,
-    ))
-    return (o % M31).swapaxes(0, o.ndim-1)
-
-def extension_point_add(pt1, pt2):
-    return np.stack((
-        extension_field_mul(pt1[0], pt2[0])
-        + M31SQ - extension_field_mul(pt1[1], pt2[1]),
-        extension_field_mul(pt1[0], pt2[1]) +
-        extension_field_mul(pt1[1], pt2[0])
-    )) % M31
-
-def rbo_index_to_original(length, index):
-    if length == 1:
-        return np.zeros_like(index)
-    sub = rbo_index_to_original(length >> 1, index >> 1)
-    return (1 - (index % 2)) * sub + (index % 2) * (length - 1 - sub)
 
 def fold(values, coeff, first_round):
     for i in range(FOLDS_PER_ROUND):
@@ -71,7 +26,7 @@ def fold(values, coeff, first_round):
         twiddle_box = np.zeros_like(left)
         twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (left.ndim-1))
         f1 = ((((left + M31 - right) * HALF) % M31) * twiddle_box) % M31
-        values = (f0 + extension_field_mul(f1, coeff)) % M31
+        values = (f0 + mul_ext(f1, coeff)) % M31
     return values
 
 def fold_with_positions(values, domain_size, positions, coeff, first_round):
@@ -91,7 +46,7 @@ def fold_with_positions(values, domain_size, positions, coeff, first_round):
         twiddle_box = np.zeros_like(left)
         twiddle_box[:] = twiddle.reshape((left.shape[0],) + (1,)*(left.ndim-1))
         f1 = ((((left + M31 - right) * HALF) % M31) * twiddle_box) % M31
-        values = (f0 + extension_field_mul(f1, coeff)) % M31
+        values = (f0 + mul_ext(f1, coeff)) % M31
         positions = positions[::2]
         domain_size //= 2
     return values
@@ -132,8 +87,10 @@ def prove_low_degree(evaluations):
         [get_branch(tree, c) for c in r_challenges]
         for i, (r_challenges, tree) in enumerate(zip(round_challenges, trees))
     ]
-    round_challenges_xfold = zeros(round_challenges.shape + (FOLD_SIZE_RATIO,))
-    round_challenges_xfold = round_challenges.reshape(round_challenges.shape + (1,)) * 8 + arange(FOLD_SIZE_RATIO).reshape(1, 1, FOLD_SIZE_RATIO)
+    round_challenges_xfold = (
+        round_challenges.reshape(round_challenges.shape + (1,)) * 8
+        + arange(FOLD_SIZE_RATIO).reshape(1, 1, FOLD_SIZE_RATIO)
+    )
 
     leaf_values = [
         leaves[i][round_challenges_xfold[i]]
