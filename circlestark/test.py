@@ -11,9 +11,14 @@ from fast_fri import (
     prove_low_degree as f_prove_low_degree,
     verify_low_degree as f_verify_low_degree
 )
-from fast_arithmetize import pad_to, mk_stark, verify_stark, get_vk
+from fast_arithmetize import (
+    pad_to, mk_stark, verify_stark, get_vk,
+    line_function, interpolant, m31_arith, ext_arith,
+    public_args_to_vanish_and_interp
+)
 from poseidon import (
-    poseidon_hash, arith_hash, poseidon_next_state, poseidon_constants
+    poseidon_hash, arith_hash, poseidon_next_state, poseidon_constants,
+    NUM_HASHES
 )
 import time
 import cProfile
@@ -140,23 +145,77 @@ def test_simple_arithmetize():
     )
     print("Simple arithmetization test passed")
 
+def test_lines_and_interpolants():
+    coords = (
+        # pos1, val1, pos2, val2
+        (12, 9, 13, 81, m31_arith),
+        (8, 16, 15, 256, m31_arith),
+        (12, [9, 25, 49], 13, [81, 625, 2401], m31_arith),
+        (8, [999, 998, 997], 15, [900, 901, 902], m31_arith),
+        (12, [1,2,3,4], 13, [8,16,32,64], ext_arith),
+        (8, [9,10,11,12], 15, [3,9,27,81], ext_arith),
+        (8, [[1,2,3,4],[5,0,0,0]], 17, [[8,16,32,64],[900,0,0,0]], ext_arith),
+        (23, [[5,6,7,80],[9,0,0,0]], 29, [[4,40,14,41],[99,0,0,0]], ext_arith),
+    )
+    for pos1, v1, pos2, v2, arith in coords:
+        print(pos1, v1, pos2, v2)
+        p1 = sub_domains[pos1]
+        p2 = sub_domains[pos2]
+        p3 = sub_domains[pos2 * 2 - pos1]
+        if arith[0].ndim == 1:
+            p1 = to_extension_field(p1)
+            p2 = to_extension_field(p2)
+            p3 = to_extension_field(p3)
+        v1, v2 = array(v1), array(v2)
+        L = line_function(p1, p2, sub_domains[8:16], arith)
+        assert not np.any(bary_eval(L, p1, arith))
+        assert not np.any(bary_eval(L, p2, arith))
+        assert np.any(bary_eval(L, p3, arith))
+        I = interpolant(p1, v1, p2, v2, sub_domains[8:16], arith)
+        assert np.array_equal(bary_eval(I, p1, arith), v1)
+        assert np.array_equal(bary_eval(I, p2, arith), v2)
+
+    print("Basic line and interpolant checks passed")
+
+    for i in range(0, len(coords), 2):
+        pos1, v1, pos2, v2, arith = coords[i]
+        pos3, v3, pos4, v4, _ = coords[i+1]
+        print(pos1, pos2, pos3, pos4, v1, v2, v3, v4)
+        V, I = public_args_to_vanish_and_interp(
+            32,
+            (pos1, pos2, pos3, pos4),
+            array([v1, v2, v3, v4]),
+            arith
+        )
+        for pos, v in zip((pos1, pos2, pos3, pos4), (v1, v2, v3, v4)):
+            assert not np.any(bary_eval(V, sub_domains[32+pos], arith))
+            assert np.array_equal(
+                bary_eval(I, sub_domains[32+pos], arith),
+                array(v)
+            )
+
+    print("Vanish-and-interp test passed")
+
 def test_mk_stark():
-    def next_state(state, c, arith): 
+    def next_state(state, constants, arguments, arith): 
         one, add, mul = arith
-        o = np.stack((
-            add(mul(mul(state[0], state[0]), state[1]), c[0]),
-            add(mul(mul(state[1], state[1]), state[2]), c[0]),
-            add(mul(mul(state[2], state[2]), state[0]), c[0], one),
-        ))
+        o = add(
+            mul(constants[0], np.stack((
+                add(mul(state[1], state[2]), one),
+                add(mul(state[2], state[0]), one),
+                add(mul(state[0], state[1]), one),
+            ))),
+            mul(constants[1], add(state, arguments))
+        )
         return o
 
-    constants = arange(100).reshape((100,1))
-    start_state = array([1,1,2])
+    constants = array([[0,1]] + [[1,0]]*98 + [[0,1]])
+    arguments = array([[3,0,0]] + [[0,0,0]] * 99)
     print("Generating STARK")
-    stark = mk_stark(next_state, start_state, constants)
-    vk = get_vk(constants)
+    stark = mk_stark(next_state, 3, constants, arguments, public_args=(0,99))
+    vk = get_vk(3, constants, arguments.shape[1], (0,99))
     print("Verifying STARK")
-    assert verify_stark(next_state, vk, start_state, stark)
+    assert verify_stark(next_state, vk, arguments[array((0,99))], stark)
     print("Verified!")
 
 def start_profile():
@@ -181,15 +240,29 @@ def test_poseidon_stark():
     h2 = arith_hash(in1, in2)
     print("Hash from arithmetization:", h2)
     assert np.array_equal(h1, h2)
-    vk = get_vk(poseidon_constants)
+    positions = (0,) + tuple(1 + 257 * i for i in range(NUM_HASHES))
+    vk = get_vk(48, poseidon_constants, 9, positions)
+    arguments = zeros((poseidon_constants.shape[0], 9))
+    arguments[0, :8] = in1
+    arguments[0, 8] = 1
+    arguments[1, :8] = in2
+    arguments[1, 8] = 1
+    for i in range(1, NUM_HASHES):
+        arguments[1 + 257 * i, :8] = arange(8*(i+1), 8*(i+2))
+        arguments[1 + 257 * i, 8] = i%2
     print("Generating Poseidon STARK")
-    start_state = append(append(in1, in2), zeros(32))
     start_profile()
-    stark = mk_stark(poseidon_next_state, start_state, poseidon_constants, zero_outside_trace=True)
+    stark = mk_stark(
+        poseidon_next_state,
+        48,
+        poseidon_constants,
+        arguments,
+        public_args=positions
+    )
     print("Generated")
     end_profile()
     print("Verifying Poseidon STARK")
-    assert verify_stark(poseidon_next_state, vk, start_state, stark)
+    assert verify_stark(poseidon_next_state, vk, arguments[array(positions)], stark)
     print("Verified!")
 
 if __name__ == '__main__':

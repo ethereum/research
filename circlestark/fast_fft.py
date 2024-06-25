@@ -140,33 +140,6 @@ def fft(vals, is_top_level=True):
         * inv_size
      ) % M31
 
-def bary_eval(vals, pt):
-    vals = np.copy(vals)
-    shape_suffix = vals.shape[1:]
-    size = vals.shape[0]
-    for i in range(log2(size)):
-        #vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
-        full_len = vals.shape[0]
-        half_len = full_len >> 1
-        L = vals[:half_len]
-        R = np.flip(vals[half_len:], (0,))
-        f0 = (L + R) % M31
-        if i == 0:
-            twiddle = invy[full_len: full_len + half_len]
-            baryfac = pt[1]
-        else:
-            twiddle = invx[full_len*2: full_len*2 + half_len]
-            if i == 1:
-                baryfac = pt[0]
-            else:
-                baryfac = (2 * baryfac**2 + M31 - 1) % M31
-        twiddle_box = np.zeros_like(L)
-        twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (L.ndim - 1))
-        f1 = ((L + M31 - R) * twiddle_box) % M31
-        vals = (f0 + baryfac * f1) % M31
-    inv_size = (1 << (31-log2(size))) % M31
-    return (vals[0] * inv_size) % M31
-
 def inv_fft(vals):
     vals = np.copy(vals)
     shape_suffix = vals.shape[1:]
@@ -248,10 +221,19 @@ def extension_field_mul(A, B):
 
 one = array([1,0,0,0])
 
-def bary_eval_ext(vals, pt):
+def to_ext_if_needed(obj, object_dim):
+    if obj.ndim == object_dim:
+        return to_extension_field(obj)
+    else:
+        return obj
+
+def bary_eval(vals, pt, arith):
+    one, add, mul = arith
     vals = np.copy(vals)
     shape_suffix = vals.shape[1:]
     size = vals.shape[0]
+    if one.ndim == 1:
+        pt = to_ext_if_needed(pt, object_dim=1)
     for i in range(log2(size)):
         #vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
         full_len = vals.shape[0]
@@ -259,7 +241,7 @@ def bary_eval_ext(vals, pt):
         L = vals[:half_len]
         R = np.flip(vals[half_len:], (0,))
         f0 = (L + R) % M31
-        if i==0:
+        if i == 0:
             twiddle = invy[full_len: full_len + half_len]
             baryfac = pt[1]
         else:
@@ -267,14 +249,10 @@ def bary_eval_ext(vals, pt):
             if i == 1:
                 baryfac = pt[0]
             else:
-                baryfac = (
-                    (2 * extension_field_mul(baryfac, baryfac) + M31 - one)
-                    % M31
-                )
+                baryfac = (2 * mul(baryfac, baryfac) - one) % M31
         twiddle_box = np.zeros_like(L)
         twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (L.ndim - 1))
         f1 = ((L + M31 - R) * twiddle_box) % M31
-        vals = (f0 + extension_field_mul(baryfac, f1)) % M31
-    
+        vals = (f0 + mul(baryfac, f1)) % M31
     inv_size = (1 << (31-log2(size))) % M31
     return (vals[0] * inv_size) % M31

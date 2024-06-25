@@ -55,7 +55,7 @@ def merkelize(data):
     for i in range(log2(data.shape[0])-1, 2, -1):
         hash_inputs = output[2**(i+1):2**(i+2)].reshape((-1,2,8))
         L, R = hash_inputs[...,0,:], hash_inputs[...,1,:]
-        output[2**i: 2**(i+1)] = hash(L, R).reshape((-1,))
+        output[2**i: 2**(i+1)] = poseidon_hash(L, R).reshape((-1,))
     return output
 
 # Handle with care. This is only safe if the values in at least one matrix
@@ -80,16 +80,16 @@ def _matmul(a, b):
 # N(P(x) = P(xw))
 # C(P(xw), P(x)) = N(P(x)) - P(xw) = 0
 
-def poseidon_next_state(state, c, arith):
+def poseidon_next_state(state, c, a, arith):
     one, add, mul = arith
     L = state[:24]
     R = state[24:]
 
     if c.ndim > 1 or np.count_nonzero(c[:8]) > 1:
-        Lp = (L + c[8:]) % M31
-        MAT = _matmul(L.swapaxes(0, L.ndim-1), mds).swapaxes(0, L.ndim-1) % M31
         Z24 = np.zeros_like(R)
         Z8 = np.zeros_like(R[:8])
+        Lp = (L + c[8:]) % M31
+        MAT = _matmul(L.swapaxes(0, L.ndim-1), mds).swapaxes(0, L.ndim-1) % M31
         return (
             mul(c[0], append(mul(Lp, Lp), Lp)) +
             mul(c[1], append(mul(L, L), R)) +
@@ -98,7 +98,10 @@ def poseidon_next_state(state, c, arith):
             mul(c[4], append(mul(L[:1], L[:1]), L[1:24], R)) +
             mul(c[5], append(mul(L[:1], R[:1]), L[1:24], Z24)) +
             mul(c[6], append(mul(c[6], MAT), Z24)) +
-            mul(c[7], append(Z8, mul(c[7], MAT[8:16]), Z24, Z8))
+            mul(c[7], (
+                mul((one - a[8]) % M31, append(a[:8], L[8:16], Z8, Z24)) +
+                mul(a[8], append(L[8:16], a[:8], Z8, Z24))
+            ) % M31)
         ) % M31
     else:
         if c[0]:
@@ -119,8 +122,12 @@ def poseidon_next_state(state, c, arith):
             MAT = _matmul(L, mds) % M31
             return append(mul(c[6], MAT), zeros(24))
         elif c[7]:
-            MAT = _matmul(L, mds) % M31
-            return append(zeros(8), mul(c[7], MAT[8:16]), zeros(32))
+            Z24 = np.zeros_like(R)
+            Z8 = np.zeros_like(R[:8])
+            return (
+                mul((one - a[8]) % M31, append(a[:8], L[8:16], Z8, Z24)) +
+                mul(a[8], append(L[8:16], a[:8], Z8, Z24))
+            ) % M31
         else:
             return zeros(48)
     
@@ -138,26 +145,34 @@ INNER = [
     [0,0,0,0,0,0,1,0]
 ]
 
-FINAL = [
+INITIAL = [
     [0,0,0,0,0,0,0,1]
 ]
 
-COMPONENT = (OUTER * 4 + INNER * 56 + OUTER * 4)[:-1] + FINAL
+COMPONENT = INITIAL + (OUTER * 4 + INNER * 56 + OUTER * 4)
 
-NUM_HASHES = 50
+NUM_HASHES = 51
 
 poseidon_constants = np.hstack((
-    array(COMPONENT * NUM_HASHES),
-    zeros((256 * NUM_HASHES, 24))
+    array(INITIAL + COMPONENT * NUM_HASHES),
+    zeros((1 + 257 * NUM_HASHES, 24))
 ))
 for i in range(NUM_HASHES):
-    poseidon_constants[256*i:256*(i+1):4, 8:] = round_constants
+    poseidon_constants[257*i+2:257*(i+1)+1:4, 8:] = round_constants
 
 def arith_hash(in1, in2):
     state = zeros(48)
-    state[:8] = in1
-    state[8:16] = in2
-    for i in range(256):
+    arguments = zeros((258, 9))
+    arguments[0, :8] = in1
+    arguments[0, 8] = 1
+    arguments[1, :8] = in2
+    arguments[1, 8] = 1
+    for i in range(258):
         #print('Round {}: {}'.format(i, [int(x) for x in state[:3]]))
-        state = poseidon_next_state(state, poseidon_constants[i], m31_arith)
+        state = poseidon_next_state(
+            state,
+            poseidon_constants[i],
+            arguments[i],
+            m31_arith
+        )
     return state[8:16]
