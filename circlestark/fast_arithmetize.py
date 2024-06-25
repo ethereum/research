@@ -209,6 +209,7 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
         fri_proof["final_values"].shape[0]
         << (FOLDS_PER_ROUND * len(fri_proof["roots"]))
     )
+    TA_root = proof["TA_root"]
     TA_branches = proof["TA_branches"]
     TA_leaves = proof["TA_leaves"]
     TA_next_branches = proof["TA_next_branches"]
@@ -225,12 +226,7 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
     trace_width = vk["trace_width"]
     trace_length = 2**(rounds+1).bit_length()
     G = sub_domains[trace_length//2]
-    start_point = sub_domains[trace_length]
-    output_point = sub_domains[trace_length + rounds]
-    nm1_point = sub_domains[trace_length*2-1]
-    nm2_point = sub_domains[trace_length*2-2]
     output_state = proof["output_state"]
-    TA_root = proof["TA_root"]
     w = projective_to_point(get_challenges(TA_root, M31, 4))
     w_plus_G = point_add_ext(w, to_extension_field(G))
     Va, Ia = public_args_to_vanish_and_interp(

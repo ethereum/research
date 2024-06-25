@@ -5,6 +5,8 @@ from utils import (
 )
 from precomputes import rbos, invx, invy, sub_domains
 
+# Converts a list of evaluations to a list of coefficients. Note that the
+# coefficients are in a "weird" basis: 1, y, x, xy, 2x^2-1...
 def fft(vals, is_top_level=True):
     vals = np.copy(vals)
     shape_suffix = vals.shape[1:]
@@ -31,6 +33,7 @@ def fft(vals, is_top_level=True):
         * inv_size
      ) % M31
 
+# Converts a list of coefficients into a list of evaluations
 def inv_fft(vals):
     vals = np.copy(vals)
     shape_suffix = vals.shape[1:]
@@ -54,7 +57,8 @@ def inv_fft(vals):
         vals[:, half_len:] = np.flip(R, (1,))
     return np.reshape(vals, (size,) + shape_suffix)
 
-
+# Given a list of evaluations, computes the evaluation of that polynomial at
+# one point. The point can be in the base field or extension field
 def bary_eval(vals, pt, arith):
     one, add, mul = arith
     vals = np.copy(vals)
