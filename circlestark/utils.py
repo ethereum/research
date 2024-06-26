@@ -51,11 +51,7 @@ def confirm_max_degree(coeffs, bound):
 def merkelize_top_dimension(x):
     blob = tobytes(x)
     size = len(blob) // x.shape[0]
-    import time
-    x1 = time.time()
-    o = merkelize([blob[i:i+size] for i in range(0, len(blob), size)])
-    print('t', time.time() - x1, size, len(blob) // size)
-    return o
+    return merkelize([blob[i:i+size] for i in range(0, len(blob), size)])
 
 # Checks if an object needs to be turned into extension-field
 # elements, and does so if necessary. object_dim should be the

@@ -23,7 +23,7 @@ from line_functions import (
 )
 
 from fast_stark import (
-    mk_stark, verify_stark, get_vk,
+    mk_stark, verify_stark, get_vk, build_constants_tree
 )
 
 from arithmetization_builder import (
@@ -284,9 +284,16 @@ def test_poseidon_stark():
     print("Hash from arithmetization builder:", h3)
     assert np.array_equal(h1, h2)
     assert np.array_equal(h1, h3)
-    branch_arguments = {"load_args": [
-        append(arange(i*8, (i+1)*8), array([i%2])) for i in range(NUM_HASHES+1)
-    ]}
+    branch_arguments = {
+        "load_leaf": [
+            array([0,1,2,3,4,5,6,7,1]),
+            array([8,9,10,11,12,13,14,15,1]),
+        ],
+        "load_args": [
+            append(arange(i*8, (i+1)*8), array([i%2]))
+            for i in range(NUM_HASHES-1)
+        ]
+    }
     constants = generate_constants_table(poseidon_branch_hasher)
     positions = get_public_args_indices(poseidon_branch_hasher)
     vk = get_vk(
@@ -295,6 +302,7 @@ def test_poseidon_stark():
         get_arguments_width(poseidon_branch_hasher),
         positions
     )
+    k_tree = build_constants_tree(constants)
     print("Generating Poseidon STARK")
     start_profile()
     arguments = generate_arguments_table(
@@ -308,17 +316,18 @@ def test_poseidon_stark():
     )
     next_state = generate_next_state_function(poseidon_branch_hasher)
     stark = mk_stark(
-        poseidon_next_state,
+        next_state,
         poseidon_branch_hasher["trace_width"],
         constants,
         arguments,
         positions,
+        prebuilt_constants_tree=k_tree,
         prefilled_trace=prefilled_trace
     )
     print("Generated")
     end_profile()
     print("Verifying Poseidon STARK")
-    assert verify_stark(poseidon_next_state, vk, arguments[array(positions)], stark)
+    assert verify_stark(next_state, vk, arguments[array(positions)], stark)
     print("Verified!")
 
 if __name__ == '__main__':

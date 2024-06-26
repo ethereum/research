@@ -78,28 +78,37 @@ def generate_filled_trace(obj, constants, arguments):
         trace_length,
         obj["trace_width"]
     ))
+    function_count = len(list(obj["functions"].keys()))
     functions = obj["functions"]
     for i, step in enumerate(obj["steps"]):
         f = functions[step]
-        trace[i+1] = f(trace[i], constants[i], arguments[i], m31_arith)
+        trace[i+1] = f(
+            trace[i],
+            constants[i][function_count:],
+            arguments[i],
+            m31_arith
+        )
     return trace
 
 def generate_next_state_function(obj):
 
+    function_count = len(list(obj["functions"].keys()))
+
     def next_state(state, constants, arguments, arith):
         one, add, mul = arith
         o = np.zeros_like(state)
+        c = constants[function_count:]
         for i, function in enumerate(list(obj["functions"].values())):
             o += mul(
                 constants[i],
-                function(state, constants, arguments, arith)
+                function(state, c, arguments, arith)
             )
         return o % M31
 
     return next_state
 
 def get_public_args_indices(obj):
-    return [
+    return array([
         i for i,v in enumerate(obj["steps"])
         if v in obj["take_public_arguments"]
-    ]
+    ])
