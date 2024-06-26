@@ -34,7 +34,8 @@ from arithmetization_builder import (
 
 from poseidon import (
     poseidon_hash, arith_hash, arith_hash2, poseidon_next_state,
-    poseidon_constants, poseidon_hasher, poseidon_branch_hasher, NUM_HASHES
+    poseidon_constants, poseidon_hasher, poseidon_branch_hasher, NUM_HASHES,
+    custom_trace_filler
 )
 
 import time
@@ -309,11 +310,14 @@ def test_poseidon_stark():
         poseidon_branch_hasher,
         branch_arguments
     )
-    prefilled_trace = generate_filled_trace(
-        poseidon_branch_hasher,
-        constants,
-        arguments
+    prefilled_trace = custom_trace_filler(
+        branch_arguments,
     )
+    #prefilled_trace = generate_filled_trace(
+    #    poseidon_branch_hasher,
+    #    constants,
+    #    arguments
+    #)
     next_state = generate_next_state_function(poseidon_branch_hasher)
     stark = mk_stark(
         next_state,

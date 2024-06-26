@@ -1,6 +1,6 @@
 from utils import (
     np, modinv, M31, log2, arange, array, zeros, append, m31_arith,
-    mk_junk_data
+    mk_junk_data, device
 )
 
 from arithmetization_builder import (
@@ -275,3 +275,58 @@ def arith_hash2(in1, in2):
         arguments
     )
     return prefilled_trace[len(poseidon_hasher["steps"]), 8:16]
+
+def custom_trace_filler(arguments):
+    trace_length = 2**(len(poseidon_branch_hasher["steps"])+1).bit_length()
+    trace = np.zeros((
+        trace_length,
+        poseidon_branch_hasher["trace_width"]
+    ), dtype=np.int64)
+    trace[1, 8:16] = arguments["load_leaf"][0][:8]
+    trace[2, :8] = trace[1, 8:16]
+    trace[2, 8:16] = arguments["load_leaf"][1][:8]
+    rc = np.array([[int(x) for x in z] for z in round_constants], dtype=np.int64)
+    cpumds = np.array([[int(x) for x in z] for z in mds], dtype=np.int64)
+
+    for i in range(NUM_HASHES):
+        pos = 2 + 193 * i
+        if i > 0:
+            arg = arguments["load_args"][i-1]
+            if arg[8] == 0:
+                trace[pos, :8] = arg[:8]
+                trace[pos, 8:16] = trace[pos-1, 8:16]
+            else:
+                trace[pos, :8] = trace[pos-1, 8:16]
+                trace[pos, 8:16] = arg[:8]
+        for r in range(4):
+            Lp = (trace[pos, :24] + rc[r]) % M31
+            trace[pos+1, :24] = Lp ** 2 % M31
+            trace[pos+1, 24:] = Lp
+            trace[pos+2, :24] = trace[pos+1, :24] ** 2 % M31
+            trace[pos+2, 24:] = Lp
+            L = trace[pos+2, :24] * Lp % M31
+            trace[pos+3, :24] = _matmul(L, cpumds) % M31
+            pos += 3
+        for r in range(4, 60):
+            Lp = (trace[pos, :24] + rc[r]) % M31
+            trace[pos+1, :1] = Lp[:1] ** 2 % M31
+            trace[pos+1, 1:24] = Lp[1:]
+            trace[pos+1, 24:] = Lp
+            trace[pos+2] = trace[pos+1]
+            trace[pos+2, :1] = trace[pos+1, :1] ** 2 % M31
+            L = append(
+                trace[pos+2, :1] * trace[pos+2, 24:25] % M31,
+                Lp[1:]
+            )
+            trace[pos+3, :24] = _matmul(L, cpumds) % M31
+            pos += 3
+        for r in range(60, 64):
+            Lp = (trace[pos, :24] + rc[r]) % M31
+            trace[pos+1, :24] = Lp ** 2 % M31
+            trace[pos+1, 24:] = Lp
+            trace[pos+2, :24] = trace[pos+1, :24] ** 2 % M31
+            trace[pos+2, 24:] = Lp
+            L = trace[pos+2, :24] * Lp % M31
+            trace[pos+3, :24] = _matmul(L, cpumds) % M31
+            pos += 3
+    return trace.to(device)
