@@ -4,7 +4,7 @@ from fft import fft, inv_fft, log2
 from fri import prove_low_degree, verify_low_degree
 from utils import (
     np, M31, modinv, to_extension_field, zeros, arange, array,
-    append, pad_to, m31_arith, ext_arith,
+    append, pad_to, m31_arith, ext_arith, mk_junk_data
 )
 
 from precomputes import sub_domains
@@ -22,13 +22,19 @@ from line_functions import (
     line_function, interpolant, public_args_to_vanish_and_interp
 )
 
-from fast_arithmetize import (
+from fast_stark import (
     mk_stark, verify_stark, get_vk,
 )
 
+from arithmetization_builder import (
+    example, example_args, generate_constants_table, generate_arguments_table,
+    generate_filled_trace, generate_next_state_function,
+    get_public_args_indices, get_arguments_width
+)
+
 from poseidon import (
-    poseidon_hash, arith_hash, poseidon_next_state, poseidon_constants,
-    NUM_HASHES
+    poseidon_hash, arith_hash, arith_hash2, poseidon_next_state,
+    poseidon_constants, poseidon_hasher, poseidon_branch_hasher, NUM_HASHES
 )
 
 import time
@@ -43,6 +49,7 @@ def test_basic_arithmetic():
     print("Basic arithmetic test passed")
 
 fri_proof = None
+test_stark_output = None
 
 def test_fft():
     INPUT_SIZE = 512
@@ -113,13 +120,10 @@ def test_fast_fri():
 def test_mega_fri():
     print("Testing FRI")
     INPUT_SIZE = 2**22
-    coeffs = np.zeros(INPUT_SIZE * 2, dtype=np.int64)
-
-    def mk_junk_data(length):
-        a = np.arange(length, length*2, dtype=np.int64)
-        return ((3**a) ^ (7**a)) % M31
-
-    coeffs[:INPUT_SIZE] = mk_junk_data(INPUT_SIZE)
+    coeffs = append(
+        mk_junk_data(INPUT_SIZE),
+        zeros(INPUT_SIZE)
+    )
     t1 = time.time()
     evaluations = f_inv_fft(coeffs)
     print("Low-degree extended coeffs in time {}".format(time.time() - t1))
@@ -224,10 +228,36 @@ def test_mk_stark():
     arguments = array([[3,0,0]] + [[0,0,0]] * 99)
     print("Generating STARK")
     stark = mk_stark(next_state, 3, constants, arguments, public_args=(0,99))
+    global test_stark_output
+    test_stark_output = stark["output_state"]
     vk = get_vk(3, constants, arguments.shape[1], (0,99))
     print("Verifying STARK")
     assert verify_stark(next_state, vk, arguments[array((0,99))], stark)
     print("Verified!")
+
+def test_arithmetization_builder():
+    constants = generate_constants_table(example)
+    arguments = generate_arguments_table(example, example_args)
+    prefilled_trace = generate_filled_trace(example, constants, arguments)
+    next_state = generate_next_state_function(example)
+    indices = get_public_args_indices(example)
+    stark = mk_stark(
+        next_state,
+        example["trace_width"],
+        constants,
+        arguments,
+        indices,
+        prefilled_trace=prefilled_trace
+    )
+    vk = get_vk(3, constants, arguments.shape[1], indices)
+    print("Verifying STARK")
+    assert verify_stark(next_state, vk, arguments[array(indices)], stark)
+    print("Verified!")
+    global test_stark_output
+    if test_stark_output is None:
+        raise Exception("Need test_mk_stark to check against")
+    assert np.array_equal(stark["output_state"], test_stark_output)
+    print("Outputs confirmed match")
 
 def start_profile():
     global profiler
@@ -249,26 +279,41 @@ def test_poseidon_stark():
     h1 = poseidon_hash(in1, in2)
     print("Directly computed hash:", h1)
     h2 = arith_hash(in1, in2)
-    print("Hash from arithmetization:", h2)
+    print("Hash from raw arithmetization:", h2)
+    h3 = arith_hash2(in1, in2)
+    print("Hash from arithmetization builder:", h3)
     assert np.array_equal(h1, h2)
-    positions = (0,) + tuple(1 + 257 * i for i in range(NUM_HASHES))
-    vk = get_vk(48, poseidon_constants, 9, positions)
-    arguments = zeros((poseidon_constants.shape[0], 9))
-    arguments[0, :8] = in1
-    arguments[0, 8] = 1
-    arguments[1, :8] = in2
-    arguments[1, 8] = 1
-    for i in range(1, NUM_HASHES):
-        arguments[1 + 257 * i, :8] = arange(8*(i+1), 8*(i+2))
-        arguments[1 + 257 * i, 8] = i%2
+    assert np.array_equal(h1, h3)
+    branch_arguments = {"load_args": [
+        append(arange(i*8, (i+1)*8), array([i%2])) for i in range(NUM_HASHES+1)
+    ]}
+    constants = generate_constants_table(poseidon_branch_hasher)
+    positions = get_public_args_indices(poseidon_branch_hasher)
+    vk = get_vk(
+        poseidon_branch_hasher["trace_width"],
+        constants,
+        get_arguments_width(poseidon_branch_hasher),
+        positions
+    )
     print("Generating Poseidon STARK")
     start_profile()
+    arguments = generate_arguments_table(
+        poseidon_branch_hasher,
+        branch_arguments
+    )
+    prefilled_trace = generate_filled_trace(
+        poseidon_branch_hasher,
+        constants,
+        arguments
+    )
+    next_state = generate_next_state_function(poseidon_branch_hasher)
     stark = mk_stark(
         poseidon_next_state,
-        48,
-        poseidon_constants,
+        poseidon_branch_hasher["trace_width"],
+        constants,
         arguments,
-        public_args=positions
+        positions,
+        prefilled_trace=prefilled_trace
     )
     print("Generated")
     end_profile()

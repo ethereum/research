@@ -22,8 +22,7 @@ def fft(vals, is_top_level=True):
             twiddle = invy[full_len: full_len + half_len]
         else:
             twiddle = invx[full_len*2: full_len*2 + half_len]
-        twiddle_box = np.zeros_like(L)
-        twiddle_box[:] = twiddle.reshape((1, half_len) + (1,) * (L.ndim - 2))
+        twiddle_box = twiddle.reshape((1, half_len) + (1,) * (L.ndim - 2))
         f1 = ((L + M31 - R) * twiddle_box) % M31
         vals[:, :half_len] = f0
         vals[:, half_len:] = f1
@@ -49,8 +48,7 @@ def inv_fft(vals):
             twiddle = sub_domains[full_len: full_len + half_len, 1]
         else:
             twiddle = sub_domains[full_len*2: full_len*2 + half_len, 0]
-        twiddle_box = np.zeros_like(f0)
-        twiddle_box[:] = twiddle.reshape((1, half_len) + (1,) * (f0.ndim - 2))
+        twiddle_box = twiddle.reshape((1, half_len) + (1,) * (f0.ndim - 2))
         L = (f0 + f1 * twiddle_box) % M31
         R = (f0 - f1 * twiddle_box) % M31
         vals[:, :half_len] = L
@@ -82,8 +80,7 @@ def bary_eval(vals, pt, arith):
                 baryfac = pt[0]
             else:
                 baryfac = (2 * mul(baryfac, baryfac) - one) % M31
-        twiddle_box = np.zeros_like(L)
-        twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (L.ndim - 1))
+        twiddle_box = twiddle.reshape((half_len,) + (1,) * (L.ndim - 1))
         f1 = ((L + M31 - R) * twiddle_box) % M31
         vals = (f0 + mul(baryfac, f1)) % M31
     inv_size = (1 << (31-log2(size))) % M31

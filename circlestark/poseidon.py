@@ -1,10 +1,15 @@
 from utils import (
-    np, modinv, M31, log2, arange, array, zeros, append, m31_arith
+    np, modinv, M31, log2, arange, array, zeros, append, m31_arith,
+    mk_junk_data
 )
 
-def mk_junk_data(length):
-    a = arange(length, length*2)
-    return ((3**a) ^ (7**a)) % M31
+from arithmetization_builder import (
+    example, example_args, generate_constants_table, generate_arguments_table,
+    generate_filled_trace, generate_next_state_function,
+    get_public_args_indices
+)
+
+NUM_HASHES = 51
 
 round_constants = mk_junk_data(1536).reshape((64, 24))
 
@@ -150,7 +155,6 @@ INITIAL = [
 
 COMPONENT = INITIAL + (OUTER * 4 + INNER * 56 + OUTER * 4)
 
-NUM_HASHES = 51
 
 poseidon_constants = np.hstack((
     array(INITIAL + COMPONENT * NUM_HASHES),
@@ -175,3 +179,98 @@ def arith_hash(in1, in2):
             m31_arith
         )
     return state[8:16]
+
+def outer1(state, constants, arguments, arith):
+    one, add, mul = arith
+    Lp = (state[:24] + constants[8:]) % M31
+    return append(mul(Lp, Lp), Lp)
+
+def outer2(state, constants, arguments, arith):
+    one, add, mul = arith
+    return append(mul(state[:24], state[:24]), state[24:])
+
+def outer3(state, constants, arguments, arith):
+    one, add, mul = arith
+    return append(mul(state[:24], state[24:]), np.zeros_like(state[24:]))
+
+def inner1(state, constants, arguments, arith):
+    one, add, mul = arith
+    Lp = (state[:24] + constants[8:]) % M31
+    return append(mul(Lp[:1], Lp[:1]), Lp[1:], Lp)
+
+def inner2(state, constants, arguments, arith):
+    one, add, mul = arith
+    return append(mul(state[:1], state[:1]), state[1:])
+
+def inner3(state, constants, arguments, arith):
+    one, add, mul = arith
+    return append(
+        mul(state[:1], state[24:25]), state[1:24], np.zeros_like(state[24:])
+    )
+
+def matmul_layer(state, constants, arguments, arith):
+    one, add, mul = arith
+    return append(
+        _matmul(state[:24].swapaxes(0, state.ndim-1), mds)
+        .swapaxes(0, state.ndim-1) % M31,
+        np.zeros_like(state[24:])
+    )
+
+def load_args(state, constants, arguments, arith):
+    one, add, mul = arith
+    tag = arguments[8]
+    Z32 = np.zeros_like(state[16:])
+    return (
+        mul((one - tag) % M31, append(arguments[:8], state[8:16], Z32)) +
+        mul(tag, append(state[8:16], arguments[:8], Z32))
+    )
+
+outer = ["outer1", "outer2", "outer3", "matmul_layer"]
+inner = ["inner1", "inner2", "inner3", "matmul_layer"]
+component = ["load_args"] + outer * 4 + inner * 56 + outer * 4
+
+round_constants = mk_junk_data(1536).reshape((64, 24))
+
+poseidon_hasher = {
+    "functions": {
+        "outer1": outer1,
+        "outer2": outer2,
+        "outer3": outer3,
+        "inner1": inner1,
+        "inner2": inner2,
+        "inner3": inner3,
+        "matmul_layer": matmul_layer,
+        "load_args": load_args
+    },
+    "take_extra_constants": {"outer1": 24, "inner1": 24},
+    "take_arguments": {},
+    "take_public_arguments": {"load_args": 9},
+    "steps": ["load_args"] + component,
+    "trace_width": 48,
+    "extra_constants": {
+        "outer1": append(round_constants[:4], round_constants[-4:]),
+        "inner1": round_constants[4:-4]
+    }
+}
+
+poseidon_branch_hasher = {k:v for k,v in poseidon_hasher.items()}
+poseidon_branch_hasher["steps"] = ["load_args"] + component * NUM_HASHES
+poseidon_branch_hasher["extra_constants"]["outer1"] = append(*(
+    (poseidon_branch_hasher["extra_constants"]["outer1"],) * NUM_HASHES
+))
+poseidon_branch_hasher["extra_constants"]["inner1"] = append(*(
+    (poseidon_branch_hasher["extra_constants"]["inner1"],) * NUM_HASHES
+))
+
+def arith_hash2(in1, in2):
+    constants = generate_constants_table(poseidon_hasher)
+    arguments = generate_arguments_table(
+        poseidon_hasher,
+        {"load_args": [append(in1, array([1])), append(in2, array([1]))]}
+    )
+    prefilled_trace = generate_filled_trace(
+        poseidon_hasher,
+        constants,
+        arguments
+    )
+    return prefilled_trace[len(poseidon_hasher["steps"]), 8:16]

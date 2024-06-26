@@ -253,3 +253,8 @@ def get_challenges(entropy, domain_size, num_challenges):
         int.from_bytes(challenge_data[i:i+4], 'little') % domain_size
         for i in range(0, num_challenges * 4, 4)
     ])
+
+# Generates some pseudorandom numbers mod 2**31
+def mk_junk_data(length):
+    a = arange(length, length*2)
+    return ((3**a) ^ (7**a)) % M31

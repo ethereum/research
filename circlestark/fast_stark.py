@@ -22,23 +22,32 @@ from line_functions import (
 
 from merkle import merkelize, hash, get_branch, verify_branch
 
-def mk_stark(get_next_state_vector, trace_width, constants, arguments, public_args=tuple()):
+def mk_stark(get_next_state_vector,
+             trace_width,
+             constants,
+             arguments,
+             public_args,
+             prefilled_trace=None):
     import time
     rounds, constants_width = constants.shape[:2]
     trace_length = 2**(rounds+1).bit_length()
     print('Trace length: {}'.format(trace_length))
-    trace = zeros((trace_length, trace_width))
     START = time.time()
     constants = pad_to(constants, trace_length)
     arguments = pad_to(arguments, trace_length)
     arguments_width = arguments.shape[1]
-    for i in range(rounds+1):
-        trace[i+1] = get_next_state_vector(
-            trace[i],
-            constants[i],
-            arguments[i],
-            m31_arith
-        )
+
+    if prefilled_trace is not None:
+        trace = prefilled_trace
+    else:
+        trace = zeros((trace_length, trace_width))
+        for i in range(rounds):
+            trace[i+1] = get_next_state_vector(
+                trace[i],
+                constants[i],
+                arguments[i],
+                m31_arith
+            )
     output_state = trace[rounds]
     print('Generated trace!', time.time() - START)
     trace_coeffs = fft(trace)
