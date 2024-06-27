@@ -69,71 +69,30 @@ def _matmul(a, b):
         return np.matmul(a.to(np.float64), b.to(np.float64)).to(np.int64)
     else:
         return np.matmul(a, b)
-    #small = np.matmul((a&65535).to(np.float32), b.to(np.float32)).to(np.int64)
-    #large = np.matmul((a>>16).to(np.float32), b.to(np.float32)).to(np.int64)
-    #return small + (large << 16)
 
-# 0: state[0...23] = state_prev[0...23] ** 2, state[24...47] = state_prev[0...23]
-# 1: state[0...23] = state_prev[0...23] ** 2, state[24...47] = state_prev[24...47]
-# 2: state[0...23] = state_prev[0...23] * state_prev[24...47], state_prev[24...47] = 0
-# 3: state[0] = state_prev[0]**2, state[24] = state_prev[0]
-# 4: state[0] = state_prev[0]**2, state[24] = state_prev[24]
-# 5: state[0] = state_prev[0] * state_prev[24]
-# 6: state[0...23] = MDS * state_prev[0...23], state_prev[24...47] = 0
-
-# N(P(x) = P(xw))
-# C(P(xw), P(x)) = N(P(x)) - P(xw) = 0
-
+# Direct arithmetization of Poseidon function, described above
 def poseidon_next_state(state, c, a, arith):
     one, add, mul = arith
     L = state[:24]
     R = state[24:]
 
-    if c.ndim > 1 or np.count_nonzero(c[:8]) > 1:
-        Z24 = np.zeros_like(R)
-        Z8 = np.zeros_like(R[:8])
-        Lp = (L + c[8:]) % M31
-        MAT = _matmul(L.swapaxes(0, L.ndim-1), mds).swapaxes(0, L.ndim-1) % M31
-        return (
-            mul(c[0], append(mul(Lp, Lp), Lp)) +
-            mul(c[1], append(mul(L, L), R)) +
-            mul(c[2], append(mul(L, R), Z24)) +
-            mul(c[3], append(mul(Lp[:1], Lp[:1]), Lp[1:], Lp)) +
-            mul(c[4], append(mul(L[:1], L[:1]), L[1:24], R)) +
-            mul(c[5], append(mul(L[:1], R[:1]), L[1:24], Z24)) +
-            mul(c[6], append(MAT, Z24)) +
-            mul(c[7], (
-                mul((one - a[8]) % M31, append(a[:8], L[8:16], Z8, Z24)) +
-                mul(a[8], append(L[8:16], a[:8], Z8, Z24))
-            ) % M31)
-        ) % M31
-    else:
-        if c[0]:
-            Lp = (L + c[8:]) % M31
-            return append(mul(Lp, Lp), Lp)
-        elif c[1]:
-            return append(mul(L, L), R)
-        elif c[2]:
-            return append(mul(L, R), zeros(24))
-        elif c[3]:
-            Lp = (L + c[8:]) % M31
-            return append(mul(Lp[:1], Lp[:1]), Lp[1:], Lp)
-        elif c[4]:
-            return append(mul(L[:1], L[:1]), L[1:24], R)
-        elif c[5]:
-            return append(mul(L[:1], R[:1]), L[1:24], zeros(24))
-        elif c[6]:
-            MAT = _matmul(L, mds) % M31
-            return append(MAT, zeros(24))
-        elif c[7]:
-            Z24 = np.zeros_like(R)
-            Z8 = np.zeros_like(R[:8])
-            return (
-                mul((one - a[8]) % M31, append(a[:8], L[8:16], Z8, Z24)) +
-                mul(a[8], append(L[8:16], a[:8], Z8, Z24))
-            ) % M31
-        else:
-            return zeros(48)
+    Z24 = np.zeros_like(R)
+    Z8 = np.zeros_like(R[:8])
+    Lp = (L + c[8:]) % M31
+    MAT = _matmul(L.swapaxes(0, L.ndim-1), mds).swapaxes(0, L.ndim-1) % M31
+    return (
+        mul(c[0], append(mul(Lp, Lp), Lp)) +
+        mul(c[1], append(mul(L, L), R)) +
+        mul(c[2], append(mul(L, R), Z24)) +
+        mul(c[3], append(mul(Lp[:1], Lp[:1]), Lp[1:], Lp)) +
+        mul(c[4], append(mul(L[:1], L[:1]), L[1:24], R)) +
+        mul(c[5], append(mul(L[:1], R[:1]), L[1:24], Z24)) +
+        mul(c[6], append(MAT, Z24)) +
+        mul(c[7], (
+            mul((one - a[8]) % M31, append(a[:8], L[8:16], Z8, Z24)) +
+            mul(a[8], append(L[8:16], a[:8], Z8, Z24))
+        ) % M31)
+    ) % M31
     
 OUTER = [
     [1,0,0,0,0,0,0,0],
@@ -179,6 +138,8 @@ def arith_hash(in1, in2):
             m31_arith
         )
     return state[8:16]
+
+# A second arithmetization, using our DSL
 
 def outer1(state, extra_constants, arguments, arith):
     one, add, mul = arith
@@ -275,6 +236,9 @@ def arith_hash2(in1, in2):
         arguments
     )
     return prefilled_trace[len(poseidon_hasher["steps"]), 8:16]
+
+# And a third arithmetization, filling the trace directly. This is about
+# 15% faster
 
 def custom_trace_filler(arguments):
     trace_length = 2**(len(poseidon_branch_hasher["steps"])+1).bit_length()

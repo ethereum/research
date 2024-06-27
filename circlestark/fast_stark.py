@@ -22,6 +22,27 @@ from line_functions import (
 
 from merkle import merkelize, hash, get_branch, verify_branch
 
+# Generate a STARK proof for a given claim
+#
+# get_next_state_vector  : Function that takes as as input trace column N and
+#                          outputs trace column N+1. Must be degree <= 3
+#
+# constants              : Constants that get_next_state_vector has access to.
+#                          This typically is two types: "opcodes" (constants
+#                          reflecting which "part" of get_next_state_vector
+#                          should be called, eg. t' = c1*f1(t) + c2*f2(t)...
+#                          and other constants, eg. round constants for hashing
+#
+# arguments              : User-provided arguments to the function call
+#
+# public_args            : The arguments at which coordinates are public?
+#
+# prebuilt_constants_tree: The constants only need to be put into a Merkle tree
+#                          once, so if you already did it, you can reuse the
+#                          tree.
+#
+# prefilled_trace        : Often, there's a more efficient way to fill the
+#                          trace than to call get_next_state_vector directly
 def mk_stark(get_next_state_vector,
              trace_width,
              constants,
@@ -51,6 +72,14 @@ def mk_stark(get_next_state_vector,
             )
     output_state = trace[rounds]
     print('Generated trace!', time.time() - START)
+
+    # Trace must satisfy
+    # C(T(x), T(x+G), K(x), A(x)) = Z(x) * H(x)
+    #
+    # In our case, C(T, T', K, A) = NSV(T, K, A) - T'
+
+    # Now that we have T, K, A, we can low-degree extend them to 4x
+    # length
     trace_coeffs = fft(trace)
     trace_ext4 = inv_fft(pad_to(trace_coeffs, trace_length*4))
     constants_coeffs = fft(constants)
@@ -58,8 +87,6 @@ def mk_stark(get_next_state_vector,
     arguments_coeffs = fft(arguments)
     arguments_ext4 = inv_fft(pad_to(arguments_coeffs, trace_length*4))
 
-    # Trace must satisfy
-    # C(T(x), T(x+G), K(x), A(x)) = Z(x) * H(x)
     rolled_trace4 = append(trace_ext4[4:], trace_ext4[:4])
     nsv = get_next_state_vector(
         trace_ext4.swapaxes(0, 1),
@@ -67,17 +94,15 @@ def mk_stark(get_next_state_vector,
         arguments_ext4.swapaxes(0, 1),
         m31_arith
     ).swapaxes(0, 1)
+    # C has degree < 3n, so n or 2n evaluations are not sufficient to
+    # represent it; you need 4n (or 3n, but it's easier to work with powers
+    # of two)
     C_ext4 = (nsv - rolled_trace4) % M31
     ext4_domain = sub_domains[trace_length*4: trace_length*8]
     print('Generated size-4x polynomials', time.time() - START)
-    # Extend to 8x
-    #ext8_domain = sub_domains[trace_length*8: trace_length*16]
-    #C_ext8 = inv_fft(pad_to(fft(C_ext4), trace_length*8))
-    #assert confirm_max_degree(fft(C_ext8), trace_length*3)
-    #trace_ext8 = inv_fft(pad_to(trace_coeffs, trace_length*8))
-    #constants_ext8 = inv_fft(pad_to(constants_coeffs, trace_length*8))
-    #arguments_ext8 = inv_fft(pad_to(arguments_coeffs, trace_length*8))
-    #print('Generated some size-8x polynomials', time.time() - START)
+    # We decompose both T and A as T=Qt*Vt+It and A=Qa*Va+Ia, which
+    # allows the evaluations of each at a few specific points to be made
+    # public
     Va, Ia = public_args_to_vanish_and_interp(
         trace_length,
         public_args,
@@ -89,7 +114,7 @@ def mk_stark(get_next_state_vector,
     Ia_ext4 = inv_fft(pad_to(fft(Ia), trace_length*4))
     Va_ext4 = inv_fft(pad_to(fft(Va), trace_length*4))
     args_quotient_ext4 = (arguments_ext4 - Ia_ext4) * modinv(Va_ext4) % M31
-    #assert confirm_max_degree(fft(args_quotient_ext8), trace_length)
+    #assert confirm_max_degree(fft(args_quotient_ext4), trace_length)
     Vt, It = public_args_to_vanish_and_interp(
         trace_length,
         (0, rounds),
@@ -100,17 +125,23 @@ def mk_stark(get_next_state_vector,
     It_ext4 = inv_fft(pad_to(fft(It), trace_length*4))
     Vt_ext4 = inv_fft(pad_to(fft(Vt), trace_length*4))
     trace_quotient_ext4 = (trace_ext4 - It_ext4) * modinv(Vt_ext4) % M31
-    #assert confirm_max_degree(fft(trace_quotient_ext8), trace_length)
-    #print('Generated size-8x polynomials', time.time() - START)
+    #assert confirm_max_degree(fft(trace_quotient_ext4), trace_length)
+    # Because C is equal to 0 across the entire set of coordinates on which
+    # the original trace was defined, C must be a multiple of Z, the simplest
+    # polynomial which has that property. Here, we compute H = C/Z explicitly
     Z_ext4 = eval_zpoly_at(
         trace_length,
         ext4_domain.reshape((trace_length*4, 1, 2)),
         m31_arith
     )
+    # Note that H must have degree < 2n
     H_ext4 = C_ext4 * modinv(Z_ext4) % M31
     #H_coeffs = fft(H_ext4)
     #assert confirm_max_degree(H_coeffs, trace_length*2)
     print('About to make trees!', time.time() - START)
+
+    # We put the polynomials we have together, commit to a Merkle tree of
+    # {trace, arguments}
     stack_ext4 = np.hstack((
         trace_quotient_ext4,
         args_quotient_ext4,
@@ -120,12 +151,16 @@ def mk_stark(get_next_state_vector,
     TA_ext4 = stack_ext4[:,:trace_width + arguments_width]
     TA_tree = merkelize_top_dimension(TA_ext4)
     print('Generated first tree!', time.time() - START)
+
+    # Generate a tree of the constants if we have not yet
     if prebuilt_constants_tree is not None:
         K_tree = prebuilt_constants_tree
     else:
         K_tree = merkelize_top_dimension(constants_ext4)
     print('Generated second tree!', time.time() - START)
-    # Fold and prove
+
+    # Now, we generate a random point w, at which we evaluate everything in
+    # stack_ext4
     G = sub_domains[trace_length//2]
     bump = to_extension_field(sub_domains[trace_length*4])
     w = projective_to_point(get_challenges(TA_tree[1], M31, 4))
@@ -137,6 +172,7 @@ def mk_stark(get_next_state_vector,
     #print('C_at_w', bary_eval(to_extension_field(C_ext8), w, ext_arith))[:3]
     #print('Z_at_w', bary_eval(to_extension_field(Z_ext8), w, ext_arith))
     #print('H_at_w', bary_eval(to_extension_field(H_ext8), w, ext_arith))[:3]
+
     w_bump = point_add_ext(w, bump)
     comb = np.hstack((
         stack_ext4[::2],
@@ -146,6 +182,8 @@ def mk_stark(get_next_state_vector,
     stack_width = trace_width * 2 + constants_width + arguments_width
     S_at_w = S_bary[:stack_width]
     S_at_w_plus_G = S_bary[stack_width:]
+    # Compute a random linear combination of everything in stack_ext4, using
+    # S_at_w and S_at_w_plus_G as entropy
     print("Computed evals at w and w+G", time.time() - START)
     entropy = TA_tree[1] + K_tree[1] + tobytes(S_at_w) + tobytes(S_at_w_plus_G)
     fold_factors = (
@@ -158,6 +196,9 @@ def mk_stark(get_next_state_vector,
     #merged_poly_coeffs = fft(merged_poly)
     #assert confirm_max_degree(merged_poly_coeffs, trace_length * 2)
     print('Generated merged poly!', time.time() - START)
+    # Do the quotient trick, to prove that the evaluation we gave is
+    # correct. Namely, prove: (random_linear_combination(S) - I) / L is a 
+    # polynomial, where L is 0 at w w+G, and I is S_at_w and S_at_w_plus_G
     L3 = line_function(w, w_plus_G, ext4_domain, ext_arith)
     I3 = interpolant(
         w,
@@ -174,13 +215,15 @@ def mk_stark(get_next_state_vector,
     #master_quotient_coeffs = fft(master_quotient)
     #assert confirm_max_degree(master_quotient_coeffs, trace_length * 2)
 
-    fri_proof = prove_low_degree(master_quotient)
-    entropy = (
+    # Generate a FRI proof of (random_linear_combination(S) - I) / L
+    fri_proof = prove_low_degree(master_quotient, extra_entropy=entropy)
+    fri_entropy = (
+        entropy +
         b''.join(fri_proof["roots"]) +
         tobytes(fri_proof["final_values"])
     )
     challenges_raw = get_challenges(
-        entropy, trace_length*4, NUM_CHALLENGES
+        fri_entropy, trace_length*4, NUM_CHALLENGES
     )
     fri_top_leaf_count = trace_length*4 >> FOLDS_PER_ROUND
     challenges_top = challenges_raw % fri_top_leaf_count
@@ -227,7 +270,6 @@ def get_vk(trace_width, constants, arguments_width, public_args_positions):
 
 def verify_stark(get_next_state_vector, vk, public_args, proof):
     fri_proof = proof["fri"]
-    assert verify_low_degree(fri_proof)
     len_evaluations = (
         fri_proof["final_values"].shape[0]
         << (FOLDS_PER_ROUND * len(fri_proof["roots"]))
@@ -242,6 +284,10 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
     K_root = vk["root"]
     K_branches = proof["K_branches"]
     K_leaves = proof["K_leaves"]
+    # Generate the extra entropy that was used to generate the FRI proof
+    entropy = TA_root + K_root + tobytes(S_at_w) + tobytes(S_at_w_plus_G)
+    # Verify that proof
+    assert verify_low_degree(fri_proof, extra_entropy=entropy)
     rounds = vk["rounds"]
     constants_width = vk["constants_width"]
     arguments_width = vk["arguments_width"]
@@ -250,8 +296,12 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
     trace_length = 2**(rounds+1).bit_length()
     G = sub_domains[trace_length//2]
     output_state = proof["output_state"]
+    # Pick the same two random points as the prover
     w = projective_to_point(get_challenges(TA_root, M31, 4))
     w_plus_G = point_add_ext(w, to_extension_field(G))
+    # We are going to compute H(w) = C(T(w), T(w+G), K(w), A(w)) / Z(w) and
+    # check it (thereby checking "consistency" of S(w)), and then we also
+    # do a similar check on the leaves
     Va, Ia = public_args_to_vanish_and_interp(
         trace_length,
         public_args_positions,
@@ -305,12 +355,18 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
         modinv_ext(Z_at_w)
     )
     assert np.array_equal(H_at_w, computed_H_at_w)
-    entropy = b''.join(
+    # Now, the same check as above on the leaves
+    stack_width = trace_width * 2 + constants_width + arguments_width
+    fold_factors = (
+        get_challenges(entropy, M31, stack_width * 4)
+        .reshape((stack_width, 4))
+    )
+    fri_entropy = entropy + b''.join(
         fri_proof["roots"] +
         [tobytes(x) for x in fri_proof["final_values"]]
     )
     challenges_raw = get_challenges(
-        entropy, len_evaluations, NUM_CHALLENGES
+        fri_entropy, len_evaluations, NUM_CHALLENGES
     )
     fri_top_leaf_count = len_evaluations >> FOLDS_PER_ROUND
     challenges_top = challenges_raw % fri_top_leaf_count
@@ -320,12 +376,7 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
         challenges_top * FOLD_SIZE_RATIO + challenges_bottom
     )
     challenges_next = (challenges+4) % (trace_length*4)
-    entropy = TA_root + K_root + tobytes(S_at_w) + tobytes(S_at_w_plus_G)
-    stack_width = trace_width * 2 + constants_width + arguments_width
-    fold_factors = (
-        get_challenges(entropy, M31, stack_width * 4)
-        .reshape((stack_width, 4))
-    )
+
     Va_leaves, Ia_leaves = public_args_to_vanish_and_interp(
         trace_length,
         public_args_positions,
@@ -372,6 +423,12 @@ def verify_stark(get_next_state_vector, vk, public_args, proof):
     H_leaves = (
         C_leaves * modinv(Z_leaves.reshape(Z_leaves.shape+(1,)))
     ) % M31
+    # Except here we don't have an H to check against, instead we
+    # keep going: here, we use the S_at_w and S_at_w_plus_G values
+    # provided to quotient it, and then finally verify that the
+    # quotient is a polynomial. The quotienting is not _strictly_
+    # necessary, we could just FRI over H directly, but it adds
+    # security (see: the DEEP-FRI papers)
     inv_L3_leaves = modinv_ext(line_function(
         w,
         w_plus_G,

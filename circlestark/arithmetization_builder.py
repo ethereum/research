@@ -3,6 +3,11 @@ from utils import (
     mk_junk_data
 )
 
+# We create our own mini-DSL that lets you specify a program as a series of
+# opcodes. This then converts it into more efficient functions for filling
+# the trace
+
+# Here is a basic example of a program in that mini-DSL
 def example_load_args(state, constants, arguments, arith):
     one, add, mul = arith
     return add(state, arguments)
@@ -31,6 +36,9 @@ example_args = {
     "example_load_args": [[3,0,0], [0,0,0]]
 }
 
+# Given an object in the format above, generate the constants table. This
+# has two parts: k columns for k different opcodes, and then opcode-specific
+# constants
 def generate_constants_table(obj):
     functions_list = list(obj["functions"].keys())
     extra_constants_width = max(obj["take_extra_constants"].values() or (0,))
@@ -51,10 +59,12 @@ def generate_constants_table(obj):
             constants_indices[function] += 1
     return constants
 
+# What is the width of the arguments polynomial?
 def get_arguments_width(obj):
     take_args = {**obj["take_arguments"], **obj["take_public_arguments"]}
     return max(take_args.values() or (0,))
 
+# Generate the arguments polynomial
 def generate_arguments_table(obj, arguments):
     take_args = {**obj["take_arguments"], **obj["take_public_arguments"]}
     arguments_width = max(take_args.values() or (0,))
@@ -72,6 +82,7 @@ def generate_arguments_table(obj, arguments):
             arguments_indices[function] += 1
     return o
 
+# Fill the trace
 def generate_filled_trace(obj, constants, arguments):
     trace_length = 2**(len(obj["steps"])+1).bit_length()
     trace = zeros((
@@ -90,6 +101,8 @@ def generate_filled_trace(obj, constants, arguments):
         )
     return trace
 
+# This is the next_state_vector function that needs to be passed in to
+# mk_stark and verify_stark
 def generate_next_state_function(obj):
 
     function_count = len(list(obj["functions"].keys()))
@@ -107,6 +120,7 @@ def generate_next_state_function(obj):
 
     return next_state
 
+# Get the positions of the public arguments in the arguments polynomial
 def get_public_args_indices(obj):
     return array([
         i for i,v in enumerate(obj["steps"])

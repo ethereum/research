@@ -12,23 +12,35 @@ FOLDS_PER_ROUND = 3
 FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
 NUM_CHALLENGES = 80
 
+# This is the folding step in FRI, where you combine the evaluations at two
+# sets of N coordinates each into evaluations at one set of N coordinates.
+# We do three rounds of folding at a time, so each FRI step drops the degree
+# by 8x
 def fold(values, coeff, first_round):
     for i in range(FOLDS_PER_ROUND):
         full_len, half_len = values.shape[-2], values.shape[-2]//2
         left, right = values[::2], values[1::2]
         f0 = ((left + right) * HALF) % M31
         if i == 0 and first_round:
-            twiddle = \
-                invy[full_len: full_len + half_len][folded_rbos[half_len:full_len]]
+            twiddle = (
+                invy[full_len: full_len + half_len]
+                [folded_rbos[half_len:full_len]]
+            )
         else:
-            twiddle = \
-                invx[full_len*2: full_len*2 + half_len][folded_rbos[half_len:full_len]]
+            twiddle = (
+                invx[full_len*2: full_len*2 + half_len]
+                [folded_rbos[half_len:full_len]]
+            )
         twiddle_box = np.zeros_like(left)
         twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (left.ndim-1))
         f1 = ((((left + M31 - right) * HALF) % M31) * twiddle_box) % M31
         values = (f0 + mul_ext(f1, coeff)) % M31
     return values
 
+# This performs the same folding step as above, but at a pre-supplied list
+# of positions. This is used in verification, where we repeat the same
+# calculation as was done to make the proof, but only at a few randomly
+# selected indices
 def fold_with_positions(values, domain_size, positions, coeff, first_round):
     positions = positions[::2]
     for i in range(FOLDS_PER_ROUND):
@@ -51,7 +63,8 @@ def fold_with_positions(values, domain_size, positions, coeff, first_round):
         domain_size //= 2
     return values
 
-def prove_low_degree(evaluations):
+# Generate a FRI proof
+def prove_low_degree(evaluations, extra_entropy=b''):
     assert len(evaluations.shape) == 2 and evaluations.shape[-1] == 4
     # Commit Merkle root
     values = evaluations[folded_rbos[len(evaluations):len(evaluations)*2]]
@@ -73,7 +86,7 @@ def prove_low_degree(evaluations):
         fold_factor = get_challenges(b''.join(roots), M31, 4)
         print("Fold factor: {}".format(fold_factor))
         values = fold(values, fold_factor, i==0)
-    entropy = b''.join(roots) + tobytes(values)
+    entropy = extra_entropy + b''.join(roots) + tobytes(values)
     challenges = get_challenges(
         entropy, len(evaluations) >> FOLDS_PER_ROUND, NUM_CHALLENGES
     )
@@ -103,18 +116,20 @@ def prove_low_degree(evaluations):
         "final_values": values
     }
 
-def verify_low_degree(proof):
+# Verify a FRI proof
+def verify_low_degree(proof, extra_entropy=b''):
     roots = proof["roots"]
     branches = proof["branches"]
     leaf_values = proof["leaf_values"]
     final_values = proof["final_values"]
     len_evaluations = final_values.shape[0] << (FOLDS_PER_ROUND * len(roots))
     print("Verifying FRI proof")
-    # Prove descent
-    entropy = b''.join(roots) + tobytes(final_values)
+    entropy = extra_entropy + b''.join(roots) + tobytes(final_values)
     challenges = get_challenges(
         entropy, len_evaluations >> FOLDS_PER_ROUND, NUM_CHALLENGES
     )
+    # Re-run the descent at the pseudorandomly-chosen set of points, and
+    # verify consistency at each step
     for i in range(len(roots)):
         print("Descent round {}".format(i+1))
         fold_factor = get_challenges(b''.join(roots[:i+1]), M31, 4)
@@ -141,6 +156,7 @@ def verify_low_degree(proof):
         else:
             expected_values = final_values[challenges]
         assert np.array_equal(folded_values, expected_values)
+        # Also verify the Merkle branches
         for j, c in enumerate(np.copy(challenges)):
             assert verify_branch(
                 roots[i], c, tobytes(leaf_values[i][j]), branches[i][j]
