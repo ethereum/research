@@ -4,7 +4,7 @@ from utils import (
     get_challenges, modinv_ext, merkelize_top_dimension,
     rbo_index_to_original, pad_to, m31_arith, ext_arith,
     eval_zpoly_at, projective_to_point, point_add_ext,
-    fold, fold_ext, mul_ext
+    fold, fold_ext, mul_ext, confirm_max_degree
 )
 
 from precomputes import sub_domains
@@ -108,8 +108,8 @@ def mk_stark(get_next_state_vector,
         m31_arith
     )
     H_ext4 = C_ext4 * modinv(Z_ext4) % M31
-    #H_coeffs = fft(H_ext8)
-    #assert confirm_max_degree(H_coeffs, trace_length*2+3)
+    #H_coeffs = fft(H_ext4)
+    #assert confirm_max_degree(H_coeffs, trace_length*2)
     print('About to make trees!', time.time() - START)
     stack_ext4 = np.hstack((
         trace_quotient_ext4,
@@ -156,7 +156,7 @@ def mk_stark(get_next_state_vector,
         fold(stack_ext4, fold_factors)
     ) % M31
     #merged_poly_coeffs = fft(merged_poly)
-    #assert confirm_max_degree(merged_poly_coeffs, trace_length * 3 + 3)
+    #assert confirm_max_degree(merged_poly_coeffs, trace_length * 2)
     print('Generated merged poly!', time.time() - START)
     L3 = line_function(w, w_plus_G, ext4_domain, ext_arith)
     I3 = interpolant(
@@ -172,7 +172,7 @@ def mk_stark(get_next_state_vector,
     )
     print('Generated master_quotient!', time.time() - START)
     #master_quotient_coeffs = fft(master_quotient)
-    #assert confirm_max_degree(master_quotient_coeffs, trace_length * 3)
+    #assert confirm_max_degree(master_quotient_coeffs, trace_length * 2)
 
     fri_proof = prove_low_degree(master_quotient)
     entropy = (

@@ -7,7 +7,7 @@ from precomputes import folded_rbos, invx, invy
 from fast_fft import fft
 from merkle import merkelize, hash, get_branch, verify_branch
 
-BASE_CASE_SIZE = 128
+BASE_CASE_SIZE = 64
 FOLDS_PER_ROUND = 3
 FOLD_SIZE_RATIO = 2**FOLDS_PER_ROUND
 NUM_CHALLENGES = 80
