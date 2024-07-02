@@ -1,7 +1,7 @@
 from utils import (
     np, array, zeros, tobytes, arange, append, log2, point_add,
     point_double, modinv, one, M31, reverse_bit_order,
-    to_ext_if_needed
+    to_ext_if_needed, to_extension_field
 )
 from precomputes import rbos, invx, invy, sub_domains
 
@@ -57,7 +57,7 @@ def inv_fft(vals):
 
 # Given a list of evaluations, computes the evaluation of that polynomial at
 # one point. The point can be in the base field or extension field
-def bary_eval(vals, pt, arith):
+def bary_eval(vals, pt, arith, first_round_optimize=False):
     one, add, mul = arith
     vals = np.copy(vals)
     shape_suffix = vals.shape[1:]
@@ -70,7 +70,7 @@ def bary_eval(vals, pt, arith):
         half_len = full_len >> 1
         L = vals[:half_len]
         R = np.flip(vals[half_len:], (0,))
-        f0 = (L + R) % M31
+        f0 = (L + R)
         if i == 0:
             twiddle = invy[full_len: full_len + half_len]
             baryfac = pt[1]
@@ -81,7 +81,13 @@ def bary_eval(vals, pt, arith):
             else:
                 baryfac = (2 * mul(baryfac, baryfac) - one) % M31
         twiddle_box = twiddle.reshape((half_len,) + (1,) * (L.ndim - 1))
-        f1 = ((L + M31 - R) * twiddle_box) % M31
-        vals = (f0 + mul(baryfac, f1)) % M31
+        f1 = ((L - R) * twiddle_box) % M31
+        if first_round_optimize and i==0 and one.ndim==1:
+            vals = (
+                to_extension_field(f0)
+                + baryfac * f1.reshape(f1.shape+(1,))
+            ) % M31
+        else:
+            vals = (f0 + mul(baryfac, f1)) % M31
     inv_size = (1 << (31-log2(size))) % M31
     return (vals[0] * inv_size) % M31

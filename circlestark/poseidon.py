@@ -1,6 +1,6 @@
 from utils import (
     np, modinv, M31, log2, arange, array, zeros, append, m31_arith,
-    mk_junk_data, device
+    mk_junk_data, device, pad_to, to_extension_field
 )
 
 from arithmetization_builder import (
@@ -11,7 +11,7 @@ from arithmetization_builder import (
 
 NUM_HASHES = 151
 
-round_constants = mk_junk_data(1536).reshape((64, 24))
+round_constants = mk_junk_data(1024).reshape((64, 16))
 
 mds44 = array([
     [5, 7, 1, 3],
@@ -20,37 +20,39 @@ mds44 = array([
     [1, 1, 4, 6]
 ])
 
-mds = zeros((24, 24))
-for i in range(0, 24, 4):
-    for j in range(0, 24, 4):
+mds = zeros((16, 16))
+for i in range(0, 16, 4):
+    for j in range(0, 16, 4):
         mds[i:i+4, j:j+4] = mds44 * (2 if i==j else 1)
 
+innerdiag = mk_junk_data(16)
+mdsinner = zeros((16, 16)) + 1
+mdsinner[arange(16), arange(16)] = (innerdiag + 1) % M31
+
+mds_cpu = mds.cpu().numpy()
+round_constants_cpu = round_constants.cpu().numpy()
+innerdiag_cpu = innerdiag.cpu().numpy()
+
+import numpy
+
 def poseidon_hash(in1, in2):
-    state = zeros(in1.shape[:-1]+(24,))
+    state = numpy.zeros(in1.shape[:-1]+(16,), dtype=numpy.int64)
     state[...,:8] = in1
     state[...,8:16] = in2
     for i in range(64):
-        #print('Round {}: {}'.format(i*4, [int(x) for x in state[:3]]))
-        state = (state + round_constants[i]) % M31
         if i >= 4 and i < 60:
-            x = np.copy(state[...,0])
-            state[...,0] = (x * x) % M31
-            #print('Round {}: {}'.format(i*4+1, [int(x) for x in state[:3]]))
-            state[...,0] = (state[...,0] * state[...,0]) % M31
-            #print('Round {}: {}'.format(i*4+2, [int(x) for x in state[:3]]))
-            state[...,0] = (state[...,0] * x) % M31
-            #print('Round {}: {}'.format(i*4+3, [int(x) for x in state[:3]]))
+            state[...,0] = pow5(state[...,0] + round_constants_cpu[i, 0] - M31)
+            state = (
+                state * innerdiag_cpu
+                + numpy.sum(state, axis=-1).reshape(state.shape[:-1]+(1,))
+            ) % M31
         else:
-            x = state
-            state = (x * x) % M31
-            #print('Round {}: {}'.format(i*4+1, [int(x) for x in state[:3]]))
-            state = (state * state) % M31
-            #print('Round {}: {}'.format(i*4+2, [int(x) for x in state[:3]]))
-            state = (state * x) % M31
-            #print('Round {}: {}'.format(i*4+3, [int(x) for x in state[:3]]))
+            state = numpy.matmul(
+                pow5(state + round_constants_cpu[i] - M31),
+                mds_cpu
+            ) % M31
 
-        state = _matmul(state, mds) % M31
-    return state[...,8:16]
+    return (state[...,8:16] + in2) % M31
 
 def merkelize(data):
     assert len(data.shape) == 1
@@ -59,238 +61,159 @@ def merkelize(data):
     for i in range(log2(data.shape[0])-1, 2, -1):
         hash_inputs = output[2**(i+1):2**(i+2)].reshape((-1,2,8))
         L, R = hash_inputs[...,0,:], hash_inputs[...,1,:]
-        output[2**i: 2**(i+1)] = poseidon_hash(L, R).reshape((-1,))
+        output[2**i: 2**(i+1)] = crazy_poseidon(L, R).reshape((-1,))
     return output
 
 # Handle with care. This is only safe if the values in at least one matrix
 # are "small" (as floats are only reliable ints up to 2**53)
 def _matmul(a, b):
     if hasattr(np, 'tensor'):
-        return np.matmul(a.to(np.float64), b.to(np.float64)).to(np.int64)
+        x1 = np.matmul(a.to(np.float64), b.to(np.float64) % 65536).to(np.int64)
+        x2 = np.matmul(a.to(np.float64), b.to(np.float64) // 65536).to(np.int64)
+        return (x1 + (x2 % M31) * 65536) % M31
     else:
-        return np.matmul(a, b)
+        return np.matmul(a, b) % M31
 
-# Direct arithmetization of Poseidon function, described above
-def poseidon_next_state(state, c, a, arith):
+def pow5(x):
+    x2 = (x*x) % M31
+    x3 = (x2*x) % M31
+    return (x3*x2) % M31
+
+def pow5_arith(x, arith):
     one, add, mul = arith
-    L = state[:24]
-    R = state[24:]
+    x2 = mul(x, x)
+    x3 = mul(x, x2)
+    return mul(x2, x3)
 
-    Z24 = np.zeros_like(R)
-    Z8 = np.zeros_like(R[:8])
-    Lp = (L + c[8:]) % M31
-    MAT = _matmul(L.swapaxes(0, L.ndim-1), mds).swapaxes(0, L.ndim-1) % M31
-    return (
-        mul(c[0], append(mul(Lp, Lp), Lp)) +
-        mul(c[1], append(mul(L, L), R)) +
-        mul(c[2], append(mul(L, R), Z24)) +
-        mul(c[3], append(mul(Lp[:1], Lp[:1]), Lp[1:], Lp)) +
-        mul(c[4], append(mul(L[:1], L[:1]), L[1:24], R)) +
-        mul(c[5], append(mul(L[:1], R[:1]), L[1:24], Z24)) +
-        mul(c[6], append(MAT, Z24)) +
-        mul(c[7], (
-            mul((one - a[8]) % M31, append(a[:8], L[8:16], Z8, Z24)) +
-            mul(a[8], append(L[8:16], a[:8], Z8, Z24))
-        ) % M31)
-    ) % M31
-    
-OUTER = [
-    [1,0,0,0,0,0,0,0],
-    [0,1,0,0,0,0,0,0],
-    [0,0,1,0,0,0,0,0],
-    [0,0,0,0,0,0,1,0]
-]
+def vecmul(v1, v2):
+    prod = v1 * v2 % M31
+    return np.sum(prod, axis=-1) % M31
 
-INNER = [
-    [0,0,0,1,0,0,0,0],
-    [0,0,0,0,1,0,0,0],
-    [0,0,0,0,0,1,0,0],
-    [0,0,0,0,0,0,1,0]
-]
+powers_of_mds = zeros((57, 73, 16))
+powers_of_mds[0, 0, 0] = round_constants[4, 0]
+powers_of_mds[0, 1:17] = mds
+for i in range(56):
+    powers_of_mds[i+1] = powers_of_mds[i]
+    powers_of_mds[i+1, 17+i, 0] = 1
+    powers_of_mds[i+1] = _matmul(powers_of_mds[i+1], mdsinner)
+    if i < 55:
+        powers_of_mds[i+1, 0, 0] = (
+            powers_of_mds[i+1, 0, 0]
+            + round_constants[i+5, 0]
+        ) % M31
 
-INITIAL = [
-    [0,0,0,0,0,0,0,1]
-]
+def crazy_poseidon(in1, in2):
+    state = zeros(in1.shape[:-1]+(16,)).cpu()
+    state[...,:8] = in1
+    state[...,8:16] = in2
+    for i in range(4):
+        state = pow5(state + round_constants[i] - M31)
+        if i < 3:
+            state = _matmul(state, mds)
+    new_round_values = zeros(in1.shape[:-1]+(73,))
+    new_round_values[...,0] = 1
+    new_round_values[...,1:17] = state
+    for i in range(56):
+        m = vecmul(new_round_values[...,:17+i], powers_of_mds[i,:17+i,0])
+        new_round_values[...,17+i] = (pow5(m) - m) % M31
+    state = _matmul(new_round_values, powers_of_mds[56])
+    for i in range(4):
+        state = pow5(state + round_constants[60+i] - M31)
+        state = _matmul(state, mds)
+    return (state[...,8:16] + in2) % M31
 
-COMPONENT = INITIAL + (OUTER * 4 + INNER * 56 + OUTER * 4)
-
-
-poseidon_constants = np.hstack((
-    array(INITIAL + COMPONENT * NUM_HASHES),
-    zeros((1 + 257 * NUM_HASHES, 24))
-))
-for i in range(NUM_HASHES):
-    poseidon_constants[257*i+2:257*(i+1)+1:4, 8:] = round_constants
-
-def arith_hash(in1, in2):
-    state = zeros(48)
-    arguments = zeros((258, 9))
-    arguments[0, :8] = in1
-    arguments[0, 8] = 1
-    arguments[1, :8] = in2
-    arguments[1, 8] = 1
-    for i in range(258):
-        #print('Round {}: {}'.format(i, [int(x) for x in state[:3]]))
-        state = poseidon_next_state(
-            state,
-            poseidon_constants[i],
-            arguments[i],
-            m31_arith
+def fill_poseidon_trace(hash_inputs, positions):
+    N = hash_inputs.shape[0]
+    _positions = positions.reshape((N, 1))
+    hash_outputs = zeros((N+1, 8))
+    for i in range(32):
+        L = hash_inputs[i::32] * (1 - _positions[i::32]) + hash_outputs[i:N:32] * _positions[i::32]
+        R = hash_inputs[i::32] * _positions[i::32] + hash_outputs[i:N:32] * (1 - _positions[i::32])
+        hash_outputs[i+1::32] = np.array(poseidon_hash(L.cpu().numpy(), R.cpu().numpy()))
+    trace = zeros((N, 192))
+    trace[:, :8] = hash_inputs * (1 - _positions)
+    trace[:, 8:16] = hash_inputs * _positions
+    trace[1:, :8] += hash_outputs[1:-1] * _positions[1:]
+    trace[1:, 8:16] += hash_outputs[1:-1] * (1 - _positions[1:])
+    for i in range(4):
+        _prev = trace[:,i*16:(i+1)*16]
+        _next = pow5(_prev + round_constants[i] - M31)
+        if i < 3:
+            _next = _matmul(_next, mds)
+        trace[:,(i+1)*16:(i+2)*16] = _next
+    ones = zeros((hash_inputs.shape[0], 1)) + 1
+    for i in range(56):
+        m = vecmul(
+            np.hstack((ones, trace[:,64:80+i])),
+            powers_of_mds[i,:17+i,0]
         )
-    return state[8:16]
+        trace[:,80+i] = (pow5(m) - m) % M31
 
-# A second arithmetization, using our DSL
-
-def outer1(state, extra_constants, arguments, arith):
-    one, add, mul = arith
-    Lp = (state[:24] + extra_constants) % M31
-    return append(mul(Lp, Lp), Lp)
-
-def outer2(state, extra_constants, arguments, arith):
-    one, add, mul = arith
-    return append(mul(state[:24], state[:24]), state[24:])
-
-def outer3(state, extra_constants, arguments, arith):
-    one, add, mul = arith
-    L = mul(state[:24], state[24:])
-    return append(
-        _matmul(L.swapaxes(0, state.ndim-1), mds)
-        .swapaxes(0, state.ndim-1) % M31,
-        np.zeros_like(L)
-    )
-
-def inner1(state, extra_constants, arguments, arith):
-    one, add, mul = arith
-    Lp = (state[:24] + extra_constants) % M31
-    return append(mul(Lp[:1], Lp[:1]), Lp[1:], Lp)
-
-def inner2(state, extra_constants, arguments, arith):
-    one, add, mul = arith
-    return append(mul(state[:1], state[:1]), state[1:])
-
-def inner3(state, extra_constants, arguments, arith):
-    one, add, mul = arith
-    L = append(mul(state[:1], state[24:25]), state[1:24])
-    return append(
-        _matmul(L.swapaxes(0, state.ndim-1), mds)
-        .swapaxes(0, state.ndim-1) % M31,
-        np.zeros_like(L)
-    )
-
-def load_args(state, extra_constants, arguments, arith):
-    one, add, mul = arith
-
-    tag = arguments[8]
-    Z32 = np.zeros_like(state[16:])
-    return (
-        mul((one - tag) % M31, append(arguments[:8], state[8:16], Z32)) +
-        mul(tag, append(state[8:16], arguments[:8], Z32))
-    ) % M31
-
-outer = ["outer1", "outer2", "outer3"]
-inner = ["inner1", "inner2", "inner3"]
-component = ["load_args"] + outer * 4 + inner * 56 + outer * 4
-
-round_constants = mk_junk_data(1536).reshape((64, 24))
-
-poseidon_hasher = {
-    "functions": {
-        "outer1": outer1,
-        "outer2": outer2,
-        "outer3": outer3,
-        "inner1": inner1,
-        "inner2": inner2,
-        "inner3": inner3,
-        "load_args": load_args,
-        "load_leaf": load_args,
-    },
-    "take_extra_constants": {"outer1": 24, "inner1": 24},
-    "take_arguments": {"load_args": 9},
-    "take_public_arguments": {"load_leaf": 9},
-    "steps": ["load_leaf"] * 2 + component[1:],
-    "trace_width": 48,
-    "extra_constants": {
-        "outer1": append(round_constants[:4], round_constants[-4:]),
-        "inner1": round_constants[4:-4]
-    }
-}
-
-poseidon_branch_hasher = {k:v for k,v in poseidon_hasher.items()}
-poseidon_branch_hasher["steps"] = ["load_leaf"] * 2 + (component * NUM_HASHES)[1:]
-poseidon_branch_hasher["extra_constants"]["outer1"] = append(*(
-    (poseidon_branch_hasher["extra_constants"]["outer1"],) * NUM_HASHES
-))
-poseidon_branch_hasher["extra_constants"]["inner1"] = append(*(
-    (poseidon_branch_hasher["extra_constants"]["inner1"],) * NUM_HASHES
-))
-
-def arith_hash2(in1, in2):
-    constants = generate_constants_table(poseidon_hasher)
-    arguments = generate_arguments_table(
-        poseidon_hasher,
-        {"load_leaf": [append(in1, array([1])), append(in2, array([1]))]}
-    )
-    prefilled_trace = generate_filled_trace(
-        poseidon_hasher,
-        constants,
-        arguments
-    )
-    return prefilled_trace[len(poseidon_hasher["steps"]), 8:16]
-
-# And a third arithmetization, filling the trace directly. This is about
-# 15% faster
-
-def custom_trace_filler(arguments):
-    trace_length = 2**(len(poseidon_branch_hasher["steps"])+1).bit_length()
-    trace = np.zeros((
-        trace_length,
-        poseidon_branch_hasher["trace_width"]
-    ), dtype=np.int64)
-    trace[1, 8:16] = arguments["load_leaf"][0][:8]
-    trace[2, :8] = trace[1, 8:16]
-    trace[2, 8:16] = arguments["load_leaf"][1][:8]
-    rc = np.array([[int(x) for x in z] for z in round_constants], dtype=np.int64)
-    cpumds = np.array([[int(x) for x in z] for z in mds], dtype=np.int64)
-
-    for i in range(NUM_HASHES):
-        pos = 2 + 193 * i
-        if i > 0:
-            arg = arguments["load_args"][i-1]
-            if arg[8] == 0:
-                trace[pos, :8] = arg[:8]
-                trace[pos, 8:16] = trace[pos-1, 8:16]
-            else:
-                trace[pos, :8] = trace[pos-1, 8:16]
-                trace[pos, 8:16] = arg[:8]
-        for r in range(4):
-            Lp = (trace[pos, :24] + rc[r]) % M31
-            trace[pos+1, :24] = Lp ** 2 % M31
-            trace[pos+1, 24:] = Lp
-            trace[pos+2, :24] = trace[pos+1, :24] ** 2 % M31
-            trace[pos+2, 24:] = Lp
-            L = trace[pos+2, :24] * Lp % M31
-            trace[pos+3, :24] = _matmul(L, cpumds) % M31
-            pos += 3
-        for r in range(4, 60):
-            Lp = (trace[pos, :24] + rc[r]) % M31
-            trace[pos+1, :1] = Lp[:1] ** 2 % M31
-            trace[pos+1, 1:24] = Lp[1:]
-            trace[pos+1, 24:] = Lp
-            trace[pos+2] = trace[pos+1]
-            trace[pos+2, :1] = trace[pos+1, :1] ** 2 % M31
-            L = append(
-                trace[pos+2, :1] * trace[pos+2, 24:25] % M31,
-                Lp[1:]
+    for i in range(4):
+        if i == 0:
+            _prev = _matmul(
+                np.hstack((ones, trace[:,64:136])),
+                powers_of_mds[56]
             )
-            trace[pos+3, :24] = _matmul(L, cpumds) % M31
-            pos += 3
-        for r in range(60, 64):
-            Lp = (trace[pos, :24] + rc[r]) % M31
-            trace[pos+1, :24] = Lp ** 2 % M31
-            trace[pos+1, 24:] = Lp
-            trace[pos+2, :24] = trace[pos+1, :24] ** 2 % M31
-            trace[pos+2, 24:] = Lp
-            L = trace[pos+2, :24] * Lp % M31
-            trace[pos+3, :24] = _matmul(L, cpumds) % M31
-            pos += 3
-    return trace.to(device)
+        else:
+            _prev = trace[:,120+16*i:136+16*i]
+        _next = pow5((_prev + round_constants[60+i]) % M31)
+        _next = _matmul(_next, mds)
+        if i < 3:
+            trace[:,136+16*i:152+16*i] = _next
+        else:
+            trace[:,184:192] = (_next[:,8:16] + trace[:, 8:16]) % M31
+    return trace
+
+def poseidon_constraint_check(state, next_state, constants, arith):
+    one, add, mul = arith
+    o = zeros((184,) + state.shape[1:])
+    depth = state.ndim - one.ndim - 1
+
+    def fix_rc_row(rc_row):
+        rc_row = rc_row.reshape(rc_row.shape + (1,)*depth)
+        if one.ndim == 1:
+            return to_extension_field(rc_row)
+        return rc_row
+
+    for i in range(4):
+        _prev = state[i*16:(i+1)*16]
+        rc = fix_rc_row(round_constants[i])
+        expected = pow5_arith((_prev + rc) % M31, arith)
+        if i < 3:
+            expected = _matmul(expected.swapaxes(0,-1), mds).swapaxes(0,-1)
+        o[i*16:(i+1)*16] = state[(i+1)*16:(i+2)*16] - expected
+    ones = np.zeros_like(o[:1])
+    if one.ndim == 1:
+        ones[...,0] = 1
+    else:
+        ones += 1
+    for i in range(56):
+        m = vecmul(
+            append(ones, state[64:80+i]).swapaxes(0,-1),
+            powers_of_mds[i,:17+i,0]
+        ).swapaxes(0,-1)
+        o[64+i] = state[80+i] - (pow5_arith(m, arith) - m)
+    for i in range(4):
+        if i==0:
+            _prev = _matmul(
+                append(ones, state[64:136]).swapaxes(0,-1),
+                powers_of_mds[56]
+            ).swapaxes(0,-1)
+        else:
+            _prev = state[120+16*i:136+16*i]
+        rc = fix_rc_row(round_constants[60+i])
+        expected = pow5_arith((_prev + rc) % M31, arith)
+        expected = _matmul(expected.swapaxes(0,-1), mds).swapaxes(0,-1)
+        if i < 3:
+            o[120+16*i:136+16*i] = state[136+16*i:152+16*i] - expected
+        else:
+            o[168:176] = state[184:192] - (expected[8:16] + state[8:16])
+    o[176:184] = mul(
+        (one - constants[0]) % M31,
+        mul(
+            (next_state[:8] - state[184:192]) % M31,
+            (next_state[8:16] - state[184:192]) % M31
+        )
+    )
+    return o % M31

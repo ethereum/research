@@ -26,16 +26,9 @@ from fast_stark import (
     mk_stark, verify_stark, get_vk, build_constants_tree
 )
 
-from arithmetization_builder import (
-    example, example_args, generate_constants_table, generate_arguments_table,
-    generate_filled_trace, generate_next_state_function,
-    get_public_args_indices, get_arguments_width
-)
-
 from poseidon import (
-    poseidon_hash, arith_hash, arith_hash2, poseidon_next_state,
-    poseidon_constants, poseidon_hasher, poseidon_branch_hasher, NUM_HASHES,
-    custom_trace_filler
+    poseidon_hash, NUM_HASHES,
+    fill_poseidon_trace, poseidon_constraint_check
 )
 
 import time
@@ -132,35 +125,6 @@ def test_mega_fri():
     proof = f_prove_low_degree(to_extension_field(evaluations))
     print("Generated proof in time {}".format(time.time() - t2))
 
-def test_simple_arithmetize():
-    print("Testing simple arithmetization")
-    SIZE = 128
-    trace = zeros(SIZE)
-    trace[0] = 1
-    for i in range(SIZE-1):
-        trace[i+1] = ((trace[i] ** 2 % M31) * trace[i] + 1) % M31
-    ext_trace = f_inv_fft(pad_to(f_fft(trace), SIZE*4))
-    assert bary_eval(ext_trace, sub_domains[SIZE], m31_arith) == 1
-    assert bary_eval(ext_trace, sub_domains[SIZE+1], m31_arith) == 2
-    assert bary_eval(ext_trace, sub_domains[SIZE+2], m31_arith) == 9
-    C_left = np.roll(ext_trace, -4)
-    C_right = ((ext_trace**2 % M31) * ext_trace + M31 + 1) % M31
-    C = (
-        np.roll(ext_trace, -4)
-        + M31 - ((ext_trace**2 % M31) * ext_trace + M31 + 1) % M31
-    ) % M31
-    C_exempt_start = C * (
-        sub_domains[SIZE*4:SIZE*8, 0] + M31 - sub_domains[SIZE, 0]
-    ) % M31
-    Z = sub_domains[SIZE*4:SIZE*8, 0]
-    for i in range(1, log2(SIZE)):
-        Z = (2*Z**2 + M31 - 1) % M31
-    assert np.array_equal(
-        f_fft(C_exempt_start * modinv(Z) % M31)[SIZE*3+1:],
-        zeros(SIZE-1)
-    )
-    print("Simple arithmetization test passed")
-
 def test_lines_and_interpolants():
     coords = (
         # pos1, val1, pos2, val2
@@ -213,52 +177,30 @@ def test_lines_and_interpolants():
     print("Vanish-and-interp test passed")
 
 def test_mk_stark():
-    def next_state(state, constants, arguments, arith): 
+    def get_next_state(state, constants, arith): 
         one, add, mul = arith
-        o = add(
-            mul(constants[0], np.stack((
-                add(mul(state[1], state[2]), one),
-                add(mul(state[2], state[0]), one),
-                add(mul(state[0], state[1]), one),
-            ))),
-            mul(constants[1], add(state, arguments))
-        )
+        o = np.copy(state)
+        o[0] = (mul(state[1], state[2]) + constants[0]) % M31
+        o[1] = (mul(state[2], state[0]) + constants[1]) % M31
+        o[2] = (mul(state[0], state[1]) + constants[2]) % M31
         return o
 
-    constants = array([[0,1]] + [[1,0]]*98 + [[0,1]])
-    arguments = array([[3,0,0]] + [[0,0,0]] * 99)
-    print("Generating STARK")
-    stark = mk_stark(next_state, 3, constants, arguments, public_args=(0,99))
-    global test_stark_output
-    test_stark_output = stark["output_state"]
-    vk = get_vk(3, constants, arguments.shape[1], (0,99))
-    print("Verifying STARK")
-    assert verify_stark(next_state, vk, arguments[array((0,99))], stark)
-    print("Verified!")
+    def check_constraint(state, next_state, constants, arith):
+        computed_next = get_next_state(state, constants, arith)
+        return (computed_next - next_state) % M31
 
-def test_arithmetization_builder():
-    constants = generate_constants_table(example)
-    arguments = generate_arguments_table(example, example_args)
-    prefilled_trace = generate_filled_trace(example, constants, arguments)
-    next_state = generate_next_state_function(example)
-    indices = get_public_args_indices(example)
-    stark = mk_stark(
-        next_state,
-        example["trace_width"],
-        constants,
-        arguments,
-        indices,
-        prefilled_trace=prefilled_trace
-    )
-    vk = get_vk(3, constants, arguments.shape[1], indices)
+    trace = zeros((128, 3))
+    constants = arange(384).reshape((128,3))
+
+    trace[0] = array([3, 0, 0])
+    for i in range(127):
+        trace[i+1] = get_next_state(trace[i], constants[i], m31_arith)
+    print("Generating STARK")
+    stark = mk_stark(check_constraint, trace, constants, public_args=(0,99), H_degree=4)
+    vk = get_vk(trace.shape, constants, 3, (0,99), H_degree=4)
     print("Verifying STARK")
-    assert verify_stark(next_state, vk, arguments[array(indices)], stark)
+    assert verify_stark(check_constraint, vk, trace[array((0,99))], stark)
     print("Verified!")
-    global test_stark_output
-    if test_stark_output is None:
-        raise Exception("Need test_mk_stark to check against")
-    assert np.array_equal(stark["output_state"], test_stark_output)
-    print("Outputs confirmed match")
 
 def start_profile():
     global profiler
@@ -275,64 +217,50 @@ def end_profile():
     print(s.getvalue().replace(os.getcwd(), '.')[:4000])
 
 def test_poseidon_stark():
-    in1 = arange(8)
-    in2 = arange(8, 16)
-    h1 = poseidon_hash(in1, in2)
-    print("Directly computed hash:", h1)
-    h2 = arith_hash(in1, in2)
-    print("Hash from raw arithmetization:", h2)
-    h3 = arith_hash2(in1, in2)
-    print("Hash from arithmetization builder:", h3)
-    assert np.array_equal(h1, h2)
-    assert np.array_equal(h1, h3)
-    branch_arguments = {
-        "load_leaf": [
-            array([0,1,2,3,4,5,6,7,1]),
-            array([8,9,10,11,12,13,14,15,1]),
-        ],
-        "load_args": [
-            append(arange(i*8, (i+1)*8), array([i%2]))
-            for i in range(NUM_HASHES-1)
-        ]
-    }
-    constants = generate_constants_table(poseidon_branch_hasher)
-    positions = get_public_args_indices(poseidon_branch_hasher)
-    vk = get_vk(
-        poseidon_branch_hasher["trace_width"],
-        constants,
-        get_arguments_width(poseidon_branch_hasher),
-        positions
-    )
-    k_tree = build_constants_tree(constants)
+    NUM_HASHES = 8192
+    ins = mk_junk_data(NUM_HASHES*8).reshape((NUM_HASHES,8))
+    positions = arange(NUM_HASHES) % 2
+    constants = zeros((NUM_HASHES,1))
+    constants[::32,:] = 1
+    k_tree = build_constants_tree(constants, H_degree=4)
     print("Generating Poseidon STARK")
     start_profile()
-    arguments = generate_arguments_table(
-        poseidon_branch_hasher,
-        branch_arguments
-    )
-    prefilled_trace = custom_trace_filler(
-        branch_arguments,
-    )
-    #prefilled_trace = generate_filled_trace(
-    #    poseidon_branch_hasher,
-    #    constants,
-    #    arguments
-    #)
-    next_state = generate_next_state_function(poseidon_branch_hasher)
-    stark = mk_stark(
-        next_state,
-        poseidon_branch_hasher["trace_width"],
-        constants,
-        arguments,
+    trace = fill_poseidon_trace(
+        ins,
         positions,
-        prebuilt_constants_tree=k_tree,
-        prefilled_trace=prefilled_trace
     )
-    print("Generated")
+    stark = mk_stark(
+        poseidon_constraint_check,
+        trace,
+        constants,
+        public_args=(0,NUM_HASHES-2),
+        prebuilt_constants_tree=k_tree,
+        H_degree=4
+    )
+    print(f"Generated proof of {NUM_HASHES-2} hashes")
     end_profile()
+    vk = get_vk(trace.shape, constants, 184, (0,NUM_HASHES-2), H_degree=4)
+
     print("Verifying Poseidon STARK")
-    assert verify_stark(next_state, vk, arguments[array(positions)], stark)
+    assert verify_stark(poseidon_constraint_check, vk, trace[array((0,NUM_HASHES-2))], stark)
     print("Verified!")
+    fri_proof = stark["fri"]
+    L1 = sum(32 * len(branch) for branch in sum(fri_proof["branches"], []))
+    L2 = 32 * len(fri_proof["roots"])
+    L3 = 32 * len(fri_proof["leaf_values"])
+    L4 = 16 * len(fri_proof["final_values"])
+    L5 = sum(32 * len(branch) for branch in stark["TQ_branches"])
+    L6 = sum(32 * len(branch) for branch in stark["TQ_next_branches"])
+    L7 = sum(32 * len(branch) for branch in stark["K_branches"])
+    L8 = len(stark["TQ_leaves"].to(dtype=np.int32).cpu().numpy().tobytes())
+    L9 = len(stark["TQ_next_leaves"]
+             .to(dtype=np.int32).cpu().numpy().tobytes())
+    L10 = len(stark["K_leaves"].to(dtype=np.int32).cpu().numpy().tobytes())
+    length = L1 + L2 + L3 + L4 + L5 + L6 + L7 + L8 + L9 + L10
+    print(f"Proof length: {length} bytes: {L1} (FRI branches), "
+          f"{L2} (FRI roots), {L3} (FRI leaves), {L4} (FRI final values), "
+          f"{L5} (T+A branches) {L6} (T+A next branches) {L7} (K branches), "
+          f"{L8} (T+A leaves) {L9} (T+A next leaves) {L10} (K leaves)")
 
 if __name__ == '__main__':
     for name, func in dict(locals()).items():
@@ -345,6 +273,6 @@ if __name__ == '__main__':
         test_fast_fft()
         test_fast_fri()
         test_mega_fri()
-        test_simple_arithmetize()
+        test_lines_and_interpolants()
         test_mk_stark()
         test_poseidon_stark()

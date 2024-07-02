@@ -3,6 +3,7 @@ import torch as np
 np.array = np.tensor
 np.array_equal = np.equal
 np.copy = np.clone
+np.concatenate = np.cat
 device = np.device("cuda" if np.cuda.is_available() else "cpu")
 
 M31 = 2**31-1
@@ -98,22 +99,27 @@ def mul(x, y):
 
 # Multiplication in the extension field
 def mul_ext(A, B):
-    # Karatsuba does not seem to actually speed this up!!
     A = A.swapaxes(0, A.ndim-1)
     B = B.swapaxes(0, B.ndim-1)
-    o_LL_r = (A[0] * B[0] - A[1] * B[1]) % M31
-    o_LL_i = (A[0] * B[1] + A[1] * B[0]) % M31
-    o_LR_r = A[0] * B[2] - A[1] * B[3]
-    o_LR_i = A[0] * B[3] + A[1] * B[2] - M31SQ
-    o_RL_r = A[2] * B[0] - A[3] * B[1]
-    o_RL_i = A[2] * B[1] + A[3] * B[0] - M31SQ
-    o_RR_r = (A[2] * B[2] - A[3] * B[3]) % M31
-    o_RR_i = (A[2] * B[3] + A[3] * B[2]) % M31
+    LL_low = A[0] * B[0]
+    LL_high = A[1] * B[1]
+    LL_med = (A[0] + A[1]) * (B[0] + B[1])
+    o_LL_r = (LL_low - LL_high)
+    o_LL_i = (LL_med - LL_low - LL_high)
+    A_fold = (A[:2] + A[2:]) % M31
+    B_fold = (B[:2] + B[2:]) % M31
+    o_comb_r = (A_fold[0] * B_fold[0] - A_fold[1] * B_fold[1])
+    o_comb_i = (A_fold[0] * B_fold[1] + A_fold[1] * B_fold[0])
+    RR_low = A[2] * B[2]
+    RR_high = A[3] * B[3]
+    RR_med = (A[2] + A[3]) * (B[2] + B[3])
+    o_RR_r = (RR_low - RR_high) % M31
+    o_RR_i = (RR_med - RR_low - RR_high) % M31
     o = np.stack((
         o_LL_r - o_RR_r + o_RR_i * 2,
         o_LL_i - o_RR_i - o_RR_r * 2,
-        o_LR_r + o_RL_r,
-        o_LR_i + o_RL_i
+        o_comb_r - o_LL_r - o_RR_r,
+        o_comb_i - o_LL_i - o_RR_i,
     ))
     return (o % M31).swapaxes(0, o.ndim-1)
 
@@ -169,6 +175,18 @@ def eval_zpoly_at(degree, coords, arith):
     for i in range(1, log2(degree)):
         Z = (2 * mul(Z, Z) - one.reshape((1,)*depth + one.shape)) % M31
     return Z
+
+def eval_monomial_at(degree, coord, arith):
+    one, add, mul = arith
+    o = coord[1] if degree % 2 else one
+    power = coord[0]
+    degree //= 2
+    while degree > 0:
+        if degree % 2:
+            o = mul(o, power)
+        power = (2 * mul(power, power) - 1) % M31
+        degree //= 2
+    return o
 
 # Adds two points on the circle (this is angular addition, similar to
 # trigonometry sin(x+y) = sinxcosy + cosxsiny, cos(x+y) = cosxcosy - sinxsiny
@@ -243,7 +261,7 @@ def folded_reverse_bit_order(vals):
 # and Merkle branch indices
 def get_challenges(entropy, domain_size, num_challenges):
     challenge_data = b''.join(
-        hash(entropy + bytes([i])) for i in range((num_challenges + 7) // 8)
+        hash(entropy + bytes([i//256, i%256])) for i in range((num_challenges + 7) // 8)
     )
     return array([
         int.from_bytes(challenge_data[i:i+4], 'little') % domain_size

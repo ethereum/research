@@ -9,14 +9,13 @@ from fast_fft import bary_eval
 
 def line_function(P1, P2, domain, arith):
     one, add, mul = arith
-    a = (P2[1] + M31 - P1[1]) % M31
-    b = (P1[0] + M31 - P2[0]) % M31
-    c = (M31SQ + mul(P2[0], P1[1]) - mul(P1[0], P2[1])) % M31
     if one.ndim == 1:
         domain = to_ext_if_needed(domain, object_dim=2)
         P1 = to_ext_if_needed(P1, object_dim=1)
         P2 = to_ext_if_needed(P2, object_dim=1)
-
+    a = (P2[1] + M31 - P1[1]) % M31
+    b = (P1[0] + M31 - P2[0]) % M31
+    c = (M31SQ + mul(P2[0], P1[1]) - mul(P1[0], P2[1])) % M31
     return (mul(a, domain[:,0]) + mul(b, domain[:,1]) + c) % M31
 
 def interpolant(P1, v1, P2, v2, domain, arith):
@@ -29,14 +28,13 @@ def interpolant(P1, v1, P2, v2, domain, arith):
         domain = to_ext_if_needed(domain, object_dim=2)
         P1 = to_ext_if_needed(P1, object_dim=1)
         P2 = to_ext_if_needed(P2, object_dim=1)
-    if np.array_equal(P1[0], P2[0]):
-        y = domain[:,1].reshape((domain.shape[0],) + (1,) * depth + one.shape)
-        slope = mul((v2 - v1) % M31, inv((P2[1] - P1[1]) % M31))
-        return (v1 + mul((y - P1[1]) % M31, slope)) % M31
-    else:
-        x = domain[:,0].reshape((domain.shape[0],) + (1,) * depth + one.shape)
-        slope = mul((v2 - v1) % M31, inv((P2[0] - P1[0]) % M31))
-        return (v1 + mul((x - P1[0]) % M31, slope)) % M31
+    x = domain[:,0].reshape((domain.shape[0],) + (1,) * depth + one.shape)
+    y = domain[:,1].reshape((domain.shape[0],) + (1,) * depth + one.shape)
+    dx = (P2[0] - P1[0]) % M31
+    dy = (P2[1] - P1[1]) % M31
+    invdist = inv((mul(dx, dx) + mul(dy, dy)) % M31)
+    dot = (mul((x - P1[0]) % M31, dx) + mul((y - P1[1]) % M31, dy)) % M31
+    return v1 + mul((v2 - v1) % M31, mul(dot, invdist))
 
 def public_args_to_vanish_and_interp(domain_size,
                                      indices,

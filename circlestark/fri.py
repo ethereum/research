@@ -71,7 +71,7 @@ def fold(values, coeff, domain):
 # Get the Merkle branch challenge indices from a root
 def get_challenges(root, domain_size, num_challenges):
     challenge_data = b''.join(
-        hash(root + bytes([i])) for i in range((num_challenges + 7) // 8)
+        hash(root + bytes([i//256, i%256])) for i in range((num_challenges + 7) // 8)
     )
     return [
         int.from_bytes(challenge_data[i:i+4], 'little') % domain_size
