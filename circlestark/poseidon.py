@@ -102,45 +102,44 @@ for i in range(56):
             + round_constants[i+5, 0]
         ) % M31
 
-def crazy_poseidon(in1, in2):
-    state = zeros(in1.shape[:-1]+(16,)).cpu()
-    state[...,:8] = in1
-    state[...,8:16] = in2
-    for i in range(4):
-        state = pow5(state + round_constants[i] - M31)
-        if i < 3:
-            state = _matmul(state, mds)
-    new_round_values = zeros(in1.shape[:-1]+(73,))
-    new_round_values[...,0] = 1
-    new_round_values[...,1:17] = state
-    for i in range(56):
-        m = vecmul(new_round_values[...,:17+i], powers_of_mds[i,:17+i,0])
-        new_round_values[...,17+i] = (pow5(m) - m) % M31
-    state = _matmul(new_round_values, powers_of_mds[56])
-    for i in range(4):
-        state = pow5(state + round_constants[60+i] - M31)
-        state = _matmul(state, mds)
-    return (state[...,8:16] + in2) % M31
-
+# We're proving a STARK of a series of Merkle branches, each 32 long
 def fill_poseidon_trace(hash_inputs, positions):
     N = hash_inputs.shape[0]
     _positions = positions.reshape((N, 1))
     hash_outputs = zeros((N+1, 8))
+    # Build all N/32 branches in parallel to make things faster
     for i in range(32):
-        L = hash_inputs[i::32] * (1 - _positions[i::32]) + hash_outputs[i:N:32] * _positions[i::32]
-        R = hash_inputs[i::32] * _positions[i::32] + hash_outputs[i:N:32] * (1 - _positions[i::32])
-        hash_outputs[i+1::32] = np.array(poseidon_hash(L.cpu().numpy(), R.cpu().numpy()))
+        L = (
+            hash_inputs[i::32] * (1 - _positions[i::32])
+            + hash_outputs[i:N:32] * _positions[i::32]
+        )
+        R = (
+            hash_inputs[i::32] * _positions[i::32]
+            + hash_outputs[i:N:32] * (1 - _positions[i::32])
+        )
+        # Do the hashing in numpy. It's slower per byte, but
+        # less overhead, and even at 8192 hashes, overhead of
+        # pinging back and forth between computer and GPU is
+        # the more important thing to optimize
+        hash_outputs[i+1::32] = np.array(
+            poseidon_hash(L.cpu().numpy(), R.cpu().numpy())
+        )
+    # Trace has 192 columns
     trace = zeros((N, 192))
+    # First 16 are the input
     trace[:, :8] = hash_inputs * (1 - _positions)
     trace[:, 8:16] = hash_inputs * _positions
     trace[1:, :8] += hash_outputs[1:-1] * _positions[1:]
     trace[1:, 8:16] += hash_outputs[1:-1] * (1 - _positions[1:])
+    # First four rounds (minus the last matmul)
     for i in range(4):
         _prev = trace[:,i*16:(i+1)*16]
         _next = pow5(_prev + round_constants[i] - M31)
         if i < 3:
             _next = _matmul(_next, mds)
         trace[:,(i+1)*16:(i+2)*16] = _next
+    # Middle 56 rounds, only first cell is edited. We use clever
+    # tricks to only use one trace cell per round
     ones = zeros((hash_inputs.shape[0], 1)) + 1
     for i in range(56):
         m = vecmul(
@@ -149,6 +148,7 @@ def fill_poseidon_trace(hash_inputs, positions):
         )
         trace[:,80+i] = (pow5(m) - m) % M31
 
+    # Last four rounds (plus the matmul of the previous round)
     for i in range(4):
         if i == 0:
             _prev = _matmul(
@@ -162,9 +162,12 @@ def fill_poseidon_trace(hash_inputs, positions):
         if i < 3:
             trace[:,136+16*i:152+16*i] = _next
         else:
+            # In the last round, only save 8 cells, we don't need the
+            # others
             trace[:,184:192] = (_next[:,8:16] + trace[:, 8:16]) % M31
     return trace
 
+# Run the constraint function C(T(x), T(next(x)), K(x))
 def poseidon_constraint_check(state, next_state, constants, arith):
     one, add, mul = arith
     o = zeros((184,) + state.shape[1:])
@@ -176,6 +179,13 @@ def poseidon_constraint_check(state, next_state, constants, arith):
             return to_extension_field(rc_row)
         return rc_row
 
+    ones = np.zeros_like(o[:1])
+    if one.ndim == 1:
+        ones[...,0] = 1
+    else:
+        ones += 1
+
+    # First four rounds (minus the last matmul)
     for i in range(4):
         _prev = state[i*16:(i+1)*16]
         rc = fix_rc_row(round_constants[i])
@@ -183,17 +193,16 @@ def poseidon_constraint_check(state, next_state, constants, arith):
         if i < 3:
             expected = _matmul(expected.swapaxes(0,-1), mds).swapaxes(0,-1)
         o[i*16:(i+1)*16] = state[(i+1)*16:(i+2)*16] - expected
-    ones = np.zeros_like(o[:1])
-    if one.ndim == 1:
-        ones[...,0] = 1
-    else:
-        ones += 1
+
+    # Middle 56 rounds
     for i in range(56):
         m = vecmul(
             append(ones, state[64:80+i]).swapaxes(0,-1),
             powers_of_mds[i,:17+i,0]
         ).swapaxes(0,-1)
         o[64+i] = state[80+i] - (pow5_arith(m, arith) - m)
+
+    # Last 4 rounds, plus the last matmul of the previous round
     for i in range(4):
         if i==0:
             _prev = _matmul(
@@ -209,6 +218,9 @@ def poseidon_constraint_check(state, next_state, constants, arith):
             o[120+16*i:136+16*i] = state[136+16*i:152+16*i] - expected
         else:
             o[168:176] = state[184:192] - (expected[8:16] + state[8:16])
+
+    # Checking consistency between the output and the next input. One of
+    # the two next input leaves must be the output leaf
     o[176:184] = mul(
         (one - constants[0]) % M31,
         mul(

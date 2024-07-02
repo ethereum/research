@@ -101,6 +101,11 @@ def mul(x, y):
 def mul_ext(A, B):
     A = A.swapaxes(0, A.ndim-1)
     B = B.swapaxes(0, B.ndim-1)
+
+    # Reminder: each input is of the form (a+bi) + (c+di)w
+    # where i^2 = -1 and w^2 = -2i-1
+
+    # This is Karatsuba multiplication for complex field elements
     LL_low = A[0] * B[0]
     LL_high = A[1] * B[1]
     LL_med = (A[0] + A[1]) * (B[0] + B[1])
@@ -108,13 +113,18 @@ def mul_ext(A, B):
     o_LL_i = (LL_med - LL_low - LL_high)
     A_fold = (A[:2] + A[2:]) % M31
     B_fold = (B[:2] + B[2:]) % M31
+    # Technically this can also be Karatsuba'd, but it would
+    # require more %M31's, not clear if worth it on net
     o_comb_r = (A_fold[0] * B_fold[0] - A_fold[1] * B_fold[1])
     o_comb_i = (A_fold[0] * B_fold[1] + A_fold[1] * B_fold[0])
+    # Same as above, but for the w slice
     RR_low = A[2] * B[2]
     RR_high = A[3] * B[3]
     RR_med = (A[2] + A[3]) * (B[2] + B[3])
     o_RR_r = (RR_low - RR_high) % M31
     o_RR_i = (RR_med - RR_low - RR_high) % M31
+    # The equivalent of o_LL_r = (LL_low - LL_high), but where the
+    # w*w term turns into -2i-1
     o = np.stack((
         o_LL_r - o_RR_r + o_RR_i * 2,
         o_LL_i - o_RR_i - o_RR_r * 2,
