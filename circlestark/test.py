@@ -31,6 +31,13 @@ from poseidon import (
     fill_poseidon_trace, poseidon_constraint_check
 )
 
+# from zfuncs import fill_poseidon_trace, poseidon_hash
+try:
+    from zfuncs import poseidon_constraint_check
+    import cupy as cp
+except:
+    pass
+
 import time
 import cProfile
 import pstats
@@ -214,7 +221,7 @@ def end_profile():
     s = io.StringIO()
     ps = pstats.Stats(profiler, stream=s).sort_stats(pstats.SortKey.CUMULATIVE)
     ps.print_stats()
-    print(s.getvalue().replace(os.getcwd(), '.')[:4000])
+    print(s.getvalue().replace(os.getcwd(), '.')[:10000])
 
 def test_poseidon_stark():
     NUM_HASHES = 8192
@@ -223,6 +230,10 @@ def test_poseidon_stark():
     constants = zeros((NUM_HASHES,1))
     constants[::32,:] = 1
     k_tree = build_constants_tree(constants, H_degree=4)
+    try:
+        poseidon_constraint_check(cp.arange(192), cp.arange(192,384), cp.arange(1), m31_arith)
+    except:
+        pass
     print("Generating Poseidon STARK")
     start_profile()
     trace = fill_poseidon_trace(

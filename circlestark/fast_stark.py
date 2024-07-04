@@ -11,6 +11,11 @@ from precomputes import sub_domains
 
 from fast_fft import fft, inv_fft, bary_eval
 
+try:
+    from zfuncs import fft, inv_fft, bary_eval
+except:
+    pass
+
 from fast_fri import (
     prove_low_degree, verify_low_degree,
     NUM_CHALLENGES, FOLDS_PER_ROUND, FOLD_SIZE_RATIO
@@ -104,6 +109,7 @@ def mk_stark(check_constraint,
     trace_length = trace.shape[0]
     trace_width = trace.shape[1]
     print('Trace length: {}'.format(trace_length))
+
     START = time.time()
     constants = pad_to(constants, trace_length)
 
@@ -122,7 +128,11 @@ def mk_stark(check_constraint,
         trace_length*ext_degree:
         trace_length*ext_degree*2
     ]
+    np.cuda.synchronize()
+    print('About to generate trace_ext', time.time() - START)
     trace_ext = inv_fft(pad_to(fft(trace), trace_length*ext_degree))
+    np.cuda.synchronize()
+    print('Generated trace_ext', time.time() - START)
     # Decompose the trace into the public part and the private part:
     # trace = public * V + private. We commit to the private part, and show
     # the public part in the clear
@@ -162,6 +172,8 @@ def mk_stark(check_constraint,
             domain_is_multi=True
         )
 
+    #TQ_tree = f1()
+    #H_ext = f2()
     import concurrent.futures
     with concurrent.futures.ThreadPoolExecutor() as executor:
         # Submit the tasks to the executor

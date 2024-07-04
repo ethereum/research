@@ -3,7 +3,7 @@ from utils import (
     modinv, one, M31, reverse_bit_order, folded_reverse_bit_order
 )
 
-TOP_DOMAIN_SIZE = 2**24
+TOP_DOMAIN_SIZE = 2**23
 
 # Generator point
 G = array([1268011823, 2])

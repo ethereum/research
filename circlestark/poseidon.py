@@ -42,9 +42,10 @@ def poseidon_hash(in1, in2):
     for i in range(64):
         if i >= 4 and i < 60:
             state[...,0] = pow5(state[...,0] + round_constants_cpu[i, 0] - M31)
+            statesum = numpy.sum(state, axis=-1) % M31
             state = (
                 state * innerdiag_cpu
-                + numpy.sum(state, axis=-1).reshape(state.shape[:-1]+(1,))
+                + statesum.reshape(state.shape[:-1]+(1,))
             ) % M31
         else:
             state = numpy.matmul(
@@ -173,11 +174,9 @@ def poseidon_constraint_check(state, next_state, constants, arith):
     o = zeros((184,) + state.shape[1:])
     depth = state.ndim - one.ndim - 1
 
-    def fix_rc_row(rc_row):
-        rc_row = rc_row.reshape(rc_row.shape + (1,)*depth)
-        if one.ndim == 1:
-            return to_extension_field(rc_row)
-        return rc_row
+    rc = round_constants.reshape(round_constants.shape + (1,)*depth)
+    if one.ndim == 1:
+        rc = to_extension_field(rc)
 
     ones = np.zeros_like(o[:1])
     if one.ndim == 1:
@@ -188,8 +187,7 @@ def poseidon_constraint_check(state, next_state, constants, arith):
     # First four rounds (minus the last matmul)
     for i in range(4):
         _prev = state[i*16:(i+1)*16]
-        rc = fix_rc_row(round_constants[i])
-        expected = pow5_arith((_prev + rc) % M31, arith)
+        expected = pow5_arith((_prev + rc[i]) % M31, arith)
         if i < 3:
             expected = _matmul(expected.swapaxes(0,-1), mds).swapaxes(0,-1)
         o[i*16:(i+1)*16] = state[(i+1)*16:(i+2)*16] - expected
@@ -211,8 +209,7 @@ def poseidon_constraint_check(state, next_state, constants, arith):
             ).swapaxes(0,-1)
         else:
             _prev = state[120+16*i:136+16*i]
-        rc = fix_rc_row(round_constants[60+i])
-        expected = pow5_arith((_prev + rc) % M31, arith)
+        expected = pow5_arith((_prev + rc[60+i]) % M31, arith)
         expected = _matmul(expected.swapaxes(0,-1), mds).swapaxes(0,-1)
         if i < 3:
             o[120+16*i:136+16*i] = state[136+16*i:152+16*i] - expected
