@@ -2,16 +2,15 @@ import sys
 from fields import S, M, B, ES, EM, EB
 from fft import fft, inv_fft, log2
 from fri import prove_low_degree, verify_low_degree
+from zorch.m31 import (
+    zeros, array, arange, append, tobytes, add, sub, mul, cp as np,
+    mul_ext, modinv_ext, sum as m31_sum, eq, iszero, M31
+)
 from utils import (
-    np, M31, modinv, to_extension_field, zeros, arange, array,
-    append, pad_to, m31_arith, ext_arith, mk_junk_data
+    pad_to, mk_junk_data, to_extension_field
 )
 
 from precomputes import sub_domains
-
-from fast_fft import (
-    fft as f_fft, inv_fft as f_inv_fft, bary_eval
-)
 
 from fast_fri import (
     prove_low_degree as f_prove_low_degree,
@@ -26,10 +25,14 @@ from fast_stark import (
     mk_stark, verify_stark, get_vk, build_constants_tree
 )
 
-from poseidon import (
-    poseidon_hash, NUM_HASHES,
-    fill_poseidon_trace, poseidon_constraint_check
+from fast_fft import (
+    fft as f_fft, inv_fft as f_inv_fft, bary_eval
 )
+
+from poseidon import (
+    poseidon_constraint_check, fill_poseidon_trace, poseidon_hash
+)
+import cupy as cp
 
 import time
 import cProfile
@@ -86,7 +89,7 @@ def test_fast_fft():
     t2 = time.time()
     print("Computed size-{} fast fft in {} sec".format(INPUT_SIZE, t2 - t1))
     assert [int(x) for x in coeffs2] == coeffs1
-    assert np.array_equal(f_inv_fft(coeffs2), npdata)
+    assert eq(f_inv_fft(coeffs2), npdata)
     print("Fast FFT checks passed")
 
 def test_fast_fri():
@@ -128,73 +131,76 @@ def test_mega_fri():
 def test_lines_and_interpolants():
     coords = (
         # pos1, val1, pos2, val2
-        (12, 9, 13, 81, m31_arith),
-        (8, 16, 15, 256, m31_arith),
-        (12, [9, 25, 49], 13, [81, 625, 2401], m31_arith),
-        (8, [999, 998, 997], 15, [900, 901, 902], m31_arith),
-        (12, [1,2,3,4], 13, [8,16,32,64], ext_arith),
-        (8, [9,10,11,12], 15, [3,9,27,81], ext_arith),
-        (8, [[1,2,3,4],[5,0,0,0]], 17, [[8,16,32,64],[900,0,0,0]], ext_arith),
-        (23, [[5,6,7,80],[9,0,0,0]], 29, [[4,40,14,41],[99,0,0,0]], ext_arith),
+        (12, 9, 13, 81, False),
+        (8, 16, 15, 256, False),
+        (12, [9, 25, 49], 13, [81, 625, 2401], False),
+        (8, [999, 998, 997], 15, [900, 901, 902], False),
+        (12, [1,2,3,4], 13, [8,16,32,64], True),
+        (8, [9,10,11,12], 15, [3,9,27,81], True),
+        (8, [[1,2,3,4],[5,0,0,0]], 17, [[8,16,32,64],[900,0,0,0]], True),
+        (23, [[5,6,7,80],[9,0,0,0]], 29, [[4,40,14,41],[99,0,0,0]], True),
     )
-    for pos1, v1, pos2, v2, arith in coords:
+    for pos1, v1, pos2, v2, is_extended in coords:
         print(pos1, v1, pos2, v2)
         p1 = sub_domains[pos1]
         p2 = sub_domains[pos2]
         p3 = sub_domains[pos2 * 2 - pos1]
-        if arith[0].ndim == 1:
-            p1 = to_extension_field(p1)
-            p2 = to_extension_field(p2)
-            p3 = to_extension_field(p3)
+        if is_extended:
+            p1 = p1.to_extended()
+            p2 = p2.to_extended()
+            p3 = p3.to_extended()
         v1, v2 = array(v1), array(v2)
-        L = line_function(p1, p2, sub_domains[8:16], arith)
-        assert not np.any(bary_eval(L, p1, arith))
-        assert not np.any(bary_eval(L, p2, arith))
-        assert np.any(bary_eval(L, p3, arith))
-        I = interpolant(p1, v1, p2, v2, sub_domains[8:16], arith)
-        assert np.array_equal(bary_eval(I, p1, arith), v1)
-        assert np.array_equal(bary_eval(I, p2, arith), v2)
+        L = line_function(p1, p2, sub_domains[8:16], is_extended)
+        assert iszero(bary_eval(L, p1, is_extended))
+        assert iszero(bary_eval(L, p2, is_extended))
+        assert not iszero(bary_eval(L, p3, is_extended))
+        I = interpolant(p1, v1, p2, v2, sub_domains[8:16], is_extended)
+        assert eq(bary_eval(I, p1, is_extended), v1)
+        assert eq(bary_eval(I, p2, is_extended), v2)
 
     print("Basic line and interpolant checks passed")
 
     for i in range(0, len(coords), 2):
-        pos1, v1, pos2, v2, arith = coords[i]
+        pos1, v1, pos2, v2, is_extended = coords[i]
         pos3, v3, pos4, v4, _ = coords[i+1]
         print(pos1, pos2, pos3, pos4, v1, v2, v3, v4)
         V, I = public_args_to_vanish_and_interp(
             32,
             (pos1, pos2, pos3, pos4),
             array([v1, v2, v3, v4]),
-            arith
+            is_extended
         )
         for pos, v in zip((pos1, pos2, pos3, pos4), (v1, v2, v3, v4)):
-            assert not np.any(bary_eval(V, sub_domains[32+pos], arith))
-            assert np.array_equal(
-                bary_eval(I, sub_domains[32+pos], arith),
+            assert iszero(bary_eval(V, sub_domains[32+pos], is_extended))
+            assert eq(
+                bary_eval(I, sub_domains[32+pos], is_extended),
                 array(v)
             )
 
     print("Vanish-and-interp test passed")
 
 def test_mk_stark():
-    def get_next_state(state, constants, arith): 
-        one, add, mul = arith
-        o = np.copy(state)
-        o[0] = (mul(state[1], state[2]) + constants[0]) % M31
-        o[1] = (mul(state[2], state[0]) + constants[1]) % M31
-        o[2] = (mul(state[0], state[1]) + constants[2]) % M31
+    def get_next_state(state, constants, is_extended): 
+        if is_extended:
+            _mul = mul_ext
+        else:
+            _mul = mul
+        o = cp.copy(state)
+        o[0] = add(_mul(state[1], state[2]), constants[0])
+        o[1] = add(_mul(state[2], state[0]), constants[1])
+        o[2] = add(_mul(state[0], state[1]), constants[2])
         return o
 
-    def check_constraint(state, next_state, constants, arith):
-        computed_next = get_next_state(state, constants, arith)
-        return (computed_next - next_state) % M31
+    def check_constraint(state, next_state, constants, is_extended):
+        computed_next = get_next_state(state, constants, is_extended)
+        return sub(computed_next, next_state)
 
     trace = zeros((128, 3))
     constants = arange(384).reshape((128,3))
 
     trace[0] = array([3, 0, 0])
     for i in range(127):
-        trace[i+1] = get_next_state(trace[i], constants[i], m31_arith)
+        trace[i+1] = get_next_state(trace[i], constants[i], False)
     print("Generating STARK")
     stark = mk_stark(check_constraint, trace, constants, public_args=(0,99), H_degree=4)
     vk = get_vk(trace.shape, constants, 3, (0,99), H_degree=4)
@@ -214,15 +220,19 @@ def end_profile():
     s = io.StringIO()
     ps = pstats.Stats(profiler, stream=s).sort_stats(pstats.SortKey.CUMULATIVE)
     ps.print_stats()
-    print(s.getvalue().replace(os.getcwd(), '.')[:4000])
+    print(s.getvalue().replace(os.getcwd(), '.')[:10000])
 
 def test_poseidon_stark():
-    NUM_HASHES = 8192
+    NUM_HASHES = 16384
     ins = mk_junk_data(NUM_HASHES*8).reshape((NUM_HASHES,8))
     positions = arange(NUM_HASHES) % 2
     constants = zeros((NUM_HASHES,1))
     constants[::32,:] = 1
     k_tree = build_constants_tree(constants, H_degree=4)
+    try:
+        poseidon_constraint_check(cp.arange(192), cp.arange(192,384), cp.arange(1), m31_arith)
+    except:
+        pass
     print("Generating Poseidon STARK")
     start_profile()
     trace = fill_poseidon_trace(
@@ -252,10 +262,9 @@ def test_poseidon_stark():
     L5 = sum(32 * len(branch) for branch in stark["TQ_branches"])
     L6 = sum(32 * len(branch) for branch in stark["TQ_next_branches"])
     L7 = sum(32 * len(branch) for branch in stark["K_branches"])
-    L8 = len(stark["TQ_leaves"].to(dtype=np.int32).cpu().numpy().tobytes())
-    L9 = len(stark["TQ_next_leaves"]
-             .to(dtype=np.int32).cpu().numpy().tobytes())
-    L10 = len(stark["K_leaves"].to(dtype=np.int32).cpu().numpy().tobytes())
+    L8 = len(stark["TQ_leaves"].tobytes())
+    L9 = len(stark["TQ_next_leaves"].tobytes())
+    L10 = len(stark["K_leaves"].tobytes())
     length = L1 + L2 + L3 + L4 + L5 + L6 + L7 + L8 + L9 + L10
     print(f"Proof length: {length} bytes: {L1} (FRI branches), "
           f"{L2} (FRI roots), {L3} (FRI leaves), {L4} (FRI final values), "

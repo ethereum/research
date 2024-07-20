@@ -1,39 +1,11 @@
 from merkle import merkelize, hash, get_branch, verify_branch
-import torch as np
-np.array = np.tensor
-np.array_equal = np.equal
-np.copy = np.clone
-np.concatenate = np.cat
-device = np.device("cuda" if np.cuda.is_available() else "cpu")
-
-M31 = 2**31-1
-M31SQ = (2**31-1)**2
+from zorch.m31 import (
+    zeros, array, arange, append, tobytes, add, sub, mul, cp as np,
+    mul_ext, modinv, modinv_ext, sum as m31_sum, M31, eq, iszero
+)
+from zorch.m31_circle import Point, ExtendedPoint
+M31SQ = M31 ** 2
 HALF = 2**30
-
-# Converts a list to an array (which benefits from GPU acceleration)
-def array(x):
-    return np.array(x, dtype=np.int64, device=device)
-
-# Creates an array of zeros of the given shape
-def zeros(shape):
-    return np.zeros(shape, dtype=np.int64, device=device)
-
-# Converts an array to bytes
-def tobytes(shape):
-    return shape.to(dtype=np.int32).cpu().numpy().tobytes()
-
-# Generates a range, eg. [0, 1 ... n-1], or [start, start+1 ... end-1],
-# or [start, start+step ... {highest start+step*k before end}]
-def arange(*args):
-    return np.arange(*args, dtype=np.int64, device=device)
-
-# Combine two arrays along the top dimension (ie. treat them as lists
-# and concatenate the lists)
-def append(*args):
-    if len(args[0].shape) == 1:
-        return np.hstack(args)
-    else:
-        return np.vstack(args)
 
 def log2(x):
     assert x & (x-1) == 0
@@ -46,7 +18,7 @@ def pad_to(arr, new_len):
 
 # Confirms that the coefficients respect a given degree bound
 def confirm_max_degree(coeffs, bound):
-    return not np.any(coeffs[bound:])
+    return iszero(coeffs[bound:])
 
 # Merkelize a list of items
 def merkelize_top_dimension(x):
@@ -70,158 +42,46 @@ def to_extension_field(values):
     o[...,:1] = v
     return o
 
+one_ext = array([1,0,0,0])
+
 # Convert an extension field element to a point in the extension
 # field. Guarantees no properties about the point; the use case
 # is purely "pick a random point" for Fiat-Shamir-style protocols
 def projective_to_point(t):
     t2 = mul_ext(t, t)
-    inv_1pt2 = modinv_ext((one + t2) % M31)
-    return np.stack((
-        mul_ext((one + M31 - t2) % M31, inv_1pt2),
-        mul_ext((2 * t) % M31, inv_1pt2)
-    ))
+    inv_1pt2 = modinv_ext(add(one_ext, t2))
+    return ExtendedPoint(
+        mul_ext(sub(one_ext, t2), inv_1pt2),
+        mul_ext(add(t, t), inv_1pt2)
+    )
 
 # Takes as input a N*k array of values, and a vector k extension field
 # elements, and computes the size-N linear combination
 def fold(vector, fold_factors):
-    return np.sum(
-        vector.reshape(vector.shape+(1,)) * fold_factors % M31,
+    return m31_sum(
+        mul(vector.reshape(vector.shape+(1,)), fold_factors),
         axis=-2
-    ) % M31
+    )
 
 # Same put takes as input a N*k array of extension field elements
 def fold_ext(vector, fold_factors):
-    return np.sum(mul_ext(vector, fold_factors), axis=-2) % M31
-
-# Multiplication, mod 2**31-1
-def mul(x, y):
-    return x*y % M31
-
-# Multiplication in the extension field
-def mul_ext(A, B):
-    A = A.swapaxes(0, A.ndim-1)
-    B = B.swapaxes(0, B.ndim-1)
-
-    # Reminder: each input is of the form (a+bi) + (c+di)w
-    # where i^2 = -1 and w^2 = -2i-1
-
-    # This is Karatsuba multiplication for complex field elements
-    LL_low = A[0] * B[0]
-    LL_high = A[1] * B[1]
-    LL_med = (A[0] + A[1]) * (B[0] + B[1])
-    o_LL_r = (LL_low - LL_high)
-    o_LL_i = (LL_med - LL_low - LL_high)
-    A_fold = (A[:2] + A[2:]) % M31
-    B_fold = (B[:2] + B[2:]) % M31
-    # Technically this can also be Karatsuba'd, but it would
-    # require more %M31's, not clear if worth it on net
-    o_comb_r = (A_fold[0] * B_fold[0] - A_fold[1] * B_fold[1])
-    o_comb_i = (A_fold[0] * B_fold[1] + A_fold[1] * B_fold[0])
-    # Same as above, but for the w slice
-    RR_low = A[2] * B[2]
-    RR_high = A[3] * B[3]
-    RR_med = (A[2] + A[3]) * (B[2] + B[3])
-    o_RR_r = (RR_low - RR_high) % M31
-    o_RR_i = (RR_med - RR_low - RR_high) % M31
-    # The equivalent of o_LL_r = (LL_low - LL_high), but where the
-    # w*w term turns into -2i-1
-    o = np.stack((
-        o_LL_r - o_RR_r + o_RR_i * 2,
-        o_LL_i - o_RR_i - o_RR_r * 2,
-        o_comb_r - o_LL_r - o_RR_r,
-        o_comb_i - o_LL_i - o_RR_i,
-    ))
-    return (o % M31).swapaxes(0, o.ndim-1)
-
-# Modular inverse, mod 2**31-1
-def modinv(x):
-    o = x
-    pow_of_x = (x * x) % M31
-    for i in range(29):
-        pow_of_x = (pow_of_x * pow_of_x) % M31
-        o = (o * pow_of_x) % M31
-    return o
-
-# Modular inverse in the extension field
-# Uses the formula 1/(a+bi) = (a-bi)/(a^2+b^2),
-# together with an analog of that formula for the second
-# extension (add w where w^2 = -1-2i)
-def modinv_ext(x):
-    x = x.swapaxes(0, x.ndim-1)
-    r20 = (x[2] * x[2] + M31SQ - x[3] * x[3]) % M31
-    r21 = (2 * x[2] * x[3]) % M31
-    denom0 = (x[0]**2 - x[1]**2 + r20 - r21 * 2) % M31
-    denom1 = (2*x[0]*x[1] + r21 + r20 * 2) % M31
-    inv_denom_norm = modinv((denom0 ** 2 + denom1 ** 2) % M31)
-    inv_denom0 = (denom0 * inv_denom_norm) % M31
-    inv_denom1 = (M31SQ - denom1 * inv_denom_norm) % M31
-    o = np.stack((
-        x[0] * inv_denom0 + M31SQ - x[1] * inv_denom1,
-        x[0] * inv_denom1 + x[1] * inv_denom0,
-        M31SQ - x[2] * inv_denom0 + x[3] * inv_denom1,
-        M31SQ * 2 - x[2] * inv_denom1 - x[3] * inv_denom0,
-    ))
-    return (o % M31).swapaxes(0, o.ndim-1)
-
-one = array([1,0,0,0])
-m31_arith = (
-    array(1),
-    lambda *x: sum(x) % M31,
-    mul
-)
-ext_arith = (
-    one,
-    lambda *x: sum(x) % M31,
-    mul_ext
-)
+    return m31_sum(mul_ext(vector, fold_factors), axis=-2)
 
 # Evaluates the simplest polynomial that equals zero across
 # the domain of size `degree`, at the given coords. Supports
 # the base field or extension field
-def eval_zpoly_at(degree, coords, arith):
-    one, add, mul = arith
-    Z = coords[...,0,:] if one.ndim == 1 else coords[...,0]
-    depth = Z.ndim - one.ndim
+def eval_zpoly_at(degree, coords, is_extended=False):
+    if is_extended:
+        Z = coords.x
+        one = array([1,0,0,0]).reshape((1,) * (Z.ndim - 1) + (4,))
+        _mul = mul_ext
+    else:
+        Z = coords.x
+        one = array([1]).reshape((1,) * Z.ndim)
+        _mul = mul
     for i in range(1, log2(degree)):
-        Z = (2 * mul(Z, Z) - one.reshape((1,)*depth + one.shape)) % M31
+        Z = sub(2 * _mul(Z, Z) % M31, one)
     return Z
-
-def eval_monomial_at(degree, coord, arith):
-    one, add, mul = arith
-    o = coord[1] if degree % 2 else one
-    power = coord[0]
-    degree //= 2
-    while degree > 0:
-        if degree % 2:
-            o = mul(o, power)
-        power = (2 * mul(power, power) - 1) % M31
-        degree //= 2
-    return o
-
-# Adds two points on the circle (this is angular addition, similar to
-# trigonometry sin(x+y) = sinxcosy + cosxsiny, cos(x+y) = cosxcosy - sinxsiny
-def point_add(pt1, pt2):
-    o = zeros(max(pt1.shape, pt2.shape))
-    o[...,0] = (M31SQ + pt1[...,0]*pt2[...,0] - pt1[...,1]*pt2[...,1]) % M31
-    o[...,1] = (pt1[...,0]*pt2[...,1] + pt1[...,1]*pt2[...,0]) % M31
-    return o
-
-# Adds a point on the circle to itself, similar to trigonometry
-# sin(2x) = 2sinxcosx, cos(2x) = 2cos^2x-1
-def point_double(pt):
-    o = np.zeros_like(pt)
-    o[...,0] = (2 * pt[...,0] * pt[...,0] - 1) % M31
-    o[...,1] = (2 * pt[...,0] * pt[...,1]) % M31
-    return o
-
-# Add two points whose coordinates are in the extension field
-def point_add_ext(pt1, pt2):
-    return np.stack((
-        mul_ext(pt1[0], pt2[0])
-        + M31SQ - mul_ext(pt1[1], pt2[1]),
-        mul_ext(pt1[0], pt2[1]) +
-        mul_ext(pt1[1], pt2[0])
-    )) % M31
 
 # Converts a list into "reverse bit order", eg:
 # 0 1 -> 0 1

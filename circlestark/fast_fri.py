@@ -1,6 +1,10 @@
+from zorch.m31 import (
+    zeros, array, arange, append, tobytes, add, sub, mul, cp as np,
+    mul_ext, modinv_ext, sum as m31_sum, eq, M31, iszero
+)
 from utils import (
-    log2, M31, M31SQ, HALF, to_extension_field, mul_ext, modinv,
-    np, array, zeros, tobytes, arange, reverse_bit_order,
+    log2, M31, M31SQ, HALF, to_extension_field,
+    np, tobytes, reverse_bit_order,
     merkelize_top_dimension, get_challenges, rbo_index_to_original
 )
 from precomputes import folded_rbos, invx, invy
@@ -20,7 +24,7 @@ def fold(values, coeff, first_round):
     for i in range(FOLDS_PER_ROUND):
         full_len, half_len = values.shape[-2], values.shape[-2]//2
         left, right = values[::2], values[1::2]
-        f0 = ((left + right) * HALF) % M31
+        f0 = mul(add(left, right), HALF)
         if i == 0 and first_round:
             twiddle = (
                 invy[full_len: full_len + half_len]
@@ -33,8 +37,8 @@ def fold(values, coeff, first_round):
             )
         twiddle_box = np.zeros_like(left)
         twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (left.ndim-1))
-        f1 = ((((left + M31 - right) * HALF) % M31) * twiddle_box) % M31
-        values = (f0 + mul_ext(f1, coeff)) % M31
+        f1 = mul(mul(sub(left, right), HALF), twiddle_box)
+        values = add(f0, mul_ext(f1, coeff))
     return values
 
 # This performs the same folding step as above, but at a pre-supplied list
@@ -45,7 +49,7 @@ def fold_with_positions(values, domain_size, positions, coeff, first_round):
     positions = positions[::2]
     for i in range(FOLDS_PER_ROUND):
         left, right = values[::2], values[1::2]
-        f0 = ((left + right) * HALF) % M31
+        f0 = mul(add(left, right), HALF)
         if i == 0 and first_round:
             unrbo_positions = rbo_index_to_original(domain_size, positions)
             twiddle = invy[domain_size + unrbo_positions]
@@ -57,8 +61,8 @@ def fold_with_positions(values, domain_size, positions, coeff, first_round):
             twiddle = invx[domain_size * 2 + unrbo_positions]
         twiddle_box = np.zeros_like(left)
         twiddle_box[:] = twiddle.reshape((left.shape[0],) + (1,)*(left.ndim-1))
-        f1 = ((((left + M31 - right) * HALF) % M31) * twiddle_box) % M31
-        values = (f0 + mul_ext(f1, coeff)) % M31
+        f1 = mul(mul(sub(left, right), HALF), twiddle_box)
+        values = add(f0, mul_ext(f1, coeff))
         positions = positions[::2]
         domain_size //= 2
     return values
@@ -165,6 +169,6 @@ def verify_low_degree(proof, extra_entropy=b''):
     o = np.zeros_like(final_values)
     N = final_values.shape[0]
     o[rbo_index_to_original(N, arange(N))] = final_values
-    coeffs = fft(o, is_top_level=False)
-    assert not np.any(coeffs[N//2:])
+    coeffs = fft(o, is_top_level=False) % M31
+    assert iszero(coeffs[N//2:])
     return True
