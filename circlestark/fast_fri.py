@@ -27,13 +27,13 @@ def fold(values, coeff, first_round):
         f0 = mul(add(left, right), HALF)
         if i == 0 and first_round:
             twiddle = (
-                invy[full_len: full_len + half_len]
-                [folded_rbos[half_len:full_len]]
+                invy[full_len: full_len * 2]
+                [folded_rbos[full_len:full_len*2:2]]
             )
         else:
             twiddle = (
-                invx[full_len*2: full_len*2 + half_len]
-                [folded_rbos[half_len:full_len]]
+                invx[full_len*2: full_len * 3]
+                [folded_rbos[full_len:full_len*2:2]]
             )
         twiddle_box = np.zeros_like(left)
         twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (left.ndim-1))

@@ -24,34 +24,26 @@ def line_function(P1, P2, domain):
     c = -(a * x1 + b * y1)
     return [a * x + b * y + c for x,y in domain]
 
-def folded_reverse_bit_order(values):
+def rbo(values):
     if len(values) == 1:
         return values
-    L = folded_reverse_bit_order(values[:len(values)//2])
-    R = folded_reverse_bit_order(values[len(values)//2:][::-1])
-    o = [0] * len(values)
+    L = rbo(values[::2])
+    R = rbo(values[1::2])
+    return L + R
+
+def folded_reverse_bit_order(values):
+    L = rbo(values[::2])
+    R = rbo(values[1::2][::-1])
+    o = [None for _ in values]
     o[::2] = L
     o[1::2] = R
     return o
 
-def undo_folded_reverse_bit_order(values):
-    if len(values) == 1:
-        return values
-    L = values[::2]
-    R = values[1::2]
-    return (
-        undo_folded_reverse_bit_order(L) +
-        undo_folded_reverse_bit_order(R)[::-1]
-    )
+undo_folded_reverse_bit_order = folded_reverse_bit_order
 
 def rbo_index_to_original(length, index):
-    assert index < length
-    if length == 1:
-        return 0
-    if index % 2 == 0:
-        return rbo_index_to_original(length // 2, index // 2)
-    else:
-        return length - 1 - rbo_index_to_original(length // 2, index // 2)
+    sub = int(bin(length + index)[3:-1][::-1], 2)
+    return sub * 2 if index % 2 == 0 else length - 1 - sub * 2
 
 def fold(values, coeff, domain):
     for i in range(FOLDS_PER_ROUND):
@@ -59,10 +51,10 @@ def fold(values, coeff, domain):
         f0 = [(L+R)/2 for L,R in zip(left, right)]
         if isinstance(domain[0], tuple):
             f1 = [(L-R)/(2*y) for L,R,(x,y) in zip(left, right, domain[::2])]
-            twiddle = [y for (x,y) in domain[::2]]
+            # twiddle = [y.inv() for (x,y) in domain[::2]]
         else:
             f1 = [(L-R)/(2*x) for L,R,x in zip(left, right, domain[::2])]
-            twiddle = domain[::2]
+            # twiddle = domain[::2]
         values = [f0val + coeff * f1val for f0val, f1val in zip(f0, f1)]
         domain = halve_domain(domain[::2], preserve_length=True)
     return values, domain

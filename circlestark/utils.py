@@ -22,7 +22,7 @@ def confirm_max_degree(coeffs, bound):
 
 # Merkelize a list of items
 def merkelize_top_dimension(x):
-    blob = tobytes(x)
+    blob = tobytes(x % M31)
     size = len(blob) // x.shape[0]
     return merkelize([blob[i:i+size] for i in range(0, len(blob), size)])
 
@@ -104,11 +104,14 @@ def reverse_bit_order(vals):
 
 # Returns the index of a given value in the list created by the
 # function above
-def rbo_index_to_original(length, index):
+def rbo_index_to_original(length, index, first_round=True):
     if length == 1:
         return np.zeros_like(index)
-    sub = rbo_index_to_original(length >> 1, index >> 1)
-    return (1 - (index % 2)) * sub + (index % 2) * (length - 1 - sub)
+    sub = rbo_index_to_original(length >> 1, index >> 1, False)
+    if first_round:
+        return (1 - (index % 2)) * sub*2 + (index % 2) * (length - 1 - sub*2)
+    else:
+        return (1 - (index % 2)) * sub + (index % 2) * (length//2 + sub)
 
 # Similar to reverse bit order, except when you construct it you
 # reverse the right side at each step.
@@ -117,15 +120,10 @@ def rbo_index_to_original(length, index):
 # 0 1 2 3 4 5 6 7 -> 0 7 3 4 1 6 2 5
 # Useful for circle FFTs
 def folded_reverse_bit_order(vals):
-    vals = np.copy(vals)
-    size = vals.shape[0]
-    shape_suffix = vals.shape[1:]
-    for i in range(log2(size)):
-        vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
-        full_len = vals.shape[1]
-        half_len = full_len >> 1
-        vals[:, half_len:] = np.flip(vals[:, half_len:], (1,))
-    return reverse_bit_order(vals.reshape((size,) + shape_suffix))
+    o = np.zeros_like(vals)
+    o[::2] = reverse_bit_order(vals[::2])
+    o[1::2] = reverse_bit_order(vals[1::2][::-1])
+    return o
 
 # Get challenge indices. Used to choose random linear combinations
 # and Merkle branch indices

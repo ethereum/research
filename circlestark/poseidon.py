@@ -78,7 +78,7 @@ def matmul(data1, data2):
     data2 = data2.astype(np.uint64)
     o1 = np.matmul(data1 & 65535, data2)
     o2 = np.matmul(data1 >> 16, data2)
-    return ((o1 + (o2 % M31) * 65536) % M31).astype(np.uint32)
+    return ((o1 + ((o2 % M31) << 16)) % M31).astype(np.uint32)
 
 def poseidon_hash(in1, in2):
     state = zeros(in1.shape[:-1]+(16,))
@@ -99,7 +99,6 @@ def poseidon_hash(in1, in2):
 
 # We're proving a STARK of a series of Merkle branches, each 32 long
 def fill_poseidon_trace(hash_inputs, positions):
-
     N = hash_inputs.shape[0]
     positions = positions.reshape((N, 1))
     hash_outputs = zeros((N+1, 8))
@@ -117,8 +116,7 @@ def fill_poseidon_trace(hash_inputs, positions):
         # less overhead, and even at 8192 hashes, overhead of
         # pinging back and forth between computer and GPU is
         # the more important thing to optimize
-        #h = poseidon_hash(L, R)
-        #_hash_outputs[i+1::32] = h
+        #hash_outputs[i+1::32] = poseidon_hash(L, R)
         hash_outputs[i+1::32] = np.array(
             poseidon_hash_cpu(
                 L.get().astype(np.uint64),

@@ -174,12 +174,12 @@ def mk_stark(check_constraint,
         # Submit the tasks to the executor
         future1 = executor.submit(f1)
         future2 = executor.submit(f2)
-    
+      
         # Get the results
         TQ_tree = future1.result()
         H_ext = future2.result()
-    # TQ_tree = f1()
-    # H_ext = f2()
+    #TQ_tree = f1()
+    #H_ext = f2()
 
     print('Generated tree and C_ext!', time.time() - START)
 
