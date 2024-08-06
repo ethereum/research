@@ -1,10 +1,8 @@
 from zorch.m31 import (
-    zeros, array, arange, append, tobytes, add, sub, mul, cp as np,
-    mul_ext, modinv_ext, sum as m31_sum, eq, M31, iszero
+    M31, ExtendedM31, Point, modulus, zeros_like, Z, G
 )
 from utils import (
-    log2, M31, M31SQ, HALF, to_extension_field,
-    np, tobytes, reverse_bit_order,
+    log2, HALF, cp, reverse_bit_order,
     merkelize_top_dimension, get_challenges, rbo_index_to_original
 )
 from precomputes import folded_rbos, invx, invy
@@ -22,9 +20,9 @@ NUM_CHALLENGES = 80
 # by 8x
 def fold(values, coeff, first_round):
     for i in range(FOLDS_PER_ROUND):
-        full_len, half_len = values.shape[-2], values.shape[-2]//2
+        full_len, half_len = values.shape[-1], values.shape[-1]//2
         left, right = values[::2], values[1::2]
-        f0 = mul(add(left, right), HALF)
+        f0 = (left + right) * HALF
         if i == 0 and first_round:
             twiddle = (
                 invy[full_len: full_len * 2]
@@ -35,10 +33,10 @@ def fold(values, coeff, first_round):
                 invx[full_len*2: full_len * 3]
                 [folded_rbos[full_len:full_len*2:2]]
             )
-        twiddle_box = np.zeros_like(left)
+        twiddle_box = zeros_like(left)
         twiddle_box[:] = twiddle.reshape((half_len,) + (1,) * (left.ndim-1))
-        f1 = mul(mul(sub(left, right), HALF), twiddle_box)
-        values = add(f0, mul_ext(f1, coeff))
+        f1 = (left - right) * HALF * twiddle_box
+        values = f0 + f1 * coeff
     return values
 
 # This performs the same folding step as above, but at a pre-supplied list
@@ -49,7 +47,7 @@ def fold_with_positions(values, domain_size, positions, coeff, first_round):
     positions = positions[::2]
     for i in range(FOLDS_PER_ROUND):
         left, right = values[::2], values[1::2]
-        f0 = mul(add(left, right), HALF)
+        f0 = (left + right) * HALF
         if i == 0 and first_round:
             unrbo_positions = rbo_index_to_original(domain_size, positions)
             twiddle = invy[domain_size + unrbo_positions]
@@ -59,17 +57,17 @@ def fold_with_positions(values, domain_size, positions, coeff, first_round):
                 (positions << 1) >> i
             )
             twiddle = invx[domain_size * 2 + unrbo_positions]
-        twiddle_box = np.zeros_like(left)
+        twiddle_box = zeros_like(left)
         twiddle_box[:] = twiddle.reshape((left.shape[0],) + (1,)*(left.ndim-1))
-        f1 = mul(mul(sub(left, right), HALF), twiddle_box)
-        values = add(f0, mul_ext(f1, coeff))
+        f1 = (left - right) * HALF * twiddle_box
+        values = f0 + f1 * coeff
         positions = positions[::2]
         domain_size //= 2
     return values
 
 # Generate a FRI proof
 def prove_low_degree(evaluations, extra_entropy=b''):
-    assert len(evaluations.shape) == 2 and evaluations.shape[-1] == 4
+    assert evaluations.ndim == 1 and isinstance(evaluations, ExtendedM31)
     # Commit Merkle root
     values = evaluations[folded_rbos[len(evaluations):len(evaluations)*2]]
     leaves = []
@@ -87,16 +85,16 @@ def prove_low_degree(evaluations, extra_entropy=b''):
         roots.append(trees[-1][1])
         print('Root: 0x{}'.format(roots[-1].hex()))
         print("Descent round {}: {} values".format(i+1, len(values)))
-        fold_factor = get_challenges(b''.join(roots), M31, 4)
+        fold_factor = ExtendedM31(get_challenges(b''.join(roots), modulus, 4))
         print("Fold factor: {}".format(fold_factor))
         values = fold(values, fold_factor, i==0)
-    entropy = extra_entropy + b''.join(roots) + tobytes(values)
+    entropy = extra_entropy + b''.join(roots) + values.tobytes()
     challenges = get_challenges(
         entropy, len(evaluations) >> FOLDS_PER_ROUND, NUM_CHALLENGES
     )
     round_challenges = (
         challenges.reshape((1,)+challenges.shape)
-        >> arange(0, rounds * FOLDS_PER_ROUND, FOLDS_PER_ROUND)
+        >> cp.arange(0, rounds * FOLDS_PER_ROUND, FOLDS_PER_ROUND)
         .reshape((rounds,) + (1,) * challenges.ndim)
     )
 
@@ -106,7 +104,7 @@ def prove_low_degree(evaluations, extra_entropy=b''):
     ]
     round_challenges_xfold = (
         round_challenges.reshape(round_challenges.shape + (1,)) * 8
-        + arange(FOLD_SIZE_RATIO).reshape(1, 1, FOLD_SIZE_RATIO)
+        + cp.arange(FOLD_SIZE_RATIO).reshape(1, 1, FOLD_SIZE_RATIO)
     )
 
     leaf_values = [
@@ -128,7 +126,7 @@ def verify_low_degree(proof, extra_entropy=b''):
     final_values = proof["final_values"]
     len_evaluations = final_values.shape[0] << (FOLDS_PER_ROUND * len(roots))
     print("Verifying FRI proof")
-    entropy = extra_entropy + b''.join(roots) + tobytes(final_values)
+    entropy = extra_entropy + b''.join(roots) + final_values.tobytes()
     challenges = get_challenges(
         entropy, len_evaluations >> FOLDS_PER_ROUND, NUM_CHALLENGES
     )
@@ -136,15 +134,17 @@ def verify_low_degree(proof, extra_entropy=b''):
     # verify consistency at each step
     for i in range(len(roots)):
         print("Descent round {}".format(i+1))
-        fold_factor = get_challenges(b''.join(roots[:i+1]), M31, 4)
+        fold_factor = ExtendedM31(
+            get_challenges(b''.join(roots[:i+1]), modulus, 4)
+        )
         print("Fold factor: {}".format(fold_factor))
         evaluation_size = len_evaluations >> (i * FOLDS_PER_ROUND)
         positions = (
             challenges.reshape((NUM_CHALLENGES, 1)) * FOLD_SIZE_RATIO
-            + arange(FOLD_SIZE_RATIO)
+            + cp.arange(FOLD_SIZE_RATIO)
         ).reshape((NUM_CHALLENGES * FOLD_SIZE_RATIO))
         folded_values = fold_with_positions(
-            leaf_values[i].reshape((-1,4)),
+            leaf_values[i].reshape((-1,)),
             evaluation_size,
             positions,
             fold_factor,
@@ -153,22 +153,22 @@ def verify_low_degree(proof, extra_entropy=b''):
         if i < len(roots) - 1:
             expected_values = (
                 leaf_values[i+1][
-                    arange(NUM_CHALLENGES),
+                    cp.arange(NUM_CHALLENGES),
                     challenges % FOLD_SIZE_RATIO
                 ]
             )
         else:
             expected_values = final_values[challenges]
-        assert np.array_equal(folded_values, expected_values)
+        assert folded_values == expected_values
         # Also verify the Merkle branches
-        for j, c in enumerate(np.copy(challenges)):
+        for j, c in enumerate(cp.copy(challenges)):
             assert verify_branch(
-                roots[i], c, tobytes(leaf_values[i][j]), branches[i][j]
+                roots[i], c, leaf_values[i][j].tobytes(), branches[i][j]
             )
         challenges >>= FOLDS_PER_ROUND
-    o = np.zeros_like(final_values)
+    o = zeros_like(final_values)
     N = final_values.shape[0]
-    o[rbo_index_to_original(N, arange(N))] = final_values
-    coeffs = fft(o, is_top_level=False) % M31
-    assert iszero(coeffs[N//2:])
+    o[rbo_index_to_original(N, cp.arange(N))] = final_values
+    coeffs = fft(o, is_top_level=False)
+    assert coeffs[N//2:] == 0
     return True

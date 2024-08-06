@@ -1,16 +1,14 @@
 from utils import (
-    reverse_bit_order, folded_reverse_bit_order, log2
+    reverse_bit_order, folded_reverse_bit_order, log2, cp
 )
 from zorch.m31 import (
-    zeros, array, arange, append, tobytes, add, sub, mul, cp as np,
-    mul_ext, modinv, modinv_ext, sum as m31_sum, M31
+    M31, ExtendedM31, Point, modulus, zeros_like, Z, G
 )
-from zorch.m31_circle import Point, ExtendedPoint, Z, G
 
 TOP_DOMAIN_SIZE = 2**24
 
 # Generator point
-for i in range(log2(TOP_DOMAIN_SIZE), log2(M31+1)-1):
+for i in range(log2(TOP_DOMAIN_SIZE), log2(modulus+1)-1):
     G = G.double()
 
 def get_subdomains():
@@ -19,11 +17,9 @@ def get_subdomains():
     top_domain[1] = G
     for i in range(1, log2(TOP_DOMAIN_SIZE * 2)):
         doubled = top_domain.double()
-        doubled_plus_one = doubled + G
-        new_domain = Point.zeros(2**(i+1))
-        new_domain[::2] = doubled
-        new_domain[1::2] = doubled_plus_one
-        top_domain = new_domain
+        top_domain = Point.zeros(2**(i+1))
+        top_domain[::2] = doubled
+        top_domain[1::2] = doubled + G
     top_domain = top_domain[1::2]
     
     # Compute an array that contains the top domain and all smaller-size domains
@@ -35,13 +31,13 @@ def get_subdomains():
 
 sub_domains = get_subdomains()
 
-invx = modinv(sub_domains.x)
-invy = modinv(sub_domains.y)
+invx = 1 / sub_domains.x
+invy = 1 / sub_domains.y
 
-rbos = zeros(TOP_DOMAIN_SIZE * 2)
+rbos = cp.zeros(TOP_DOMAIN_SIZE * 2, dtype=cp.uint32)
 for i in range(log2(TOP_DOMAIN_SIZE)):
-    rbos[2**i:2**(i+1)] = reverse_bit_order(arange(2**i))
+    rbos[2**i:2**(i+1)] = reverse_bit_order(cp.arange(2**i))
 
-folded_rbos = zeros(TOP_DOMAIN_SIZE * 2)
+folded_rbos = cp.zeros(TOP_DOMAIN_SIZE * 2, dtype=cp.uint32)
 for i in range(log2(TOP_DOMAIN_SIZE)):
-    folded_rbos[2**i:2**(i+1)] = folded_reverse_bit_order(arange(2**i))
+    folded_rbos[2**i:2**(i+1)] = folded_reverse_bit_order(cp.arange(2**i))

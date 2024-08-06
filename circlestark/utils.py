@@ -1,10 +1,8 @@
 from merkle import merkelize, hash, get_branch, verify_branch
 from zorch.m31 import (
-    zeros, array, arange, append, tobytes, add, sub, mul, cp as np,
-    mul_ext, modinv, modinv_ext, sum as m31_sum, M31, eq, iszero
+    M31, ExtendedM31, Point, modulus, zeros_like
 )
-from zorch.m31_circle import Point, ExtendedPoint
-M31SQ = M31 ** 2
+import cupy as cp
 HALF = 2**30
 
 def log2(x):
@@ -13,74 +11,45 @@ def log2(x):
 
 # Pads an array to a given length
 def pad_to(arr, new_len):
-    padding = zeros((new_len - arr.shape[0],) + arr.shape[1:])
-    return append(arr, padding)
+    padding = arr.__class__.zeros((new_len - arr.shape[0],) + arr.shape[1:])
+    return arr.__class__.append(arr, padding)
 
 # Confirms that the coefficients respect a given degree bound
 def confirm_max_degree(coeffs, bound):
-    return iszero(coeffs[bound:])
+    return coeffs[bound:] == 0
 
 # Merkelize a list of items
 def merkelize_top_dimension(x):
-    blob = tobytes(x % M31)
+    blob = x.tobytes()
     size = len(blob) // x.shape[0]
     return merkelize([blob[i:i+size] for i in range(0, len(blob), size)])
-
-# Checks if an object needs to be turned into extension-field
-# elements, and does so if necessary. object_dim should be the
-# dimension of `obj` in the case where it is _not_ extension-field
-# elements
-def to_ext_if_needed(obj, object_dim):
-    if obj.ndim == object_dim:
-        return to_extension_field(obj)
-    else:
-        return obj
-
-def to_extension_field(values):
-    o = zeros(values.shape + (4,))
-    v = values.reshape(values.shape+(1,))
-    o[...,:1] = v
-    return o
-
-one_ext = array([1,0,0,0])
 
 # Convert an extension field element to a point in the extension
 # field. Guarantees no properties about the point; the use case
 # is purely "pick a random point" for Fiat-Shamir-style protocols
 def projective_to_point(t):
-    t2 = mul_ext(t, t)
-    inv_1pt2 = modinv_ext(add(one_ext, t2))
-    return ExtendedPoint(
-        mul_ext(sub(one_ext, t2), inv_1pt2),
-        mul_ext(add(t, t), inv_1pt2)
+    t2 = t**2
+    inv_1pt2 = 1 / (t2 + 1)
+    return Point(
+        (1 - t2) * inv_1pt2,
+        t * 2 * inv_1pt2
     )
 
 # Takes as input a N*k array of values, and a vector k extension field
 # elements, and computes the size-N linear combination
 def fold(vector, fold_factors):
-    return m31_sum(
-        mul(vector.reshape(vector.shape+(1,)), fold_factors),
-        axis=-2
+    return ExtendedM31.sum(
+        vector * fold_factors,
+        axis=-1
     )
-
-# Same put takes as input a N*k array of extension field elements
-def fold_ext(vector, fold_factors):
-    return m31_sum(mul_ext(vector, fold_factors), axis=-2)
 
 # Evaluates the simplest polynomial that equals zero across
 # the domain of size `degree`, at the given coords. Supports
 # the base field or extension field
-def eval_zpoly_at(degree, coords, is_extended=False):
-    if is_extended:
-        Z = coords.x
-        one = array([1,0,0,0]).reshape((1,) * (Z.ndim - 1) + (4,))
-        _mul = mul_ext
-    else:
-        Z = coords.x
-        one = array([1]).reshape((1,) * Z.ndim)
-        _mul = mul
+def eval_zpoly_at(degree, coords):
+    Z = coords.x
     for i in range(1, log2(degree)):
-        Z = sub(2 * _mul(Z, Z) % M31, one)
+        Z = 2 * Z * Z - 1
     return Z
 
 # Converts a list into "reverse bit order", eg:
@@ -91,12 +60,12 @@ def reverse_bit_order(vals):
     size = vals.shape[0]
     shape_suffix = vals.shape[1:]
     for i in range(log2(size)):
-        vals = np.reshape(vals, (1 << i, size >> i) + shape_suffix)
+        vals = vals.reshape((1 << i, size >> i) + shape_suffix)
         full_len = vals.shape[1]
         half_len = full_len >> 1
         L = vals[:, ::2]
         R = vals[:, 1::2]
-        o = np.zeros_like(vals)
+        o = zeros_like(vals)
         o[:, :half_len] = L
         o[:, half_len:] = R
         vals = o
@@ -105,8 +74,9 @@ def reverse_bit_order(vals):
 # Returns the index of a given value in the list created by the
 # function above
 def rbo_index_to_original(length, index, first_round=True):
+    assert index.__class__ == cp.ndarray
     if length == 1:
-        return np.zeros_like(index)
+        return cp.zeros_like(index)
     sub = rbo_index_to_original(length >> 1, index >> 1, False)
     if first_round:
         return (1 - (index % 2)) * sub*2 + (index % 2) * (length - 1 - sub*2)
@@ -120,7 +90,7 @@ def rbo_index_to_original(length, index, first_round=True):
 # 0 1 2 3 4 5 6 7 -> 0 7 3 4 1 6 2 5
 # Useful for circle FFTs
 def folded_reverse_bit_order(vals):
-    o = np.zeros_like(vals)
+    o = zeros_like(vals)
     o[::2] = reverse_bit_order(vals[::2])
     o[1::2] = reverse_bit_order(vals[1::2][::-1])
     return o
@@ -131,12 +101,12 @@ def get_challenges(entropy, domain_size, num_challenges):
     challenge_data = b''.join(
         hash(entropy + bytes([i//256, i%256])) for i in range((num_challenges + 7) // 8)
     )
-    return array([
+    return cp.array([
         int.from_bytes(challenge_data[i:i+4], 'little') % domain_size
         for i in range(0, num_challenges * 4, 4)
-    ])
+    ], dtype=cp.uint32)
 
 # Generates some pseudorandom numbers mod 2**31
 def mk_junk_data(length):
-    a = arange(length, length*2)
-    return ((3**a) ^ (7**a)) % M31
+    a = cp.arange(length, length*2, dtype=cp.uint32)
+    return M31(((3**a) ^ (7**a)) % modulus)

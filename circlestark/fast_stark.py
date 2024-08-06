@@ -1,14 +1,12 @@
 from utils import (
-    log2, to_extension_field,
-    get_challenges, merkelize_top_dimension,
+    log2, get_challenges, merkelize_top_dimension,
     rbo_index_to_original, pad_to,
     eval_zpoly_at, projective_to_point,
-    fold, fold_ext, confirm_max_degree
+    fold, confirm_max_degree, cp
 )
 
 from zorch.m31 import (
-    zeros, array, arange, append, tobytes, add, sub, mul, cp as np,
-    mul_ext, modinv, modinv_ext, sum as m31_sum, eq, iszero, M31
+    M31, ExtendedM31, Point, modulus, zeros_like, Z, G
 )
 
 from precomputes import sub_domains
@@ -28,10 +26,11 @@ from merkle import merkelize, hash, get_branch, verify_branch
 
 # Tweaks the last row of a trace or constraint object to reduce its degree
 def tweak_last_row(obj):
-    obj = np.copy(obj)
+    obj = obj.copy()
     coeffs = fft(obj)
-    tweak_value = fft(append(zeros(obj.shape[0]-1), zeros(1) + 1))[-1]
-    obj[-1] = sub(obj[-1], mul(coeffs[-1], modinv(tweak_value)))
+    cls = obj.__class__
+    tweak_value = fft(cls.append(cls.zeros(obj.shape[0]-1), cls([1])))[-1]
+    obj[-1] -= coeffs[-1] / tweak_value
     return obj
 
 # Computes H(x) = C(T(x), T(next(x)), K(x)) / Z(x). This function gets
@@ -41,34 +40,20 @@ def compute_H(domain,
               T_offset,
               K,
               check_constraint,
-              trace_length,
-              is_extended,
-              domain_is_multi=False):
-    if is_extended:
-        _mul = mul_ext
-        _inv = modinv_ext
-    else:
-        _mul = mul
-        _inv = modinv
+              trace_length):
     F1, F2 = sub_domains[trace_length*2-2], sub_domains[trace_length*2-1]
-    Z = eval_zpoly_at(trace_length, domain, is_extended)
-    if domain_is_multi:
-        L = line_function(F1, F2, domain, is_extended)
-        C = _mul(
-            check_constraint(
-                T.swapaxes(0,1),
-                T_offset.swapaxes(0,1),
-                K.swapaxes(0,1),
-            is_extended).swapaxes(0,1),
-            L.reshape(L.shape + (1,))
-        )
+    Z = eval_zpoly_at(trace_length, domain)
+    if domain.ndim == 1:
+        L = line_function(F1, F2, domain)
+        C = check_constraint(
+            T.swapaxes(0,1),
+            T_offset.swapaxes(0,1),
+            K.swapaxes(0,1)
+        ).swapaxes(0,1) * L.reshape(L.shape + (1,))
         Z = Z.reshape(L.shape+(1,))
-    else:
-        L = line_function(F1, F2, domain.reshape((1,)+domain.shape), is_extended)
-        C = _mul(
-            check_constraint(T, T_offset, K, is_extended),
-            L
-        )
+    elif domain.ndim == 0:
+        L = line_function(F1, F2, domain.reshape((1,)+domain.shape))
+        C = check_constraint(T, T_offset, K) * L
 
     # Uncomment for debugging
     # print('T_at_w', T[:3])
@@ -78,7 +63,7 @@ def compute_H(domain,
     # print('C_at_w', C[:3])
     # print('Z_at_w', Z)
 
-    return _mul(C, _inv(Z))
+    return C / Z
 
 # Generate a STARK proof for a given claim
 #
@@ -137,18 +122,19 @@ def mk_stark(check_constraint,
     V, I = public_args_to_vanish_and_interp(
         trace_length,
         public_args,
-        trace[array(public_args)],
-        False
+        trace[cp.array(public_args)],
     )
     V_ext = inv_fft(pad_to(fft(V), trace_length*ext_degree))
     I_ext = inv_fft(pad_to(fft(I), trace_length*ext_degree))
     print('Generated V,I', time.time() - START)
-    trace_quotient_ext = mul(
-        sub(trace_ext, I_ext),
-        modinv(V_ext).reshape(V_ext.shape+(1,))
+    trace_quotient_ext = (
+        (trace_ext - I_ext) / V_ext.reshape(V_ext.shape+(1,))
     )
     constants_ext = inv_fft(pad_to(fft(constants), trace_length*ext_degree))
-    rolled_trace_ext = append(trace_ext[ext_degree:], trace_ext[:ext_degree])
+    rolled_trace_ext = M31.append(
+        trace_ext[ext_degree:],
+        trace_ext[:ext_degree]
+    )
     # Zero on the last two columns of the trace. We multiply this into C
     # to make it zero across the entire trace
 
@@ -165,8 +151,6 @@ def mk_stark(check_constraint,
             constants_ext,
             check_constraint,
             trace_length,
-            is_extended=False,
-            domain_is_multi=True
         )
 
     import concurrent.futures
@@ -184,7 +168,7 @@ def mk_stark(check_constraint,
     print('Generated tree and C_ext!', time.time() - START)
 
     #H_coeffs = fft(H_ext)
-    #print(np.where(H_coeffs[trace_length * (H_degree + 1)] % M31 != 0), H_ext.shape)
+    #print(cp.where(H_coeffs[trace_length * H_degree:].value % modulus != 0), H_ext.shape)
     #assert confirm_max_degree(H_coeffs, trace_length * H_degree)
 
     output_width = H_ext.shape[1]
@@ -195,27 +179,20 @@ def mk_stark(check_constraint,
 
     # Now, we generate a random point w, at which we evaluate our polynomials
     G = sub_domains[trace_length//2]
-    w = projective_to_point(get_challenges(TQ_tree[1], M31, 4))
-    w_plus_G = w + G.to_extended()
+    w = projective_to_point(
+        ExtendedM31(get_challenges(TQ_tree[1], modulus, 4))
+    )
+    w_plus_G = w + G
 
     # Trace quotient, at w and w+G
-    TQ_bary = mul_ext(
-        sub(
-            bary_eval(trace, w, True, True),
-            bary_eval(I, w, True, True)
-        ),
-        modinv_ext(bary_eval(V, w, True, True))
-    )
-    TQ_bary2 = mul_ext(
-        sub(
-            bary_eval(trace, w_plus_G, True, True),
-            bary_eval(I, w_plus_G, True, True)
-        ),
-        modinv_ext(bary_eval(V, w_plus_G, True, True))
+    TQ_bary = (bary_eval(trace, w) - bary_eval(I, w)) / bary_eval(V, w)
+    TQ_bary2 = (
+        (bary_eval(trace, w_plus_G) - bary_eval(I, w_plus_G))
+        / bary_eval(V, w_plus_G)
     )
     # Constants, at w and w+G
-    K_bary = bary_eval(constants, w, True, True)
-    K_bary2 = bary_eval(constants, w_plus_G, True, True)
+    K_bary = bary_eval(constants, w)
+    K_bary2 = bary_eval(constants, w_plus_G)
 
     # H, at w and w+G. We _could_ also compute it with compute_H, but
     # somehow a bary-evaluation is faster (!!) than calling the function
@@ -223,51 +200,49 @@ def mk_stark(check_constraint,
     w_bump = w + bump
     wpG_bump = w_plus_G + bump
     H_ef = H_ext[::2]
-    H_bary = bary_eval(H_ef, w_bump, True, True)
-    H_bary2 = bary_eval(H_ef, wpG_bump, True, True)
-    stack_ext = np.hstack((
+    H_bary = bary_eval(H_ef, w_bump)
+    H_bary2 = bary_eval(H_ef, wpG_bump)
+    stack_ext = M31.append(
         trace_quotient_ext,
         constants_ext,
-        H_ext
-    ))
+        H_ext,
+        axis=1
+    )
     stack_width = trace_width + constants_width + output_width
-    S_at_w = append(TQ_bary, K_bary, H_bary)
-    S_at_w_plus_G = append(TQ_bary2, K_bary2, H_bary2)
+    S_at_w = ExtendedM31.append(TQ_bary, K_bary, H_bary)
+    S_at_w_plus_G = ExtendedM31.append(TQ_bary2, K_bary2, H_bary2)
     # Compute a random linear combination of everything in stack_ext4, using
     # S_at_w and S_at_w_plus_G as entropy
     print("Computed evals at w and w+G", time.time() - START)
-    entropy = TQ_tree[1] + K_tree[1] + tobytes(S_at_w) + tobytes(S_at_w_plus_G)
-    fold_factors = (
-        get_challenges(entropy, M31, stack_width * 4)
+    entropy = TQ_tree[1] + K_tree[1] + S_at_w.tobytes() + S_at_w_plus_G.tobytes()
+    fold_factors = ExtendedM31(
+        get_challenges(entropy, modulus, stack_width * 4)
         .reshape((stack_width, 4))
     )
     #assert eq(
     #    bary_eval(stack_ext, w, True, True),
     #    S_at_w
     #)
-    merged_poly = (
-        fold(stack_ext, fold_factors)
-    ) % M31
+    merged_poly = fold(stack_ext, fold_factors)
     #merged_poly_coeffs = fft(merged_poly)
     #assert confirm_max_degree(merged_poly_coeffs, trace_length * H_degree)
     print('Generated merged poly!', time.time() - START)
     # Do the quotient trick, to prove that the evaluation we gave is
     # correct. Namely, prove: (random_linear_combination(S) - I) / L is a 
     # polynomial, where L is 0 at w w+G, and I is S_at_w and S_at_w_plus_G
-    L3 = line_function(w, w_plus_G, ext_domain, True)
+    L3 = line_function(w, w_plus_G, ext_domain)
     I3 = interpolant(
         w,
-        fold_ext(S_at_w, fold_factors),
+        fold(S_at_w, fold_factors),
         w_plus_G,
-        fold_ext(S_at_w_plus_G, fold_factors),
-        ext_domain,
-        True
+        fold(S_at_w_plus_G, fold_factors),
+        ext_domain
     )
     #assert eq(
     #    fold_ext(S_at_w, fold_factors),
     #    bary_eval(merged_poly, w, True)
     #)
-    master_quotient = mul_ext(sub(merged_poly, I3), modinv_ext(L3))
+    master_quotient = (merged_poly - I3) / L3
     print('Generated master_quotient!', time.time() - START)
     #master_quotient_coeffs = fft(master_quotient)
     #assert confirm_max_degree(master_quotient_coeffs, trace_length * H_degree)
@@ -277,7 +252,7 @@ def mk_stark(check_constraint,
     fri_entropy = (
         entropy +
         b''.join(fri_proof["roots"]) +
-        tobytes(fri_proof["final_values"])
+        fri_proof["final_values"].tobytes()
     )
     challenges_raw = get_challenges(
         fri_entropy, trace_length*ext_degree, NUM_CHALLENGES
@@ -346,7 +321,7 @@ def verify_stark(check_constraint, vk, public_rows, proof):
     K_leaves = proof["K_leaves"]
     ext_degree = vk["ext_degree"]
     # Generate the extra entropy that was used to generate the FRI proof
-    entropy = TQ_root + K_root + tobytes(S_at_w) + tobytes(S_at_w_plus_G)
+    entropy = TQ_root + K_root + S_at_w.tobytes() + S_at_w_plus_G.tobytes()
     # Verify that proof
     assert verify_low_degree(fri_proof, extra_entropy=entropy)
     constants_width = vk["constants_width"]
@@ -355,8 +330,8 @@ def verify_stark(check_constraint, vk, public_rows, proof):
     trace_length = vk["trace_length"]
     G = sub_domains[trace_length//2]
     # Pick the same two random points as the prover
-    w = projective_to_point(get_challenges(TQ_root, M31, 4))
-    w_plus_G = w + G.to_extended()
+    w = projective_to_point(ExtendedM31(get_challenges(TQ_root, modulus, 4)))
+    w_plus_G = w + G
     # We are going to compute H(w) = C(T(w), T(w+G), K(w), A(w)) / Z(w) and
     # check it (thereby checking "consistency" of S(w)), and then we also
     # do a similar check on the leaves
@@ -364,41 +339,30 @@ def verify_stark(check_constraint, vk, public_rows, proof):
         trace_length,
         public_row_positions,
         public_rows,
-        False
     )
-    T_at_w = add(
-        mul_ext(
-            S_at_w[:trace_width],
-            bary_eval(to_extension_field(V), w, True)
-        ),
-        bary_eval(to_extension_field(I), w, True)
+    T_at_w = (
+        (S_at_w[:trace_width] * bary_eval(V, w))
+        + bary_eval(I, w)
     )
-    T_at_w_plus_G = add(
-        mul_ext(
-            S_at_w_plus_G[:trace_width],
-            bary_eval(to_extension_field(V), w_plus_G, True)
-        ),
-        bary_eval(to_extension_field(I), w_plus_G, True)
+    T_at_w_plus_G = (
+        (S_at_w_plus_G[:trace_width] * bary_eval(V, w_plus_G))
+        + bary_eval(I, w_plus_G)
     )
     K_at_w = S_at_w[trace_width: -output_width]
     H_at_w = S_at_w[-output_width:]
 
-    assert eq(
-        H_at_w,
-        compute_H(
-            w,
-            T_at_w,
-            T_at_w_plus_G,
-            K_at_w,
-            check_constraint,
-            trace_length,
-            True
-        )
+    assert H_at_w == compute_H(
+        w,
+        T_at_w,
+        T_at_w_plus_G,
+        K_at_w,
+        check_constraint,
+        trace_length,
     )
     # Now, the same check as above on the leaves
     fri_entropy = entropy + b''.join(
         fri_proof["roots"] +
-        [tobytes(x) for x in fri_proof["final_values"]]
+        [x.tobytes() for x in fri_proof["final_values"]]
     )
     challenges_raw = get_challenges(
         fri_entropy, len_evaluations, NUM_CHALLENGES
@@ -417,25 +381,22 @@ def verify_stark(check_constraint, vk, public_rows, proof):
         trace_length,
         public_row_positions,
         public_rows,
-        False,
-        out_domain=sub_domains[append(
+        out_domain=sub_domains[cp.concatenate((
             trace_length * ext_degree + challenges,
             trace_length * ext_degree + challenges_next,
-        )]
+        ))]
     )
-    T_leaves = add(
-        mul(
-            TQ_leaves[:,:trace_width],
-            V_leaves[:NUM_CHALLENGES].reshape((NUM_CHALLENGES, 1))
-        ),
-        I_leaves[:NUM_CHALLENGES]
+    T_leaves = (
+        (
+            TQ_leaves[:,:trace_width]
+            * V_leaves[:NUM_CHALLENGES].reshape((NUM_CHALLENGES, 1))
+        ) + I_leaves[:NUM_CHALLENGES]
     )
-    T_next_leaves = add(
-        mul(
-            TQ_next_leaves[:,:trace_width],
-            V_leaves[NUM_CHALLENGES:].reshape((NUM_CHALLENGES, 1))
-        ),
-        I_leaves[NUM_CHALLENGES:]
+    T_next_leaves = (
+        (
+            TQ_next_leaves[:,:trace_width]
+            * V_leaves[NUM_CHALLENGES:].reshape((NUM_CHALLENGES, 1))
+        ) + I_leaves[NUM_CHALLENGES:]
     )
 
     H_leaves = compute_H(
@@ -445,8 +406,6 @@ def verify_stark(check_constraint, vk, public_rows, proof):
         K_leaves,
         check_constraint,
         trace_length,
-        False,
-        domain_is_multi=True
     )
 
     # Except here we don't have an H to check against, instead we
@@ -456,51 +415,42 @@ def verify_stark(check_constraint, vk, public_rows, proof):
     # necessary, we could just FRI over H directly, but it adds
     # security (see: the DEEP-FRI papers)
     stack_width = trace_width + constants_width + output_width
-    fold_factors = (
-        get_challenges(entropy, M31, stack_width * 4)
+    fold_factors = ExtendedM31(
+        get_challenges(entropy, modulus, stack_width * 4)
         .reshape((stack_width, 4))
     )
 
     merged_leaves = (
-        fold(np.hstack((TQ_leaves, K_leaves, H_leaves)), fold_factors)
+        fold(M31.append(TQ_leaves, K_leaves, H_leaves, axis=1), fold_factors)
     )
 
-    M_at_w = (
-        fold_ext(S_at_w, fold_factors)
-    ) % M31
-    M_at_w_plus_G = (
-        fold_ext(S_at_w_plus_G, fold_factors)
-    ) % M31
-    inv_L3_leaves = modinv_ext(line_function(
+    M_at_w = fold(S_at_w, fold_factors)
+    M_at_w_plus_G = fold(S_at_w_plus_G, fold_factors)
+    L3_leaves = line_function(
         w,
         w_plus_G,
         sub_domains[trace_length * ext_degree + challenges],
-        True
-    ))
+    )
     I3_leaves = interpolant(
         w,
         M_at_w,
         w_plus_G,
         M_at_w_plus_G,
         sub_domains[trace_length * ext_degree + challenges],
-        True
     )
-    computed_U_leaves = mul_ext(
-        (merged_leaves + M31 - I3_leaves) % M31,
-        inv_L3_leaves
-    )
+    computed_U_leaves = (merged_leaves - I3_leaves) / L3_leaves
     U_leaves = fri_proof["leaf_values"][0][
-        np.arange(NUM_CHALLENGES),
-        challenges_bottom[np.arange(NUM_CHALLENGES)]
+        cp.arange(NUM_CHALLENGES),
+        challenges_bottom[cp.arange(NUM_CHALLENGES)]
     ]
-    assert eq(U_leaves, computed_U_leaves)
+    assert U_leaves == computed_U_leaves
 
     for i in range(NUM_CHALLENGES):
         ci, nci = int(challenges[i]), int(challenges_next[i])
         assert verify_branch(
-            TQ_root, ci, tobytes(TQ_leaves[i]), TQ_branches[i])
+            TQ_root, ci, TQ_leaves[i].tobytes(), TQ_branches[i])
         assert verify_branch(
-            TQ_root, nci, tobytes(TQ_next_leaves[i]), TQ_next_branches[i])
+            TQ_root, nci, TQ_next_leaves[i].tobytes(), TQ_next_branches[i])
         assert verify_branch(
-            K_root, ci, tobytes(K_leaves[i]), K_branches[i])
+            K_root, ci, K_leaves[i].tobytes(), K_branches[i])
     return True

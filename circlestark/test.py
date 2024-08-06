@@ -3,11 +3,10 @@ from fields import S, M, B, ES, EM, EB
 from fft import fft, inv_fft, log2
 from fri import prove_low_degree, verify_low_degree
 from zorch.m31 import (
-    zeros, array, arange, append, tobytes, add, sub, mul, cp as np,
-    mul_ext, modinv_ext, sum as m31_sum, eq, iszero, M31
+    M31, ExtendedM31, Point, modulus, zeros_like
 )
 from utils import (
-    pad_to, mk_junk_data, to_extension_field
+    pad_to, mk_junk_data
 )
 
 from precomputes import sub_domains
@@ -78,7 +77,7 @@ def test_fast_fft():
     print("Testing fast FFT")
     INPUT_SIZE = 2**13
     data = [pow(3, i, 2**31-1) for i in range(INPUT_SIZE)]
-    npdata = array(data)
+    npdata = M31(data)
     t0 = time.time()
     coeffs1 = fft([B(x) for x in data])
     t1 = time.time()
@@ -89,17 +88,18 @@ def test_fast_fft():
     t2 = time.time()
     print("Computed size-{} fast fft in {} sec".format(INPUT_SIZE, t2 - t1))
     assert [int(x) for x in coeffs2] == coeffs1
-    assert eq(f_inv_fft(coeffs2), npdata)
+    assert f_inv_fft(coeffs2) == npdata
     print("Fast FFT checks passed")
 
 def test_fast_fri():
     print("Testing FRI")
     INPUT_SIZE = 4096
-    coeffs = array(
-        [pow(3, i, M31) for i in range(INPUT_SIZE)] + [0] * INPUT_SIZE,
+    coeffs = M31(
+        [pow(3, i, modulus) for i in range(INPUT_SIZE)] + [0] * INPUT_SIZE,
     )
     evaluations = f_inv_fft(coeffs)
-    proof = f_prove_low_degree(to_extension_field(evaluations))
+    print('ev', evaluations, evaluations.__class__)
+    proof = f_prove_low_degree(evaluations.to_extended())
     assert f_verify_low_degree(proof)
     global fri_proof
     if fri_proof is None:
@@ -109,23 +109,23 @@ def test_fast_fri():
     for leaf_set1, leaf_set2 in zip(fri_proof["leaf_values"], proof["leaf_values"]):
         for leaf1, leaf2 in zip(leaf_set1, leaf_set2):
             for v1, v2 in zip(leaf1, leaf2):
-                assert [x.value for x in v1.value] == [int(x) for x in v2]
+                assert [x.value for x in v1.value] == [int(x) for x in v2.value]
     for v1, v2 in zip(fri_proof["final_values"], proof["final_values"]):
-        assert [x.value for x in v1.value] == [int(x) for x in v2]
+        assert [x.value for x in v1.value] == [int(x) for x in v2.value]
     print("Proofs equivalent!")
 
 def test_mega_fri():
     print("Testing FRI")
     INPUT_SIZE = 2**22
-    coeffs = append(
+    coeffs = M31.append(
         mk_junk_data(INPUT_SIZE),
-        zeros(INPUT_SIZE)
+        M31.zeros(INPUT_SIZE)
     )
     t1 = time.time()
     evaluations = f_inv_fft(coeffs)
     print("Low-degree extended coeffs in time {}".format(time.time() - t1))
     t2 = time.time()
-    proof = f_prove_low_degree(to_extension_field(evaluations))
+    proof = f_prove_low_degree(evaluations.to_extended())
     print("Generated proof in time {}".format(time.time() - t2))
 
 def test_lines_and_interpolants():
@@ -149,14 +149,14 @@ def test_lines_and_interpolants():
             p1 = p1.to_extended()
             p2 = p2.to_extended()
             p3 = p3.to_extended()
-        v1, v2 = array(v1), array(v2)
-        L = line_function(p1, p2, sub_domains[8:16], is_extended)
-        assert iszero(bary_eval(L, p1, is_extended))
-        assert iszero(bary_eval(L, p2, is_extended))
-        assert not iszero(bary_eval(L, p3, is_extended))
-        I = interpolant(p1, v1, p2, v2, sub_domains[8:16], is_extended)
-        assert eq(bary_eval(I, p1, is_extended), v1)
-        assert eq(bary_eval(I, p2, is_extended), v2)
+        v1, v2 = M31(v1), M31(v2)
+        L = line_function(p1, p2, sub_domains[8:16])
+        assert bary_eval(L, p1) == 0
+        assert bary_eval(L, p2) == 0
+        assert bary_eval(L, p3) != 0
+        I = interpolant(p1, v1, p2, v2, sub_domains[8:16])
+        assert bary_eval(I, p1) == v1
+        assert bary_eval(I, p2) == v2
 
     print("Basic line and interpolant checks passed")
 
@@ -164,48 +164,41 @@ def test_lines_and_interpolants():
         pos1, v1, pos2, v2, is_extended = coords[i]
         pos3, v3, pos4, v4, _ = coords[i+1]
         print(pos1, pos2, pos3, pos4, v1, v2, v3, v4)
+        cls = ExtendedM31 if is_extended else M31
         V, I = public_args_to_vanish_and_interp(
             32,
             (pos1, pos2, pos3, pos4),
-            array([v1, v2, v3, v4]),
-            is_extended
+            cls([v1, v2, v3, v4])
         )
         for pos, v in zip((pos1, pos2, pos3, pos4), (v1, v2, v3, v4)):
-            assert iszero(bary_eval(V, sub_domains[32+pos], is_extended))
-            assert eq(
-                bary_eval(I, sub_domains[32+pos], is_extended),
-                array(v)
-            )
+            assert bary_eval(V, sub_domains[32+pos]) == 0
+            assert bary_eval(I, sub_domains[32+pos]) == cls(v)
 
     print("Vanish-and-interp test passed")
 
 def test_mk_stark():
-    def get_next_state(state, constants, is_extended): 
-        if is_extended:
-            _mul = mul_ext
-        else:
-            _mul = mul
-        o = cp.copy(state)
-        o[0] = add(_mul(state[1], state[2]), constants[0])
-        o[1] = add(_mul(state[2], state[0]), constants[1])
-        o[2] = add(_mul(state[0], state[1]), constants[2])
+    def get_next_state(state, constants): 
+        o = zeros_like(state)
+        o[0] = (state[1] * state[2]) + constants[0]
+        o[1] = (state[2] * state[0]) + constants[1]
+        o[2] = (state[0] * state[1]) + constants[2]
         return o
 
-    def check_constraint(state, next_state, constants, is_extended):
-        computed_next = get_next_state(state, constants, is_extended)
-        return sub(computed_next, next_state)
+    def check_constraint(state, next_state, constants):
+        computed_next = get_next_state(state, constants)
+        return computed_next - next_state
 
-    trace = zeros((128, 3))
-    constants = arange(384).reshape((128,3))
+    trace = M31.zeros((128, 3))
+    constants = M31(cp.arange(384, dtype=cp.uint32).reshape((128,3)))
 
-    trace[0] = array([3, 0, 0])
+    trace[0] = M31([3, 0, 0])
     for i in range(127):
-        trace[i+1] = get_next_state(trace[i], constants[i], False)
+        trace[i+1] = get_next_state(trace[i], constants[i])
     print("Generating STARK")
     stark = mk_stark(check_constraint, trace, constants, public_args=(0,99), H_degree=4)
     vk = get_vk(trace.shape, constants, 3, (0,99), H_degree=4)
     print("Verifying STARK")
-    assert verify_stark(check_constraint, vk, trace[array((0,99))], stark)
+    assert verify_stark(check_constraint, vk, trace[cp.array((0,99))], stark)
     print("Verified!")
 
 def start_profile():
@@ -225,14 +218,10 @@ def end_profile():
 def test_poseidon_stark():
     NUM_HASHES = 16384
     ins = mk_junk_data(NUM_HASHES*8).reshape((NUM_HASHES,8))
-    positions = arange(NUM_HASHES) % 2
-    constants = zeros((NUM_HASHES,1))
+    positions = cp.arange(NUM_HASHES, dtype=cp.uint32) % 2
+    constants = M31.zeros((NUM_HASHES,1))
     constants[::32,:] = 1
     k_tree = build_constants_tree(constants, H_degree=4)
-    try:
-        poseidon_constraint_check(cp.arange(192), cp.arange(192,384), cp.arange(1), m31_arith)
-    except:
-        pass
     print("Generating Poseidon STARK")
     start_profile()
     trace = fill_poseidon_trace(
@@ -252,7 +241,12 @@ def test_poseidon_stark():
     vk = get_vk(trace.shape, constants, 184, (0,NUM_HASHES-2), H_degree=4)
 
     print("Verifying Poseidon STARK")
-    assert verify_stark(poseidon_constraint_check, vk, trace[array((0,NUM_HASHES-2))], stark)
+    assert verify_stark(
+        poseidon_constraint_check,
+        vk,
+        trace[cp.array((0,NUM_HASHES-2))],
+        stark
+    )
     print("Verified!")
     fri_proof = stark["fri"]
     L1 = sum(32 * len(branch) for branch in sum(fri_proof["branches"], []))
