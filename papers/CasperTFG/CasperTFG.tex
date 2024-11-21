@@ -164,19 +164,19 @@ $$
 
 Similarly, we define $V$ as a function that picks out the ``sender'', and $J$ as a function that picks out the ``justification''.
 
-We say that message $m_1$ is ``a dependency'' of message $m_2$ and we write $m_1 \prec m_2$ if $m_1$ is in the justification of $m_2$, or if $m_1$ is in the justification of one of the messages in $m_2$'s justification, or if it is in the justification of a message in the justification of a message in the justification of $m_2$...
+We say that message $m_1$ is ``a dependency'' of message $m_2$ and we write $m_1 \preceq m_2$ if $m_1$ is in the justification of $m_2$, or if $m_1$ is in the justification of one of the messages in $m_2$'s justification, or if it is in the justification of a message in the justification of a message in the justification of $m_2$...
 
 We also call $m_1$ a dependency of $m_2$ if $m_1 = m_2$:
 
-\begin{defn}[dependency, $\prec$]
+\begin{defn}[dependency, $\preceq$]
 \begin{equation*}
 \begin{split}
-m_1 \prec m_2 \iff & m_1 = m_2 \text{ or } \exists m' \in J(m_2) \hspace{1mm} . \hspace{1mm} m_1 \prec m'
+m_1 \preceq m_2 \iff & m_1 = m_2 \text{ or } \exists m' \in J(m_2) \hspace{1mm} . \hspace{1mm} m_1 \preceq m'
 \end{split}
 \end{equation*}
 \end{defn}
 
-We define ``the dependencies'' of a message $m$ as all of the messages $m'$ such that $m' \prec m$. These are all the messages that can be accessed in the justifications, or in the justification of messages in justifications... etc.
+We define ``the dependencies'' of a message $m$ as all of the messages $m'$ such that $m' \preceq m$. These are all the messages that can be accessed in the justifications, or in the justification of messages in justifications... etc.
 
 \begin{equation*}
 \begin{split}
@@ -186,7 +186,7 @@ D(m) = &\{m\}\cup \bigcup_{m' \in J(m)} D(m')
 
 This definition can be extended in a natural way to define the dependencies of a set of messages (by taking the union of the dependencies of the individual messages).
 
-If $m_1 \prec m_2$ and $m_1 \neq m_2$, then we also say that $m_2$ is ``later'' than $m_1$ and write $m_2 \succ m_1$.
+If $m_1 \preceq m_2$ and $m_1 \neq m_2$, then we also say that $m_2$ is ``later'' than $m_1$ and write $m_2 \succ m_1$. The relations $\prec$ and $\succeq$ are defined similarly.
 
 We now have the language to talk about the latest message from a sender $v$ out of a set of messages $M$, which we denote as $L(v, M)$:
 
@@ -225,12 +225,12 @@ Finally, we define the estimator for the Binary consensus: it returns the estima
 
 At this stage we have protocol messages and an estimator. If we can define a method for counting Byzantine faults from a set of protocol messages, then we can give the set of protocol states with their state transitions for a binary consensus protocol that tolerates $t$ Byzantine faults.
 
-Each protocol message $m$ is supposed to represent a record of messages that were seen by validator $V(m)$. Any ``correct'' node has a growing record of messages that they have received and sent. Specifically, a correct node is never the sender of a pair of messages $m_1$ and $m_2$ such that neither $m_1 \prec m_2$ nor $m_1 \succ m_2$. We call such a pair of messages ``an equivocation''.
+Each protocol message $m$ is supposed to represent a record of messages that were seen by validator $V(m)$. Any ``correct'' node has a growing record of messages that they have received and sent. Specifically, a correct node is never the sender of a pair of different messages $m_1$ and $m_2$ such that neither $m_1 \prec m_2$ nor $m_1 \succ m_2$. We call such a pair of messages ``an equivocation''.
 
 
 \begin{defn}[Equivocation]
 \begin{align}
-Eq(m_1, m_2) \iff V(m_1) = V(m_2) \text{ and } m_1 \nsucc m_2 \text{ and } m_1 \nprec m_2
+Eq(m_1, m_2) \iff V(m_1) = V(m_2) \text{ and } m_1 \nsucc m_2 \text{ and } m_1 \npreceq m_2
 \end{align}
 \end{defn}
 
