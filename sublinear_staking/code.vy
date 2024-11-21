@@ -42,6 +42,8 @@ def isEligible(user: address) -> bool:
 def __init__(stakedTokenAddress: address,
              uniqueidTokenAddress: address,
              uniqueidTokenCollection: uint256):
+    assert stakedTokenAddress.is_contract
+    assert uniqueidTokenAddress.is_contract
     STAKED_TOKEN_ADDRESS = ERC20(stakedTokenAddress)
     UNIQUEID_TOKEN_ADDRESS = ERC1155(uniqueidTokenAddress)
     UNIQUEID_TOKEN_COLLECTION = uniqueidTokenCollection
