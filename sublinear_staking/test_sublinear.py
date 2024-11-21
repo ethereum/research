@@ -9,7 +9,7 @@ w3 = Web3(EthereumTesterProvider(eth_tester))
 
 # Accounts
 accounts = w3.eth.accounts
-a1, a2, a3, a4 = accounts[0], accounts[1], accounts[2], accounts[3]
+a1, a2, a3, a4, a5 = accounts[0], accounts[1], accounts[2], accounts[3], accounts[4]
 
 # Vyper code for the main staking contract
 with open('code.vy') as f:
@@ -52,8 +52,8 @@ erc1155_contract = deploy_contract(w3, erc1155_interface['abi'], erc1155_interfa
 A = erc1155_contract.address
 cID = 1  # Collection ID
 
-# Mint 1 unit of token ID cID to a1, a2, a3
-for account in [a1, a2, a3]:
+# Mint 1 unit of token ID cID to a1, a2, a3, a4
+for account in [a1, a2, a3, a4]:
     tx_hash = erc1155_contract.functions.mint(account, cID, 1).transact({'from': a1})
     w3.eth.wait_for_transaction_receipt(tx_hash)
 
@@ -61,9 +61,9 @@ for account in [a1, a2, a3]:
 erc20_contract = deploy_contract(w3, erc20_interface['abi'], erc20_interface['bytecode'])
 T = erc20_contract.address
 
-# Mint 10**18 units to a1, a2, a3, a4
+# Mint 10**18 units to a1, a2, a3, a4, a5
 initial_balance = 10**18
-for account in [a1, a2, a3, a4]:
+for account in [a1, a2, a3, a4, a5]:
     tx_hash = erc20_contract.functions.mint(account, initial_balance).transact({'from': a1})
     w3.eth.wait_for_transaction_receipt(tx_hash)
 
@@ -77,11 +77,11 @@ staking_contract = deploy_contract(
 C = staking_contract.address
 
 # Mint 10**18 units to the staking contract C
-tx_hash = erc20_contract.functions.mint(C, 3 * 10**16).transact({'from': a1})
+tx_hash = erc20_contract.functions.mint(C, 10**17).transact({'from': a1})
 w3.eth.wait_for_transaction_receipt(tx_hash)
 
 # Step 6: Approve the staking contract to spend tokens for each account
-for account in [a1, a2, a3, a4]:
+for account in [a1, a2, a3, a4, a5]:
     tx_hash = erc20_contract.functions.approve(C, initial_balance).transact({'from': account})
     w3.eth.wait_for_transaction_receipt(tx_hash)
 
@@ -91,34 +91,60 @@ stake_amounts = {
     a2: 10**9,
     a3: 10**18,
     a4: 10**18,
+    a5: 10**18,
 }
 
 print("\nStaking attempts:")
-for account in [a1, a2, a3, a4]:
+for account in [a1, a2, a3, a4, a5]:
     amount = stake_amounts[account]
     try:
         tx_hash = staking_contract.functions.stake(amount).transact({'from': account})
         w3.eth.wait_for_transaction_receipt(tx_hash)
         print(f"Stake successful for account {account} with amount {amount}")
+        success = True
     except Exception as e:
         print(f"Stake failed for account {account} with amount {amount}: {e}")
+        success = False
+    assert success == (account != a5)
 
 # Step 8: Fast forward 1000 blocks
 eth_tester = w3.provider.ethereum_tester
 now = w3.eth.get_block('latest')['timestamp']
+deadline = staking_contract.functions.deadline().call()
+assert 1000 < deadline - now < 2000
 print(f"Before fast forward: {now}")
 eth_tester.mine_blocks(1000)
-now = w3.eth.get_block('latest')['timestamp']
-print(f"After fast forward: {now}")
-deadline = staking_contract.functions.deadline().call()
-print(f"Deadline: {deadline}")
-# Step 9: Each account unstakes their tokens and prints the amounts
-print("\nUnstaking attempts:")
+print(f"Deadline minus now: {deadline - now}")
+now2 = w3.eth.get_block('latest')['timestamp']
+print(f"After fast forward: {now2}")
+
+# Step 9: Each account except a4 unstakes their tokens and prints the amounts
+print("\nUnstaking attempts (first round, deadline not hit):")
 for account in [a1, a2, a3]:
     tx_hash = staking_contract.functions.unstake().transact({'from': account})
     w3.eth.wait_for_transaction_receipt(tx_hash)
     # Get the new balance
     balance = erc20_contract.functions.balanceOf(account).call()
+    expected_return = int(stake_amounts[account] ** 0.75) * (now2 - now)
+    actual_return = balance - 10**18
+    assert 0.99 < actual_return / expected_return < 1.01
+    print(f"Account {account} unstaked {amount}, new balance is {balance}")
+
+# Step 10: fast forward more, and then a4 unstakes. But the contract
+# runs out of money, so a4 does not get paid for the full 2000 blocks
+deadline = staking_contract.functions.deadline().call()
+print(f"Deadline minus now: {deadline - now2}")
+assert deadline - now2 < 2000
+eth_tester.mine_blocks(2000)
+print("\nUnstaking attempts (second round, deadline hit):")
+for account in [a4]:
+    tx_hash = staking_contract.functions.unstake().transact({'from': account})
+    w3.eth.wait_for_transaction_receipt(tx_hash)
+    # Get the new balance
+    balance = erc20_contract.functions.balanceOf(account).call()
+    expected_return = int(stake_amounts[account] ** 0.75) * (deadline - now)
+    actual_return = balance - 10**18
+    assert 0.99 < actual_return / expected_return < 1.01
     print(f"Account {account} unstaked {amount}, new balance is {balance}")
 contract_balance = erc20_contract.functions.balanceOf(staking_contract.address).call()
 print(f"Remaining balance: {contract_balance}")

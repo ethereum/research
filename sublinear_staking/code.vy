@@ -14,6 +14,7 @@ liabilitiesLastUpdated: uint256
 
 from ethereum.ercs import IERC20 as ERC20
 
+# If you stake x coins, this is the return you get per slot
 @view
 def getReturnPerSlot(x: uint256) -> uint256:
     sqrtX: uint256 = isqrt(x)
@@ -25,12 +26,9 @@ interface ERC1155:
     
 @view
 def isEligible(user: address) -> bool:
-# Create an instance of the ERC-1155 contract
     c: ERC1155 = ERC1155(self.uniqueidTokenAddress)
-    
     # Get the balance of the user for the specified token ID
     balance: uint256 = staticcall c.balanceOf(user, self.uniqueidTokenCollection)
-    
     # Return True if balance is greater than zero, else False
     return balance > 0
 
@@ -42,16 +40,18 @@ def __init__(stakedTokenAddress: address,
     self.stakedTokenAddress = stakedTokenAddress
     self.uniqueidTokenAddress = uniqueidTokenAddress
     self.uniqueidTokenCollection = uniqueidTokenCollection
-    
+
+# Stake the specified number of tokens
 @external
 def stake(amount: uint256):
     assert self.isEligible(msg.sender)
+    assert self.stakedAmount[msg.sender] == 0
     token: ERC20 = ERC20(self.stakedTokenAddress)
-    if self.stakedAmount[msg.sender] > 0:
-        self._unstake()
     returnPerSlot: uint256 = self.getReturnPerSlot(amount)
     self.stakedAmount[msg.sender] = amount
     self.stakeLastUpdated[msg.sender] = block.timestamp
+    # The contract tracks liabilities and totalPayoutPerSlot, so that it knows
+    # how long it can keep paying rewards
     self.liabilities += (
         (block.timestamp - self.liabilitiesLastUpdated)
         * self.totalPayoutPerSlot
@@ -66,8 +66,9 @@ def stake(amount: uint256):
         default_return_value=True
     )
     assert success
-    
-def _unstake():
+
+# Remove your stake, plus any returns
+def _unstake() -> uint256:
     token: ERC20 = ERC20(self.stakedTokenAddress)
     returnPerSlot: uint256 = self.getReturnPerSlot(self.stakedAmount[msg.sender])
     correctedNow: uint256 = min(block.timestamp, self._deadline())
@@ -81,12 +82,15 @@ def _unstake():
     self.liabilitiesLastUpdated = correctedNow
     self.totalPayoutPerSlot -= returnPerSlot
     self.liabilities -= totalOut
-    extcall token.transfer(msg.sender, totalOut)
+    success: bool = extcall token.transfer(msg.sender, totalOut)
+    assert success
+    return totalOut
     
 @external
-def unstake():
-    self._unstake()
+def unstake() -> uint256:
+    return self._unstake()
 
+# How long the contract can keep paying returns
 @view
 def _deadline() -> uint256:
     token: ERC20 = ERC20(self.stakedTokenAddress)
