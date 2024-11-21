@@ -66,16 +66,16 @@ def poseidon_hash(in1, in2):
     state[...,8:16] = in2
     for i in range(64):
         if i >= 4 and i < 60:
-            state[...,0] = pow5(add(state[...,0], round_constants[i, 0]))
-            state = add(
-                mul(state, innerdiag),
-                m31_sum(state, axis=-1).reshape(state.shape[:-1]+(1,))
+            state[...,0] = (state[...,0] + round_constants[i, 0]) ** 5
+            state = (
+                (state * innerdiag)
+                + M31.sum(state, axis=-1).reshape(state.shape[:-1]+(1,))
             )
         else:
-            mul_input = pow5(add(state, round_constants[i]))
+            mul_input = (state + round_constants[i]) ** 5
             state = mul_by_mds(mul_input)
 
-    return add(state[...,8:16], in2)
+    return state[...,8:16] + in2
 
 # We're proving a STARK of a series of Merkle branches, each 32 long
 def fill_poseidon_trace(hash_inputs, positions):
