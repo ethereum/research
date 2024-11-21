@@ -12,9 +12,12 @@ accounts = w3.eth.accounts
 a1, a2, a3, a4 = accounts[0], accounts[1], accounts[2], accounts[3]
 
 # Vyper code for the main staking contract
-staking_source_code = open('code.vy').read()
-erc20_vyper_code = open('erc20.vy').read()
-erc1155_vyper_code = open('erc1155.vy').read()
+with open('code.vy') as f:
+    staking_source_code = f.read()
+with open('erc20.vy') as f:
+    erc20_vyper_code = f.read()
+with open('erc1155.vy') as f:
+    erc1155_vyper_code = f.read()
 
 # Compile the staking contract
 compiled_staking_contract = compile_code(staking_source_code, output_formats=['abi', 'bytecode'])
