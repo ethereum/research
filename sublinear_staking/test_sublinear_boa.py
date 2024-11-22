@@ -115,9 +115,9 @@ def test_staking_fail(accounts, stake_amounts, test_staking_success):
 def fast_forward_1000_blocks(test_staking_success):    
     staking_contract = test_staking_success
     
-    deadline = staking_contract.deadline()
+    fundedUntil = staking_contract.fundedUntil()
     current_timestamp = boa.env.evm.patch.timestamp
-    assert 1000 < deadline - current_timestamp < 2000
+    assert 1000 < fundedUntil - current_timestamp < 2000
     
     # travel fowards:
     boa.env.time_travel(blocks=1000, block_delta=1)
@@ -149,8 +149,8 @@ def test_unstaking_post_travel_not_full_payment(test_unstaking_success_sans_a4, 
     
     staking_contract, current_time, previous_time = test_unstaking_success_sans_a4
     
-    deadline = staking_contract.deadline()
-    assert deadline - current_time < 2000
+    fundedUntil = staking_contract.fundedUntil()
+    assert fundedUntil - current_time < 2000
     
     # travel:
     boa.env.time_travel(blocks=2000, block_delta=1)
@@ -161,7 +161,7 @@ def test_unstaking_post_travel_not_full_payment(test_unstaking_success_sans_a4, 
     staking_contract.unstake(sender=account)
 
     erc20_balance = erc20_contract.balanceOf(account)
-    expected_return = int(stake_amounts[account] ** 0.75) * (deadline - previous_time)
+    expected_return = int(stake_amounts[account] ** 0.75) * (fundedUntil - previous_time)
     actual_return = erc20_balance - 10**18
     assert 0.99 < actual_return / expected_return < 1.01
     

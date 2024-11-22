@@ -76,7 +76,7 @@ def stake(amount: uint256):
 # Remove your stake, plus any returns
 def _unstake() -> uint256:
     returnPerSlot: uint256 = self.getReturnPerSlot(self.stakedAmount[msg.sender])
-    correctedNow: uint256 = min(block.timestamp, self._deadline())
+    correctedNow: uint256 = min(block.timestamp, self._fundedUntil())
     timeElapsed: uint256 = correctedNow - self.stakeLastUpdated[msg.sender]
     totalOut: uint256 = self.stakedAmount[msg.sender] + timeElapsed * returnPerSlot
     self.stakedAmount[msg.sender] = 0
@@ -101,7 +101,7 @@ def unstake() -> uint256:
 
 # How long the contract can keep paying returns
 @view
-def _deadline() -> uint256:
+def _fundedUntil() -> uint256:
     return (
         self.liabilitiesLastUpdated
         + (staticcall STAKED_TOKEN_ADDRESS.balanceOf(self) - self.liabilities)
@@ -110,5 +110,5 @@ def _deadline() -> uint256:
 
 @external
 @view
-def deadline() -> uint256:
-    return self._deadline()
+def fundedUntil() -> uint256:
+    return self._fundedUntil()

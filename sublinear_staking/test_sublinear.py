@@ -110,16 +110,16 @@ for account in [a1, a2, a3, a4, a5]:
 # Step 8: Fast forward 1000 blocks
 eth_tester = w3.provider.ethereum_tester
 now = w3.eth.get_block('latest')['timestamp']
-deadline = staking_contract.functions.deadline().call()
-assert 1000 < deadline - now < 2000
+fundedUntil = staking_contract.functions.fundedUntil().call()
+assert 1000 < fundedUntil - now < 2000
 print(f"Before fast forward: {now}")
 eth_tester.mine_blocks(1000)
-print(f"Deadline minus now: {deadline - now}")
+print(f"FundedUntil minus now: {fundedUntil - now}")
 now2 = w3.eth.get_block('latest')['timestamp']
 print(f"After fast forward: {now2}")
 
 # Step 9: Each account except a4 unstakes their tokens and prints the amounts
-print("\nUnstaking attempts (first round, deadline not hit):")
+print("\nUnstaking attempts (first round, fundedUntil not hit):")
 for account in [a1, a2, a3]:
     tx_hash = staking_contract.functions.unstake().transact({'from': account})
     w3.eth.wait_for_transaction_receipt(tx_hash)
@@ -132,17 +132,17 @@ for account in [a1, a2, a3]:
 
 # Step 10: fast forward more, and then a4 unstakes. But the contract
 # runs out of money, so a4 does not get paid for the full 2000 blocks
-deadline = staking_contract.functions.deadline().call()
-print(f"Deadline minus now: {deadline - now2}")
-assert deadline - now2 < 2000
+fundedUntil = staking_contract.functions.fundedUntil().call()
+print(f"FundedUntil minus now: {fundedUntil - now2}")
+assert fundedUntil - now2 < 2000
 eth_tester.mine_blocks(2000)
-print("\nUnstaking attempts (second round, deadline hit):")
+print("\nUnstaking attempts (second round, fundedUntil hit):")
 for account in [a4]:
     tx_hash = staking_contract.functions.unstake().transact({'from': account})
     w3.eth.wait_for_transaction_receipt(tx_hash)
     # Get the new balance
     balance = erc20_contract.functions.balanceOf(account).call()
-    expected_return = int(stake_amounts[account] ** 0.75) * (deadline - now)
+    expected_return = int(stake_amounts[account] ** 0.75) * (fundedUntil - now)
     actual_return = balance - 10**18
     assert 0.99 < actual_return / expected_return < 1.01
     print(f"Account {account} unstaked {amount}, new balance is {balance}")
