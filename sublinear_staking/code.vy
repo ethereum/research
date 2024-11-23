@@ -15,6 +15,7 @@ stakeLastUpdated: public(HashMap[address, uint256])
 STAKED_TOKEN_ADDRESS: immutable(ERC20)
 UNIQUEID_TOKEN_ADDRESS: immutable(ERC1155)
 UNIQUEID_TOKEN_COLLECTION: immutable(uint256)
+REWARD_DENOMINATOR: immutable(uint256)
 
 totalPayoutPerSlot: uint256
 liabilities: uint256
@@ -23,9 +24,7 @@ liabilitiesLastUpdated: uint256
 # If you stake x coins, this is the return you get per slot
 @view
 def getReturnPerSlot(x: uint256) -> uint256:
-    sqrtX: uint256 = isqrt(x)
-    return sqrtX * isqrt(sqrtX)
-    
+    return isqrt(x * isqrt(x)) // REWARD_DENOMINATOR
     
 @view
 def isEligible(user: address) -> bool:
@@ -41,29 +40,33 @@ def isEligible(user: address) -> bool:
 @deploy
 def __init__(stakedTokenAddress: address,
              uniqueidTokenAddress: address,
-             uniqueidTokenCollection: uint256):
+             uniqueidTokenCollection: uint256,
+             rewardDenominator: uint256):
     assert stakedTokenAddress.is_contract
     assert uniqueidTokenAddress.is_contract
     STAKED_TOKEN_ADDRESS = ERC20(stakedTokenAddress)
     UNIQUEID_TOKEN_ADDRESS = ERC1155(uniqueidTokenAddress)
     UNIQUEID_TOKEN_COLLECTION = uniqueidTokenCollection
+    REWARD_DENOMINATOR = rewardDenominator
 
 # Stake the specified number of tokens
 @external
 def stake(amount: uint256):
     assert self.isEligible(msg.sender)
     assert self.stakedAmount[msg.sender] == 0
+    assert amount > 0
     returnPerSlot: uint256 = self.getReturnPerSlot(amount)
+    correctedNow: uint256 = min(block.timestamp, self._fundedUntil())
     self.stakedAmount[msg.sender] = amount
-    self.stakeLastUpdated[msg.sender] = block.timestamp
+    self.stakeLastUpdated[msg.sender] = correctedNow
     # The contract tracks liabilities and totalPayoutPerSlot, so that it knows
     # how long it can keep paying rewards
     self.liabilities += (
-        (block.timestamp - self.liabilitiesLastUpdated)
+        (correctedNow - self.liabilitiesLastUpdated)
         * self.totalPayoutPerSlot
     )
     self.liabilities += amount
-    self.liabilitiesLastUpdated = block.timestamp
+    self.liabilitiesLastUpdated = correctedNow
     self.totalPayoutPerSlot += returnPerSlot
     success: bool = extcall STAKED_TOKEN_ADDRESS.transferFrom(
         msg.sender,

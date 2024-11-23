@@ -62,6 +62,7 @@ def staking_contract(accounts, erc20_contract, fund_accounts_erc1155, cID, deplo
             erc20_contract.address, 
             fund_accounts_erc1155.address,
             cID,    
+            1,
         )
         
     # handle approvals

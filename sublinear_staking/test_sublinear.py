@@ -72,7 +72,7 @@ staking_contract = deploy_contract(
     w3,
     staking_contract_interface['abi'],
     staking_contract_interface['bytecode'],
-    constructor_args=(T, A, cID)
+    constructor_args=(T, A, cID, 1)
 )
 C = staking_contract.address
 
