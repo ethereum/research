@@ -107,7 +107,7 @@ def flatten_expr(target, expr):
                     o.append(['*', nxt, latest, base])
                 return o
         else:
-            raise Exception("Bad operation: " % ast.dump(stmt.op))
+            raise Exception("Bad operation: " % ast.dump(expr.op))
         # If the subexpression is a variable or a number, then include it directly
         if isinstance(expr.left, (ast.Name, ast.Num)):
             var1 = expr.left.id if isinstance(expr.left, ast.Name) else expr.left.n
@@ -128,7 +128,7 @@ def flatten_expr(target, expr):
         # processing for the subexpression if any
         return sub1 + sub2 + [[op, target, var1, var2]]
     else:
-        raise Exception("Unexpected statement value: %r" % stmt.value)
+        raise Exception("Unexpected statement value: %r" % expr.value)
 
 # Adds a variable or number into one of the vectors; if it's a variable
 # then the slot associated with that variable is set to 1, and if it's
