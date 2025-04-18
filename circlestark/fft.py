@@ -69,7 +69,7 @@ def halve_single_domain_value(value):
     else:
         return 2*value**2-1
 
-def fft(vals, domain=None):
+def inv_fft(vals, domain=None):
     if len(vals) == 1:
         return vals
     if domain is None:
@@ -86,19 +86,19 @@ def fft(vals, domain=None):
         f0 = [(L+R)/2 for L,R in zip(left, right)]
         f1 = [(L-R)/(2*x) for L,R,x in zip(left, right, domain)]
     o = [0] * len(domain)
-    o[::2] = fft(f0, half_domain)
-    o[1::2] = fft(f1, half_domain)
+    o[::2] = inv_fft(f0, half_domain)
+    o[1::2] = inv_fft(f1, half_domain)
     return o
 
-def inv_fft(vals, domain=None):
+def fft(vals, domain=None):
     if len(vals) == 1:
         #print('o', vals)
         return vals
     if domain is None:
         domain = get_initial_domain_of_size(vals[0].__class__, len(vals))
     half_domain = halve_domain(domain)
-    f0 = inv_fft(vals[::2], half_domain)
-    f1 = inv_fft(vals[1::2], half_domain)
+    f0 = fft(vals[::2], half_domain)
+    f1 = fft(vals[1::2], half_domain)
     if isinstance(domain[0], tuple):
         left = [L+y*R for L,R,(x,y) in zip(f0, f1, domain)]
         right = [L-y*R for L,R,(x,y) in zip(f0, f1, domain)]
