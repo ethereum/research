@@ -139,7 +139,4 @@ def get_fork_choice_head(blocks: Dict[str, Block], root: str, votes: List[Vote])
         children = children_map.get(current, [])
         if not children:
             return blocks[current]
-        weights = {child: vote_weights.get(child, 0) for child in children}
-        current = max(weights.items(), key=lambda x: x[1])[0]
-
-    return blocks[current]
+        current = max(children, key=lambda x: vote_weights.get(x, 0))
