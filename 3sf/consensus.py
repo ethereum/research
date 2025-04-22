@@ -124,7 +124,10 @@ def get_fork_choice_head(blocks: Dict[str, Block], root: str, votes: List[Vote])
 
     latest_votes = []
     for v_id in set(vote.validator_id for vote in votes):
-        latest_votes.append(max(votes, key=lambda vote: vote.slot))
+        latest_votes.append(max(
+            [vote for vote in votes if vote.validator_id == v_id],
+            key=lambda vote: vote.slot
+        ))
 
     vote_weights: Dict[str, int] = {}
 
