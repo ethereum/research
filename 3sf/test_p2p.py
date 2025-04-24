@@ -107,8 +107,6 @@ if __name__ == '__main__':
     SLOT_DURATION = 12
     NUM_STAKERS = 10
 
-    network = P2PNetwork()
-    stakers = [Staker(i, network) for i in range(NUM_STAKERS)]
 
     fig, ax = plt.subplots()
     plt.ion()
@@ -125,31 +123,21 @@ if __name__ == '__main__':
     )
     genesis_block.state_root = genesis_state.compute_root()
 
+    network = P2PNetwork()
+    stakers = [Staker(i, network, genesis_block, genesis_state) for i in range(NUM_STAKERS)]
+
     # Initialize all stakers with genesis
     for staker in stakers:
-        staker.chain["genesis"] = genesis_block
-        staker.post_states["genesis"] = genesis_state
         assert staker.head == genesis_block
 
     # Simulation loop
-    for time in range(1000):
-        slot = time // SLOT_DURATION
-
-        # Proposal step
-        if time % SLOT_DURATION == 0:
-            stakers[slot % NUM_STAKERS].propose_block()
-
-        # Voting step
-        if time % SLOT_DURATION == SLOT_DURATION // 2:
-            for staker in stakers:
-                staker.vote()
-
+    for time in range(1, 1000):
         # Deliver messages
         network.time_step()
 
-        # Process inboxes
+        # Run staker code
         for staker in stakers:
-            staker.process_received()
+            staker.tick()
 
         # Periodic printout
         if time % SLOT_DURATION == 0:

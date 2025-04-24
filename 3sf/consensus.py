@@ -116,26 +116,27 @@ def get_latest_justified_block(post_states: Dict[str, State]) -> Block:
 
 # Use LMD GHOST to get the head, given a particular root (usually the
 # latest known justified block)
-def get_fork_choice_head(blocks: Dict[str, Block], root: str, votes: List[Vote]) -> str:
-    children_map: Dict[str, List[str]] = {}
-    for block in blocks.values():
-        if block.parent:
-            children_map.setdefault(block.parent, []).append(block.hash)
-
-    latest_votes = []
-    for v_id in set(vote.validator_id for vote in votes):
-        latest_votes.append(max(
-            [vote for vote in votes if vote.validator_id == v_id],
-            key=lambda vote: vote.slot
-        ))
+def get_fork_choice_head(blocks: Dict[str, Block],
+                         root: str,
+                         votes: List[Vote],
+                         min_score: int = 0) -> str:
+    latest_votes = {}
+    for vote in sorted(votes, key=lambda vote: vote.slot):
+        latest_votes[vote.validator_id] = vote
 
     vote_weights: Dict[str, int] = {}
 
-    for vote in latest_votes:
-        block = blocks[vote.head]
-        while block.slot > blocks[root].slot:
-            vote_weights[block.hash] = vote_weights.get(block.hash, 0) + 1
-            block = blocks[block.parent]
+    for vote in latest_votes.values():
+        if vote.head in blocks:
+            block = blocks[vote.head]
+            while block.slot > blocks[root].slot:
+                vote_weights[block.hash] = vote_weights.get(block.hash, 0) + 1
+                block = blocks[block.parent]
+
+    children_map: Dict[str, List[str]] = {}
+    for block in blocks.values():
+        if block.parent and vote_weights.get(block.hash, 0) >= min_score:
+            children_map.setdefault(block.parent, []).append(block.hash)
 
     current = root
     while True:

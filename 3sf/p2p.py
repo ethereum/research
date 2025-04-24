@@ -12,7 +12,7 @@ SLOT_DURATION = 12  # time units
 
 # A basic Staker node implementation
 class Staker:
-    def __init__(self, validator_id: int, network: 'P2PNetwork'):
+    def __init__(self, validator_id: int, network: 'P2PNetwork', genesis_block: Block, genesis_state: State):
         # This node's validator ID
         self.validator_id = validator_id
         # Hook to the p2p network
@@ -22,9 +22,14 @@ class Staker:
         # {block hash: post state} for all blocks that we know about
         self.post_states: Dict[str, State] = {}
         self.inbox: List[Union[Block, Vote]] = []
-        self.network.register_staker(self)
         self.known_votes: List[Vote] = []
         self.dependencies: Dict[str, List[Block]] = {}
+        self.new_votes: List[Vote] = []
+        self.safe_target: Block = None
+        self.chain["genesis"] = genesis_block
+        self.post_states["genesis"] = genesis_state
+        self.num_validators = genesis_state.config.num_validators
+        self.network.register_staker(self)
 
     @property
     def head(self):
@@ -39,8 +44,37 @@ class Staker:
     def latest_finalized_block(self):
         return self.post_states[self.head.hash].finalized_block
 
+    def compute_safe_target(self):
+        justified_hash = get_latest_justified_block(self.post_states)
+        return get_fork_choice_head(
+            self.chain,
+            justified_hash,
+            self.new_votes,
+            min_score=self.num_validators * 2 // 3
+        )
+
+    def accept_new_votes(self):
+        for vote in self.new_votes:
+            if vote not in self.known_votes:
+                self.known_votes.append(vote)
+        self.new_votes = []
+
+    def tick(self):
+        self.process_received()
+        time_in_slot = (self.network.time % SLOT_DURATION)
+        if time_in_slot == 0:
+            if self.get_current_slot() % self.num_validators == self.validator_id:
+                self.accept_new_votes()
+                self.propose_block()
+        elif time_in_slot == SLOT_DURATION // 4:
+            self.vote()
+        elif time_in_slot == (SLOT_DURATION * 2) // 4:
+            self.safe_target = self.compute_safe_target()
+        elif time_in_slot == (SLOT_DURATION * 3) // 4:
+            self.accept_new_votes()
+
     def get_current_slot(self):
-        return self.network.time // SLOT_DURATION + 1
+        return self.network.time // SLOT_DURATION
 
     # Called when it's the staker's turn to propose a block
     def propose_block(self):
@@ -81,8 +115,10 @@ class Staker:
         state = self.post_states[self.head.hash]
         head_block = self.head
         target_block = head_block
-        if target_block.slot == self.get_current_slot():
-            target_block = self.chain[target_block.parent]
+        safe_target = self.safe_target or self.chain["genesis"]
+        for i in range(3):
+            if target_block.slot > safe_target.slot:
+                target_block = self.chain[target_block.parent]
 
         vote = Vote(
             validator_id=self.validator_id,
@@ -118,6 +154,9 @@ class Staker:
                 state = process_block(copy.deepcopy(parent_state), item)
                 self.chain[item.hash] = item
                 self.post_states[item.hash] = state
+                for vote in item.votes:
+                    if vote not in self.known_votes:
+                        self.known_votes.append(vote)
                 # Once we have received a block, also process all of
                 # its dependencies
                 if item.hash in self.dependencies:
@@ -130,7 +169,7 @@ class Staker:
                 self.dependencies.setdefault(item.parent, []).append(item)
         elif isinstance(item, Vote):
             if item.head in self.chain:
-                self.known_votes.append(item)
+                self.new_votes.append(item)
             else:
                 self.dependencies.setdefault(item.head, []).append(item)
 
