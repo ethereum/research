@@ -1,8 +1,10 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from typing import Optional, List, Dict
 import hashlib
 import json
 import copy
+
+ZERO_HASH = '0'*64
 
 # Chain configuration
 @dataclass
@@ -13,34 +15,12 @@ class Config:
 @dataclass
 class State:
     config: Config
-    finalized_block: str
-    finalized_slot: int
-    justified_block: str
-    justified_slot: int
-    justified_hashes: set = field(default_factory=lambda: {"genesis"})
-    justifications: Dict[tuple, List[bool]] = field(default_factory=dict)
-    latest_votes: Dict[int, int] = field(default_factory=dict)
-
-    # Stub for computing state root
-    # (in real life replace with SSZ hashing)
-    def compute_root(self):
-        # Convert tuple keys to strings, sets to lists, and leave other values as is
-        justifications_serializable = {
-            f"{k[0]}->{k[1]}": v  # convert tuple (source, target) to "source->target"
-            for k, v in self.justifications.items()
-        }
-    
-        serializable_dict = {
-            "finalized_block": self.finalized_block,
-            "finalized_slot": self.finalized_slot,
-            "justified_block": self.justified_block,
-            "justified_slot": self.justified_slot,
-            "justified_hashes": list(self.justified_hashes),
-            "justifications": justifications_serializable
-        }
-    
-        serialized = json.dumps(serializable_dict, sort_keys=True).encode()
-        return hashlib.sha256(serialized).hexdigest()
+    latest_justified_hash: str
+    latest_justified_slot: int
+    latest_finalized_hash: str
+    latest_finalized_slot: int
+    historical_block_hashes: List[str] = field(default_factory=list)
+    justifications: Dict[str, List[bool]] = field(default_factory=dict)
 
 # A vote. In a live implementation this would also include a signature
 @dataclass
@@ -57,61 +37,87 @@ class Vote:
 # A block
 @dataclass
 class Block:
-    hash: str
     slot: int
     parent: Optional[str]
     votes: List[Vote] = field(default_factory=list)
     state_root: Optional[str] = None
 
+# Stub for computing block hash, state root...
+# (in real life replace with SSZ hashing)
+def compute_hash(obj: object):
+    serialized = json.dumps(asdict(obj), sort_keys=True).encode()
+    return hashlib.sha256(serialized).hexdigest()
+
+# We allow justification of slots either <= 4 or a perfect square after the
+# latest finalized slot. This gives us a backoff technique and ensures finality
+# keeps progressing even under high latency
+def is_justifiable_slot(finalized_slot: int, candidate: int):
+    assert candidate >= finalized_slot
+    delta = candidate - finalized_slot
+    return delta <= 4 or delta == int(delta ** 0.5) ** 2
+
+def next_justifiable_slot(finalized_slot: int, candidate: int):
+    assert candidate >= finalized_slot
+    delta = candidate - finalized_slot
+    if delta < 4:
+        return candidate + 1
+    else:
+        return finalized_slot + (int(delta ** 0.5) + 1) ** 2
+
 # Given a state, output the new state after processing that block
 def process_block(state: State, block: Block) -> State:
     state = copy.deepcopy(state)
+    # Track historical blocks in the state
+    state.historical_block_hashes.append(block.parent)
+    while len(state.historical_block_hashes) < block.slot:
+        state.historical_block_hashes.append(None)
+    # Process votes
     for vote in block.votes:
-        key = (vote.source, vote.target)
-        if vote.source not in state.justified_hashes:
-            continue  # source must already be justified
+        # Ignore votes whose source is not the current latest justified hash,
+        # or whose target is not in the history, or whose target is not a
+        # valid justifiable slot
+        if (
+            vote.source != state.latest_justified_hash
+            or vote.source != state.historical_block_hashes[vote.source_slot]
+            or vote.target != state.historical_block_hashes[vote.target_slot]
+            or vote.target_slot <= vote.source_slot
+            or not is_justifiable_slot(state.latest_finalized_slot, vote.target_slot)
+        ):
+            continue
 
-        if vote.slot != state.latest_votes.get(vote.validator_id, 0) + 1:
-            continue  # Must process votes in sequence
+        # Track attempts to justify new hashes
+        if vote.target not in state.justifications:
+            state.justifications[vote.target] = [False] * state.config.num_validators
 
-        state.latest_votes[vote.validator_id] = vote.slot
+        if not state.justifications[vote.target][vote.validator_id]:
+            state.justifications[vote.target][vote.validator_id] = True
 
-        if key not in state.justifications:
-            state.justifications[key] = [False] * state.config.num_validators
+        count = sum(state.justifications[vote.target])
 
-        if not state.justifications[key][vote.validator_id]:
-            state.justifications[key][vote.validator_id] = True
-
-        count = sum(state.justifications[key])
-
-        # Justification: if 2/3 voted for source=>target, and target.slot > current
+        # If 2/3 voted for the same new valid hash to justify
         if count == (2 * state.config.num_validators) // 3:
-            if vote.target not in state.justified_hashes:
-                state.justified_hashes.add(vote.target)
+            state.latest_justified_hash = vote.target
+            state.latest_justified_slot = vote.target_slot
+            state.justifications = {}
 
-            if vote.target_slot > state.justified_slot:
-                state.justified_block = vote.target
-                state.justified_slot = vote.target_slot
-
-            # Finalization: if this is the latest justified, and this is an arrow k => k+1
-            if  (
-                vote.source_slot == vote.target_slot - 1 and
-                vote.source_slot >= state.finalized_slot and
-                vote.target_slot == state.justified_slot
-                ):
-                state.finalized_block = vote.source
-                state.finalized_slot = vote.source_slot
+            # Finalization: if the target is the next valid justifiable
+            # hash after the source
+            if (
+                vote.target_slot
+                == next_justifiable_slot(state.latest_finalized_slot, vote.source_slot)
+            ):
+                state.latest_finalized_hash = vote.source
+                state.latest_finalized_slot = vote.source_slot
 
     return state
 
-
 # Get the highest-slot justified block that we know about
-def get_latest_justified_block(post_states: Dict[str, State]) -> Block:
+def get_latest_justified_hash(post_states: Dict[str, State]) -> str:
     latest = max(
         post_states.values(),
-        key=lambda s: s.justified_slot
+        key=lambda s: s.latest_justified_slot
     )
-    return latest.justified_block
+    return latest.latest_justified_hash
 
 
 # Use LMD GHOST to get the head, given a particular root (usually the
@@ -120,27 +126,39 @@ def get_fork_choice_head(blocks: Dict[str, Block],
                          root: str,
                          votes: List[Vote],
                          min_score: int = 0) -> str:
+    if root == ZERO_HASH:
+        # Start at genesis by default
+        root = [h for h in blocks.keys() if blocks[h].slot == 1][0]
+
+    # Identify latest votes
     latest_votes = {}
     for vote in sorted(votes, key=lambda vote: vote.slot):
         latest_votes[vote.validator_id] = vote
 
+    # For each block, count the number of votes for that block. A vote
+    # for any descendant of a block also counts as a vote for that block
     vote_weights: Dict[str, int] = {}
 
     for vote in latest_votes.values():
         if vote.head in blocks:
             block = blocks[vote.head]
             while block.slot > blocks[root].slot:
-                vote_weights[block.hash] = vote_weights.get(block.hash, 0) + 1
+                h = compute_hash(block)
+                vote_weights[h] = vote_weights.get(h, 0) + 1
                 block = blocks[block.parent]
 
+    # Identify the children of each block
     children_map: Dict[str, List[str]] = {}
     for block in blocks.values():
-        if block.parent and vote_weights.get(block.hash, 0) >= min_score:
-            children_map.setdefault(block.parent, []).append(block.hash)
+        h = compute_hash(block)
+        if block.parent and vote_weights.get(h, 0) >= min_score:
+            children_map.setdefault(block.parent, []).append(h)
 
+    # Start at the root (generally, the latest justified hash) and
+    # repeatedly choose the child with the higher number of latest votes
     current = root
     while True:
         children = children_map.get(current, [])
         if not children:
-            return blocks[current]
+            return current
         current = max(children, key=lambda x: vote_weights.get(x, 0))
