@@ -48,21 +48,17 @@ def compute_hash(obj: object):
     serialized = json.dumps(asdict(obj), sort_keys=True).encode()
     return hashlib.sha256(serialized).hexdigest()
 
-# We allow justification of slots either <= 4 or a perfect square after the
+# We allow justification of slots either <= 5 or a perfect square after the
 # latest finalized slot. This gives us a backoff technique and ensures finality
 # keeps progressing even under high latency
 def is_justifiable_slot(finalized_slot: int, candidate: int):
     assert candidate >= finalized_slot
     delta = candidate - finalized_slot
-    return delta <= 4 or delta == int(delta ** 0.5) ** 2
-
-def next_justifiable_slot(finalized_slot: int, candidate: int):
-    assert candidate >= finalized_slot
-    delta = candidate - finalized_slot
-    if delta < 4:
-        return candidate + 1
-    else:
-        return finalized_slot + (int(delta ** 0.5) + 1) ** 2
+    return (
+        delta <= 5
+        or (delta ** 0.5) % 1 == 0            # any x^2
+        or ((delta + 0.25) ** 0.5) % 1 == 0.5 # any x^2+x
+    )
 
 # Given a state, output the new state after processing that block
 def process_block(state: State, block: Block) -> State:
@@ -102,9 +98,9 @@ def process_block(state: State, block: Block) -> State:
 
             # Finalization: if the target is the next valid justifiable
             # hash after the source
-            if (
-                vote.target_slot
-                == next_justifiable_slot(state.latest_finalized_slot, vote.source_slot)
+            if not any(
+                is_justifiable_slot(state.latest_finalized_slot, slot)
+                for slot in range(vote.source_slot + 1, vote.target_slot)
             ):
                 state.latest_finalized_hash = vote.source
                 state.latest_finalized_slot = vote.source_slot

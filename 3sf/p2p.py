@@ -5,7 +5,7 @@ import copy
 from consensus import (
     State, Vote, Block,
     process_block, get_latest_justified_hash, get_fork_choice_head,
-    compute_hash, is_justifiable_slot, next_justifiable_slot
+    compute_hash, is_justifiable_slot
 )
 from collections import defaultdict
 
