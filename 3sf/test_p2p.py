@@ -129,7 +129,13 @@ if __name__ == '__main__':
     genesis_block.state_root = compute_hash(genesis_state)
     genesis_hash = compute_hash(genesis_block)
 
-    network = P2PNetwork()
+    def latency_func(t):
+        if t < 667:
+            return int(SLOT_DURATION * 2.5 * random.random() ** 3)
+        else:
+            return 1
+
+    network = P2PNetwork(latency_func)
     stakers = [Staker(i, network, genesis_block, genesis_state) for i in range(NUM_STAKERS)]
 
     # Initialize all stakers with genesis

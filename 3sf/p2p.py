@@ -197,10 +197,11 @@ class Staker:
 
 # Simulates a p2p network
 class P2PNetwork:
-    def __init__(self):
+    def __init__(self, latency_func):
         self.time = 0
         self.stakers: Dict[int, Staker] = {}
         self.queues: Dict[int, List[Tuple[int, Union[Block, Vote]]]] = defaultdict(list)
+        self.latency_func = latency_func
 
     def register_staker(self, staker: Staker):
         self.stakers[staker.validator_id] = staker
@@ -209,11 +210,7 @@ class P2PNetwork:
         for recipient_id, staker in self.stakers.items():
             if recipient_id == sender_id:
                 continue
-            if self.time < 667:
-                delay = int(SLOT_DURATION * 1.5 * random.random() ** 3)
-            else:
-                delay = 1
-            deliver_at = self.time + delay
+            deliver_at = self.time + self.latency_func(self.time)
             self.queues[recipient_id].append((deliver_at, item))
 
     def time_step(self):

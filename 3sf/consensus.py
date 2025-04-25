@@ -48,9 +48,9 @@ def compute_hash(obj: object):
     serialized = json.dumps(asdict(obj), sort_keys=True).encode()
     return hashlib.sha256(serialized).hexdigest()
 
-# We allow justification of slots either <= 5 or a perfect square after the
-# latest finalized slot. This gives us a backoff technique and ensures finality
-# keeps progressing even under high latency
+# We allow justification of slots either <= 5 or a perfect square or oblong after
+# the latest finalized slot. This gives us a backoff technique and ensures
+# finality keeps progressing even under high latency
 def is_justifiable_slot(finalized_slot: int, candidate: int):
     assert candidate >= finalized_slot
     delta = candidate - finalized_slot
@@ -124,7 +124,7 @@ def get_fork_choice_head(blocks: Dict[str, Block],
                          min_score: int = 0) -> str:
     if root == ZERO_HASH:
         # Start at genesis by default
-        root = [h for h in blocks.keys() if blocks[h].slot == 1][0]
+        root = min(blocks.keys(), key=lambda block: blocks[block].slot)
 
     # Identify latest votes
     latest_votes = {}
