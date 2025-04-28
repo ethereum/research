@@ -23,17 +23,23 @@ class Staker:
         self.chain: Dict[str, Block] = {}
         # {block hash: post state} for all blocks that we know about
         self.post_states: Dict[str, State] = {}
-        self.inbox: List[Union[Block, Vote]] = []
+        # Votes that we have received and taken into account
         self.known_votes: List[Vote] = []
-        self.dependencies: Dict[str, List[Block]] = {}
+        # Votes that we have received but not yet taken into account
         self.new_votes: List[Vote] = []
-        self.safe_target: Block = None
+        # Objects that we will process once we have processed their parents
+        self.dependencies: Dict[str, List[Block]] = {}
+        # Initialize the chain with the genesis block
         self.genesis_hash = compute_hash(genesis_block)
         self.chain[self.genesis_hash] = genesis_block
         self.post_states[self.genesis_hash] = genesis_state
         self.num_validators = genesis_state.config.num_validators
-        self.network.register_staker(self)
+        # Block that it is safe to use to vote as the target
+        self.safe_target: Block = None
+        # Head of the chain
         self.head = self.genesis_hash
+        # Join the p2p network
+        self.network.register_staker(self)
 
     @property
     def latest_justified_hash(self):
@@ -70,7 +76,6 @@ class Staker:
 
     # Called every second
     def tick(self):
-        self.process_received()
         time_in_slot = (self.network.time % SLOT_DURATION)
         # t=0: propose a block
         if time_in_slot == 0:
@@ -133,9 +138,13 @@ class Staker:
         state = self.post_states[self.head]
         target_block = self.chain[self.head]
         safe_target = self.safe_target or self.genesis_hash
+        # If there is no very recent safe target, then vote for the k'th ancestor
+        # of the head
         for i in range(3):
             if target_block.slot > self.chain[safe_target].slot:
                 target_block = self.chain[target_block.parent]
+        # If the latest finalized slot is very far back, then only some slots are
+        # valid to justify, make sure the target is one of those
         while not is_justifiable_slot(state.latest_finalized_slot, target_block.slot):
             target_block = self.chain[target_block.parent]
 
@@ -155,19 +164,9 @@ class Staker:
 
     # Called by the p2p network
     def receive(self, item: Union[Block, Vote]):
-        self.inbox.append(item)
-
-    # Called every time step
-    def process_received(self):
-        for item in self.inbox:
-            self.process_item(item)
-        self.inbox.clear()
-
-    # Function to process an item that we received
-    def process_item(self, item):
         if isinstance(item, Block):
             block_hash = compute_hash(item)
-            # If the block is already known, dump it
+            # If the block is already known, ignore it
             if block_hash in self.chain:
                 return
             parent_state = self.post_states.get(item.parent)
@@ -175,22 +174,24 @@ class Staker:
                 state = process_block(copy.deepcopy(parent_state), item)
                 self.chain[block_hash] = item
                 self.post_states[block_hash] = state
-                self.recompute_head()
                 for vote in item.votes:
                     if vote not in self.known_votes:
                         self.known_votes.append(vote)
+                self.recompute_head()
                 # Once we have received a block, also process all of
                 # its dependencies
                 if block_hash in self.dependencies:
                     for item2 in self.dependencies[block_hash]:
-                        self.process_item(item2)
+                        self.receive(item2)
                     del self.dependencies[block_hash]
             else:
                 # If we have not yet seen the block's parent, ignore for now,
                 # process later once we actually see the parent
                 self.dependencies.setdefault(item.parent, []).append(item)
         elif isinstance(item, Vote):
-            if item.head in self.chain:
+            if item in self.known_votes or item in self.new_votes:
+                pass
+            elif item.head in self.chain:
                 self.new_votes.append(item)
             else:
                 self.dependencies.setdefault(item.head, []).append(item)

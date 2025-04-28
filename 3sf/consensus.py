@@ -73,7 +73,7 @@ def process_block(state: State, block: Block) -> State:
         # or whose target is not in the history, or whose target is not a
         # valid justifiable slot
         if (
-            vote.source != state.latest_justified_hash
+            vote.source_slot > state.latest_justified_slot
             or vote.source != state.historical_block_hashes[vote.source_slot]
             or vote.target != state.historical_block_hashes[vote.target_slot]
             or vote.target_slot <= vote.source_slot
@@ -122,8 +122,8 @@ def get_fork_choice_head(blocks: Dict[str, Block],
                          root: str,
                          votes: List[Vote],
                          min_score: int = 0) -> str:
+    # Start at genesis by default
     if root == ZERO_HASH:
-        # Start at genesis by default
         root = min(blocks.keys(), key=lambda block: blocks[block].slot)
 
     # Identify latest votes
@@ -139,22 +139,20 @@ def get_fork_choice_head(blocks: Dict[str, Block],
         if vote.head in blocks:
             block = blocks[vote.head]
             while block.slot > blocks[root].slot:
-                h = compute_hash(block)
-                vote_weights[h] = vote_weights.get(h, 0) + 1
+                vote_weights[vote.head] = vote_weights.get(vote.head, 0) + 1
                 block = blocks[block.parent]
 
     # Identify the children of each block
     children_map: Dict[str, List[str]] = {}
-    for block in blocks.values():
-        h = compute_hash(block)
-        if block.parent and vote_weights.get(h, 0) >= min_score:
-            children_map.setdefault(block.parent, []).append(h)
+    for _hash, block in blocks.items():
+        if block.parent and vote_weights.get(_hash, 0) >= min_score:
+            children_map.setdefault(block.parent, []).append(_hash)
 
-    # Start at the root (generally, the latest justified hash) and
-    # repeatedly choose the child with the higher number of latest votes
+    # Start at the root (latest justified hash or genesis) and repeatedly
+    # choose the child with the most latest votes, tiebreaking by hash
     current = root
     while True:
         children = children_map.get(current, [])
         if not children:
             return current
-        current = max(children, key=lambda x: vote_weights.get(x, 0))
+        current = max(children, key=lambda x: (vote_weights.get(x, 0), x))
