@@ -193,7 +193,7 @@ We now have the language to talk about the latest message from a sender $v$ out 
 \begin{defn}[Latest message]
 \begin{equation*}
 \begin{split}
-m \in L(v, M) \iff & \nexists m' \in D(M) : V(m') = v \text{ and } m' \succ m
+m \in L(v, M) \iff & \nexists m' \in D(M) : V(m') = v \land m' \succ m
 \end{split}
 \end{equation*}
 \end{defn}
@@ -230,7 +230,7 @@ Each protocol message $m$ is supposed to represent a record of messages that wer
 
 \begin{defn}[Equivocation]
 \begin{align}
-Eq(m_1, m_2) \iff V(m_1) = V(m_2) \text{ and } m_1 \nsucc m_2 \text{ and } m_1 \nprec m_2
+Eq(m_1, m_2) \iff V(m_1) = V(m_2) \land m_1 \nsucc m_2 \land m_1 \nprec m_2
 \end{align}
 \end{defn}
 
