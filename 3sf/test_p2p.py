@@ -124,6 +124,7 @@ if __name__ == '__main__':
         latest_justified_hash=ZERO_HASH,
         latest_justified_slot=0,
         historical_block_hashes=[ZERO_HASH],
+        justified_slots=[True],
         config=Config(num_validators=NUM_STAKERS)
     )
     genesis_block.state_root = compute_hash(genesis_state)

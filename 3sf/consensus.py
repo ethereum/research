@@ -20,6 +20,7 @@ class State:
     latest_finalized_hash: str
     latest_finalized_slot: int
     historical_block_hashes: List[str] = field(default_factory=list)
+    justified_slots: List[bool] = field(default_factory=list)
     justifications: Dict[str, List[bool]] = field(default_factory=dict)
 
 # A vote. In a live implementation this would also include a signature
@@ -65,15 +66,17 @@ def process_block(state: State, block: Block) -> State:
     state = copy.deepcopy(state)
     # Track historical blocks in the state
     state.historical_block_hashes.append(block.parent)
+    state.justified_slots.append(False)
     while len(state.historical_block_hashes) < block.slot:
+        state.justified_slots.append(False)
         state.historical_block_hashes.append(None)
     # Process votes
     for vote in block.votes:
-        # Ignore votes whose source is not the current latest justified hash,
+        # Ignore votes whose source is not already justified,
         # or whose target is not in the history, or whose target is not a
         # valid justifiable slot
         if (
-            vote.source_slot > state.latest_justified_slot
+            state.justified_slots[vote.source_slot] is False
             or vote.source != state.historical_block_hashes[vote.source_slot]
             or vote.target != state.historical_block_hashes[vote.target_slot]
             or vote.target_slot <= vote.source_slot
@@ -94,7 +97,8 @@ def process_block(state: State, block: Block) -> State:
         if count == (2 * state.config.num_validators) // 3:
             state.latest_justified_hash = vote.target
             state.latest_justified_slot = vote.target_slot
-            state.justifications = {}
+            state.justified_slots[vote.target_slot] = True
+            del state.justifications[vote.target]
 
             # Finalization: if the target is the next valid justifiable
             # hash after the source
@@ -137,10 +141,10 @@ def get_fork_choice_head(blocks: Dict[str, Block],
 
     for vote in latest_votes.values():
         if vote.head in blocks:
-            block = blocks[vote.head]
-            while block.slot > blocks[root].slot:
-                vote_weights[vote.head] = vote_weights.get(vote.head, 0) + 1
-                block = blocks[block.parent]
+            block_hash = vote.head
+            while blocks[block_hash].slot > blocks[root].slot:
+                vote_weights[block_hash] = vote_weights.get(block_hash, 0) + 1
+                block_hash = blocks[block_hash].parent
 
     # Identify the children of each block
     children_map: Dict[str, List[str]] = {}
@@ -149,10 +153,11 @@ def get_fork_choice_head(blocks: Dict[str, Block],
             children_map.setdefault(block.parent, []).append(_hash)
 
     # Start at the root (latest justified hash or genesis) and repeatedly
-    # choose the child with the most latest votes, tiebreaking by hash
+    # choose the child with the most latest votes, tiebreaking by slot then hash
     current = root
     while True:
         children = children_map.get(current, [])
         if not children:
             return current
-        current = max(children, key=lambda x: (vote_weights.get(x, 0), x))
+        current = max(children,
+                      key=lambda x: (vote_weights.get(x, 0), blocks[x].slot, x))
