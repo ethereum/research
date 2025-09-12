@@ -94,7 +94,7 @@ def process_block(state: State, block: Block) -> State:
         count = sum(state.justifications[vote.target])
 
         # If 2/3 voted for the same new valid hash to justify
-        if count == (2 * state.config.num_validators) // 3:
+        if 3 * count > 2 * state.config.num_validators:
             state.latest_justified_hash = vote.target
             state.latest_justified_slot = vote.target_slot
             state.justified_slots[vote.target_slot] = True
