@@ -1,14 +1,14 @@
 from zorch import koalabear
-from utils import hash
 
-#M = koalabear.KoalaBear([[3,1,4,1],[5,9,2,6],[3,5,8,9],[7,9,3,2]])
+#M = koalabear.KoalaBear([[1 if i==j else 0 for i in range(16)] for j in range(16)])
 M = 1 / koalabear.KoalaBear([[1+i+j for i in range(16)] for j in range(16)])
 
 def matmul_layer(values):
-    size = values.shape[0] // 16
-    values = values.reshape((size, 16))
+    orig_shape = values.shape
+    size = values.shape[-1] // 16
+    values = values.reshape(values.shape[:-1] + (size, 16))
     values = koalabear.matmul(values, M)
-    values = values.reshape((size * 16,))
+    values = values.reshape(orig_shape)
     return values
 
 
@@ -52,11 +52,38 @@ def fast_point_eval(source_coords, eval_coords):
 def log2(x):
     return 0 if x <= 1 else 1 + log2(x//2)
 
-def generate_weights_seed_coords(randomness, count):
+def generate_weights_seed_coords(randomness, count, hash):
     return [
         koalabear.ExtendedKoalaBear(hash(randomness, koalabear.KoalaBear(31337+i)).value[:4])
         for i in range(log2(count))
     ]
 
-def generate_weights(randomness, count):
-    return chi_weights(generate_weights_seed_coords(randomness, count))
+def generate_weights(randomness, count, hash):
+    return chi_weights(generate_weights_seed_coords(randomness, count, hash))
+
+def hash16_to_8(inp, permutation):
+    return permutation(inp)[...,:8] + inp[...,:8]
+
+def hash(*args, permutation):
+    inputs = []
+    for arg in args:
+        inputs.append(koalabear.KoalaBear(arg.value.reshape((-1,))))
+    buffer = koalabear.KoalaBear.append(*inputs)
+    from hashlib import sha256
+    d = sha256(buffer.tobytes()).digest()
+    return koalabear.KoalaBear([int.from_bytes(d[i:i+4], 'little') for i in range(0,32,4)])
+    buffer_length = buffer.shape[0]
+    # padding: buffer -> [length] + buffer + [pad to nearest 16]
+    buffer = koalabear.KoalaBear.append(
+        koalabear.KoalaBear([buffer_length]),
+        buffer,
+        koalabear.KoalaBear.zeros(15 - buffer.shape[0] % 16)
+    )
+    # Merkle tree style hash
+    while buffer.shape[0] > 8:
+        if buffer.shape[0] % 16 == 8:
+            buffer = koalabear.KoalaBear.append(buffer, koalabear.KoalaBear.zeros(8)) + buffer_length
+        buffer = buffer.reshape((-1, 16))
+        buffer = hash16_to_8(buffer, permutation)
+        buffer = buffer.reshape((-1,))
+    return buffer

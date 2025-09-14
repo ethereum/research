@@ -2,8 +2,8 @@ import numpy as np
 from zorch import koalabear
 from utils import hash
 
-# Proves sumcheck for W * (V**3 + c)
-def sumcheck_prove(W, V, constant, randomness):
+# Proves sumcheck for W * (V**3 + c1V + c0)
+def sumcheck_prove(W, V, coeff1, coeff0, randomness, hash):
     assert (W.shape[0] & (W.shape[0]-1)) == 0, "length must be power of two"
     c0 = []
     c1 = []
@@ -22,11 +22,13 @@ def sumcheck_prove(W, V, constant, randomness):
         Vb_cb = Vb_sq * Vb
         Vm_sq = Vm * Vm
         Vm_cb = Vm_sq * Vm
+        Wm_Vm = Wm * Vm
+        Wb_Vm = Wb * Vm
         Vb_Vm_3 = Vb * Vm * 3
-        c0.append(_cls.sum(Wb * (Vb_cb + constant), axis=0))
-        c1.append(_cls.sum(Wm * (Vb_cb + constant) + Wb * Vb * Vb_Vm_3, axis=0))
-        c2.append(_cls.sum(Wm * Vb * Vb_Vm_3 + Wb * Vm * Vb_Vm_3, axis=0))
-        c3.append(_cls.sum(Wm * Vm * Vb_Vm_3 + Wb * Vm_cb, axis=0))
+        c0.append(_cls.sum(Wb * (Vb_cb + Vb * coeff1 + coeff0), axis=0))
+        c1.append(_cls.sum(Wm * (Vb_cb + Vb * coeff1 + coeff0) + Wb * Vb * Vb_Vm_3 + Wb_Vm * coeff1, axis=0))
+        c2.append(_cls.sum(Wm * Vb * Vb_Vm_3 + Wb_Vm * Vb_Vm_3 + Wm_Vm * coeff1, axis=0))
+        c3.append(_cls.sum(Wm_Vm * Vb_Vm_3 + Wb * Vm_cb, axis=0))
         c4.append(_cls.sum(Wm * Vm_cb, axis=0))
         randomness = hash(randomness, c0[-1], c1[-1], c2[-1], c3[-1], c4[-1])
         coords.append(koalabear.ExtendedKoalaBear(randomness[:4].value))
@@ -35,7 +37,7 @@ def sumcheck_prove(W, V, constant, randomness):
         size //= 2
     return c0, c1, c2, c3, c4, coords, W[0], V[0]
 
-def sumcheck_verify(c0, c1, c2, c3, c4, total, coords, value, randomness):
+def sumcheck_verify(c0, c1, c2, c3, c4, total, coords, value, randomness, hash):
     for i, (v0, v1, v2, v3, v4, coord) in enumerate(zip(c0, c1, c2, c3, c4, coords)):
         randomness = hash(randomness, v0, v1, v2, v3, v4)
         assert koalabear.ExtendedKoalaBear(randomness[:4].value) == coord
@@ -56,3 +58,6 @@ def test():
     total = koalabear.KoalaBear.sum(W * (V**3 + k), axis=0)
     assert sumcheck_verify(c0, c1, c2, c3, c4, total, coords, value, hash(W, V))
     print("Proof verified")
+
+if __name__ == '__main__':
+    test()
