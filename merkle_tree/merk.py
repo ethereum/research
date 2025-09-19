@@ -26,11 +26,7 @@ def get_proof_indices(tree_indices, depth):
     for index in maximal_indices:
         if index not in redundant_indices:
             proof.append(index)
-            while index > 1:
-                redundant_indices.add(index)
-                if (index ^ 1) not in redundant_indices:
-                    break
-                index //= 2 
+            redundant_indices.add(index)
     return [i for i in proof if i-leaf_count not in tree_indices]
 
 def mk_multi_proof(tree, indices):
