@@ -49,17 +49,17 @@ test_stark_output = None
 
 def test_fft():
     INPUT_SIZE = 512
-    data = [M(3**i) for i in range(INPUT_SIZE)]
-    coeffs = fft(data)
-    data2 = inv_fft(coeffs)
-    assert data2 == data
+    coeffs1 = [B(3**i) for i in range(INPUT_SIZE)] + [B(0)] * INPUT_SIZE
+    evaluations = fft(coeffs1)
+    coeffs2 = inv_fft(evaluations)
+    assert coeffs2 == coeffs1
     print("Basic FFT test passed")
 
 def test_fri():
     print("Testing FRI")
     INPUT_SIZE = 4096
     coeffs = [B(3**i) for i in range(INPUT_SIZE)] + [B(0)] * INPUT_SIZE
-    evaluations = inv_fft(coeffs)
+    evaluations = fft(coeffs)
     global fri_proof
     fri_proof = prove_low_degree([EB(v) for v in evaluations])
     length = (
@@ -76,19 +76,19 @@ def test_fri():
 def test_fast_fft():
     print("Testing fast FFT")
     INPUT_SIZE = 2**13
-    data = [pow(3, i, 2**31-1) for i in range(INPUT_SIZE)]
-    npdata = M31(data)
+    coeffs = [pow(3, i, modulus) for i in range(INPUT_SIZE)] + [0] * INPUT_SIZE
+    npcoeffs = M31(coeffs)
     t0 = time.time()
-    coeffs1 = fft([B(x) for x in data])
+    evaluations1 = fft([B(x) for x in coeffs])
     t1 = time.time()
     print("Computed size-{} slow fft in {} sec".format(INPUT_SIZE, t1 - t0))
     t1 = time.time()
-    coeffs2 = f_fft(npdata)
-    print(coeffs2)
+    evaluations2 = f_fft(npcoeffs)
+    print(evaluations2)
     t2 = time.time()
     print("Computed size-{} fast fft in {} sec".format(INPUT_SIZE, t2 - t1))
-    assert [int(x) for x in coeffs2] == coeffs1
-    assert f_inv_fft(coeffs2) == npdata
+    assert [int(x) for x in evaluations2] == evaluations1
+    assert f_inv_fft(evaluations2) == npcoeffs
     print("Fast FFT checks passed")
 
 def test_fast_fri():
@@ -97,7 +97,7 @@ def test_fast_fri():
     coeffs = M31(
         [pow(3, i, modulus) for i in range(INPUT_SIZE)] + [0] * INPUT_SIZE,
     )
-    evaluations = f_inv_fft(coeffs)
+    evaluations = f_fft(coeffs)
     print('ev', evaluations, evaluations.__class__)
     proof = f_prove_low_degree(evaluations.to_extended())
     assert f_verify_low_degree(proof)
@@ -122,7 +122,7 @@ def test_mega_fri():
         M31.zeros(INPUT_SIZE)
     )
     t1 = time.time()
-    evaluations = f_inv_fft(coeffs)
+    evaluations = f_fft(coeffs)
     print("Low-degree extended coeffs in time {}".format(time.time() - t1))
     t2 = time.time()
     proof = f_prove_low_degree(evaluations.to_extended())

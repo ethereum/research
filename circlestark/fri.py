@@ -11,9 +11,9 @@ NUM_CHALLENGES = 80
 
 def extend_trace(field, trace):
     small_domain = get_initial_domain_of_size(field, len(trace))
-    coeffs = fft.fft(trace, small_domain)
+    coeffs = fft.inv_fft(trace, small_domain)
     big_domain = get_initial_domain_of_size(field, len(trace)*2)
-    return fft.inv_fft(trace, big_domain)
+    return fft.fft(trace, big_domain)
 
 def line_function(P1, P2, domain):
     x1, y1 = P1
@@ -72,7 +72,7 @@ def get_challenges(root, domain_size, num_challenges):
 
 def is_rbo_low_degree(evaluations, domain):
     halflen = len(evaluations)//2
-    return fft(
+    return inv_fft(
         undo_folded_reverse_bit_order(evaluations),
         undo_folded_reverse_bit_order(domain)
     )[halflen:] == [0] * halflen

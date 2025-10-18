@@ -9,7 +9,7 @@ from precomputes import rbos, invx, invy, sub_domains
 
 # Converts a list of evaluations to a list of coefficients. Note that the
 # coefficients are in a "weird" basis: 1, y, x, xy, 2x^2-1...
-def fft(vals, is_top_level=True):
+def inv_fft(vals, is_top_level=True):
     vals = vals.copy()
     shape_suffix = vals.shape[1:]
     size = vals.shape[0]
@@ -33,7 +33,7 @@ def fft(vals, is_top_level=True):
     )
 
 # Converts a list of coefficients into a list of evaluations
-def inv_fft(vals):
+def fft(vals):
     vals = vals.copy()
     shape_suffix = vals.shape[1:]
     size = vals.shape[0]

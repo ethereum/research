@@ -27,9 +27,9 @@ from merkle import merkelize, hash, get_branch, verify_branch
 # Tweaks the last row of a trace or constraint object to reduce its degree
 def tweak_last_row(obj):
     obj = obj.copy()
-    coeffs = fft(obj)
+    coeffs = inv_fft(obj)
     cls = obj.__class__
-    tweak_value = fft(cls.append(cls.zeros(obj.shape[0]-1), cls([1])))[-1]
+    tweak_value = inv_fft(cls.append(cls.zeros(obj.shape[0]-1), cls([1])))[-1]
     obj[-1] -= coeffs[-1] / tweak_value
     return obj
 
@@ -114,7 +114,7 @@ def mk_stark(check_constraint,
         trace_length*ext_degree:
         trace_length*ext_degree*2
     ]
-    trace_ext = inv_fft(pad_to(fft(trace), trace_length*ext_degree))
+    trace_ext = fft(pad_to(inv_fft(trace), trace_length*ext_degree))
     print('Generated trace extension', time.time() - START)
     # Decompose the trace into the public part and the private part:
     # trace = public * V + private. We commit to the private part, and show
@@ -124,13 +124,13 @@ def mk_stark(check_constraint,
         public_args,
         trace[cp.array(public_args)],
     )
-    V_ext = inv_fft(pad_to(fft(V), trace_length*ext_degree))
-    I_ext = inv_fft(pad_to(fft(I), trace_length*ext_degree))
+    V_ext = fft(pad_to(inv_fft(V), trace_length*ext_degree))
+    I_ext = fft(pad_to(inv_fft(I), trace_length*ext_degree))
     print('Generated V,I', time.time() - START)
     trace_quotient_ext = (
         (trace_ext - I_ext) / V_ext.reshape(V_ext.shape+(1,))
     )
-    constants_ext = inv_fft(pad_to(fft(constants), trace_length*ext_degree))
+    constants_ext = fft(pad_to(inv_fft(constants), trace_length*ext_degree))
     rolled_trace_ext = M31.append(
         trace_ext[ext_degree:],
         trace_ext[:ext_degree]
@@ -283,9 +283,9 @@ def mk_stark(check_constraint,
 # Generate the Merkle tree of constants
 def build_constants_tree(constants, H_degree=2):
     trace_length = constants.shape[0]
-    constants_coeffs = fft(pad_to(constants, trace_length))
+    constants_coeffs = inv_fft(pad_to(constants, trace_length))
     return merkelize_top_dimension(
-        inv_fft(pad_to(constants_coeffs, trace_length*H_degree*2))
+        fft(pad_to(constants_coeffs, trace_length*H_degree*2))
     )
 
 # Generate the verification key (basically the Merkle root of the

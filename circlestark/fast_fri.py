@@ -6,7 +6,7 @@ from utils import (
     merkelize_top_dimension, get_challenges, rbo_index_to_original
 )
 from precomputes import folded_rbos, invx, invy
-from fast_fft import fft
+from fast_fft import inv_fft
 from merkle import merkelize, hash, get_branch, verify_branch
 
 BASE_CASE_SIZE = 64
@@ -169,6 +169,6 @@ def verify_low_degree(proof, extra_entropy=b''):
     o = zeros_like(final_values)
     N = final_values.shape[0]
     o[rbo_index_to_original(N, cp.arange(N))] = final_values
-    coeffs = fft(o, is_top_level=False)
+    coeffs = inv_fft(o, is_top_level=False)
     assert coeffs[N//2:] == 0
     return True
