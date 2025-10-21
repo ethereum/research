@@ -17,6 +17,38 @@ class PrimeField():
     def exp(self, x, p):
         return pow(x, p, self.modulus)
 
+    # evaluate the polynomal in the evaluation form in a coset
+    # xs[0] must the shifting parameter h
+    # formula is (x^m - h^m) / (m h^m) * sum(ys[i] * xs[i] / (x - xs[i]))
+    def eval_barycentric(self, x, xs, ys):
+        m = len(xs) # coset order
+        xm = self.exp(x, m)
+        hm = self.exp(xs[0], m)
+        s = 0
+        for i in range(len(xs)):
+            s = self.add(s, self.div(self.mul(xs[i], ys[i]), self.sub(x, xs[i])))
+        return self.mul(s, self.div(self.sub(xm, hm), self.mul(m, hm)))
+
+    # evaluate the polynomal in the evaluate form for all cosets
+    # with some optimization on inversion
+    def eval_barycentric_all(self, x, xs, ys, m):
+        ncosets = len(xs) // m
+        # evaluate all inversions in batch
+        toinv = [x - xx  for xx in xs]
+        toinv.append(m)
+        inved = self.multi_inv(toinv)
+        invm = inved[-1]
+        xm = self.exp(x, m)
+        ss = []
+        modulus = self.modulus
+        for i in range(ncosets):
+            s = 0
+            for j in range(m):
+                idx = j*ncosets+i
+                s = (s + xs[idx] * ys[idx] * inved[idx]) % modulus
+            ss.append(s * (xm - xs[i * m]) * invm * xs[-i * m] % modulus)
+        return ss
+
     # Modular inverse using the extended Euclidean algorithm
     def inv(self, a):
         if a == 0:

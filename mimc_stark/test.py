@@ -1,6 +1,9 @@
+import time
+
 from fft import fft
 from mimc_stark import mk_mimc_proof, modulus, mimc, verify_mimc_proof
 from merkle_tree import merkelize, mk_branch, verify_branch, bin_length
+from permuted_tree import merkelize as pmerkelize
 from fri import prove_low_degree, verify_low_degree_proof
 
 def test_merkletree():
@@ -17,19 +20,20 @@ def test_fri():
     poly = list(range(4096))
     root_of_unity = pow(7, (modulus-1)//16384, modulus)
     evaluations = fft(poly, modulus, root_of_unity)
+    start_time = time.time()
     proof = prove_low_degree(evaluations, root_of_unity, 4096, modulus)
-    print("Approx proof length: %d" % fri_proof_bin_length(proof))
-    assert verify_low_degree_proof(merkelize(evaluations)[1], root_of_unity, proof, 4096, modulus)
+    print("Approx proof length: %d, used time: %.4f" % (fri_proof_bin_length(proof), (time.time() - start_time)))
+    assert verify_low_degree_proof(pmerkelize(evaluations)[1], root_of_unity, proof, 4096, modulus)
     
     try:
         fakedata = [x if pow(3, i, 4096) > 400 else 39 for x, i in enumerate(evaluations)]
         proof2 = prove_low_degree(fakedata, root_of_unity, 4096, modulus)
-        assert verify_low_degree_proof(merkelize(fakedata)[1], root_of_unity, proof, 4096, modulus)
+        assert verify_low_degree_proof(pmerkelize(fakedata)[1], root_of_unity, proof, 4096, modulus)
         raise Exception("Fake data passed FRI")
     except:
         pass
     try:
-        assert verify_low_degree_proof(merkelize(evaluations)[1], root_of_unity, proof, 2048, modulus)
+        assert verify_low_degree_proof(pmerkelize(evaluations)[1], root_of_unity, proof, 2048, modulus)
         raise Exception("Fake data passed FRI")
     except:
         pass
@@ -50,4 +54,5 @@ def test_stark():
     assert verify_mimc_proof(3, 2**LOGSTEPS, constants, mimc(3, 2**LOGSTEPS, constants), proof)
 
 if __name__ == '__main__':
+    test_fri()
     test_stark()

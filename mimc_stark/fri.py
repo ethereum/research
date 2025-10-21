@@ -35,11 +35,18 @@ def prove_low_degree(values, root_of_unity, maxdeg_plus_1, modulus, exclude_mult
     # We calculate the column by Lagrange-interpolating each row, and not
     # directly from the polynomial, as this is more efficient
     quarter_len = len(xs)//4
-    x_polys = f.multi_interp_4(
-        [[xs[i+quarter_len*j] for j in range(4)] for i in range(quarter_len)],
-        [[values[i+quarter_len*j] for j in range(4)] for i in range(quarter_len)]
-    )
-    column = [f.eval_quartic(p, special_x) for p in x_polys]
+    # Using Barycentric forumla to evaluate the polynomial without interpolation
+    # column = [f.eval_barycentric(special_x,
+    #     [xs[i+quarter_len*j] for j in range(4)],
+    #     [values[i+quarter_len*j] for j in range(4)]) for i in range(quarter_len)]
+    column = f.eval_barycentric_all(special_x, xs, values, 4)
+    # Evaluate the polynomial using Lagrange interpolation
+    # x_polys = f.multi_interp_4(
+    #     [[xs[i+quarter_len*j] for j in range(4)] for i in range(quarter_len)],
+    #     [[values[i+quarter_len*j] for j in range(4)] for i in range(quarter_len)]
+    # )
+    # column1 = [f.eval_quartic(p, special_x) for p in x_polys]
+    # assert column == column1
     m2 = merkelize(column)
 
     # Pseudo-randomly select y indices to sample
