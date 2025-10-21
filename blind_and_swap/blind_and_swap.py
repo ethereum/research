@@ -4,6 +4,8 @@ from hashlib import sha256
 hash_to_int = lambda x: int.from_bytes(sha256(x).digest(), 'little')
 
 from py_ecc import bn128 as curve
+from poly_utils import PrimeField
+
 POINT = tuple
 SIG2 = tuple
 SIG3 = tuple
@@ -125,6 +127,10 @@ def test():
     assert verify_1of2(b'cow', KEY1, KEY2, secondof2_sig, BASE)
     print("Passed 1 of 2 signature test")
     # Blind and swap proofs
+    # Create two secrets of commitments
+    f = PrimeField(curve.curve_order)
+    x1 = f.mul(69042, f.inv(31337))
+    x2 = f.mul(299792458, f.inv(8675309))
     A1, B1, A2, B2 = (curve.multiply(curve.G1, x) for x in (31337, 69042, 8675309, 299792458))
     factor = 5
     C1, D1, C2, D2, proof = prove_blind_and_swap(A1, B1, A2, B2, factor, False)
@@ -132,11 +138,15 @@ def test():
     assert (C1, D1, C2, D2) == tuple(curve.multiply(P, factor) for P in (A1, B1, A2, B2))
     assert verify_blind_and_swap(A1, B1, A2, B2, C1, D1, C2, D2, proof)
     assert not verify_blind_and_swap(A1, B1, A2, B2, C1, FAKE_POINT, C2, D2, proof)
+    assert curve.multiply(C1, x1) == D1
+    assert curve.multiply(C2, x2) == D2
     factor2 = 7
     E1, F1, E2, F2, proof = prove_blind_and_swap(C1, D1, C2, D2, factor2, True)
     assert (E1, F1, E2, F2) == tuple(curve.multiply(P, factor2) for P in (C2, D2, C1, D1))
     assert verify_blind_and_swap(C1, D1, C2, D2, E1, F1, E2, F2, proof)
     assert not verify_blind_and_swap(C1, D1, C2, D2, E1, F1, E2, FAKE_POINT, proof)
+    assert curve.multiply(E2, x1) == F2
+    assert curve.multiply(E1, x2) == F1
     print("Passed blind-and-swap test")
 
 if __name__ == '__main__':
