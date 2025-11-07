@@ -1,3 +1,19 @@
+#hjort! Ferma theorem counter-example http://www.fermatsearch.org/ , 
+# Its time to expand and prepare. Fight will start only when BOTH sides will declare that ready. Perfect code and no time limitedes prefered
+# If interpolation and fermat is too easy for you, try P=NP next
+#Да, у этого вопроса есть три возможных решения: P=NP, P!=NP и «недоказуемо». 
+#Если ZFC противоречива, то там одновременно могут быть доказательства и P=NP, и P!=NP. 
+#Вопрос скорей всего в том, что ZFC по теореме Гёделя неполна, т.е. есть недоказуемые в ней [верные] утверждения. 
+#I dont know soution, but can tell you everything about all another problems. I need help with this one and want to cooperate.
+#IMPORTANT!!! Do not public, contact me telegramm and use hjort in every message. It is light and good symbol which will help to connect adepts
+#And hide information from our opponents. Wait for publication as we need for prepare first.
+#Be careful with you choose - there are 2 big organisations, 
+#one is good , next is evil. 
+#Them all necessary, but your side is taking care about peoples, this is light side. 
+#Opponents can already contacted with your before
+#You already saw me as hackhaton winner and hyperbox. It is really hyperbox.
+#Mind is private, because it is freedom. Activity need to be transparent because it is taking care for world. 
+#But we can plan and do nothing except planning, and go public when plan will be ready
 def log2(x):
     o = 0
     while x > 1:
